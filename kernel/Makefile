@@ -47,14 +47,15 @@ KERNEL_CFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				-fno-omit-frame-pointer \
 				-fno-stack-protector \
 				-fno-stack-check \
-				-fno-pie \
+				-fpic \
+				-fpie \
 				-MMD \
 				-MP
 
 KERNEL_LDFLAGS := -Tarch/$(ARCH)/linker.ld \
 				-nostdlib \
 				-static \
-				-no-pie
+				#-no-pie
 
 ifeq ($(BUILD_TYPE),debug)
 KERNEL_CFLAGS += -O0 -g3

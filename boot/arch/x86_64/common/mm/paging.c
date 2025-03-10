@@ -21,48 +21,64 @@
 #include <mm/vmm.h>
 #include <lib/string.h>
 #include <print.h>
+#include <axboot.h>
 #include <stdint.h>
 
 /* Trimmed down version of */
 /* https://github.com/KevinAlavik/nekonix/blob/main/kernel/src/mm/vmm.c */
 /* Thanks, Kevin <3 */
 
-void map_page(uintptr_t *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
+void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size, uint64_t flags)
 {
-    uint64_t pml1_idx = (virt & (uint64_t)0x1ff << 12) >> 12;
-    uint64_t pml2_idx = (virt & (uint64_t)0x1ff << 21) >> 21;
-    uint64_t pml3_idx = (virt & (uint64_t)0x1ff << 30) >> 30;
-    uint64_t pml4_idx = (virt & (uint64_t)0x1ff << 39) >> 39;
-
-    if (!(pm[pml4_idx] & 1)) {
-        pm[pml4_idx] = (uint64_t)mem_alloc(PAGE_SIZE) | flags;
+    for (size_t i = 0; i < ROUND_UP(size, PAGE_SIZE); i += PAGE_SIZE) {
+        map_page(pm, virt + i, phys + i, flags);
     }
-
-    uint64_t *pml3_table = (uint64_t *)(pm[pml4_idx] & 0x000FFFFFFFFFF000);
-    if (!(pml3_table[pml3_idx] & 1)) {
-        pml3_table[pml3_idx] = (uint64_t)mem_alloc(PAGE_SIZE) | flags;
-    }
-
-    uint64_t *pml2_table = (uint64_t *)(pml3_table[pml3_idx] & 0x000FFFFFFFFFF000);
-    if (!(pml2_table[pml2_idx] & 1)) {
-        pml2_table[pml2_idx] = (uint64_t)mem_alloc(PAGE_SIZE) | flags;
-    }
-
-    uint64_t *pml1_table = (uint64_t *)(pml2_table[pml2_idx] & 0x000FFFFFFFFFF000);
-    pml1_table[pml1_idx] = phys | flags;
-
-	debug("map_page(): Mapped 0x%lx -> 0x%lx\n", phys, virt);
 }
 
-uintptr_t *create_pagemap()
+void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
 {
-    uint64_t *pm = (uint64_t *)mem_alloc(PAGE_SIZE);
+    uint64_t pml1_idx = (virt >> 12) & 0x1ff;
+    uint64_t pml2_idx = (virt >> 21) & 0x1ff;
+    uint64_t pml3_idx = (virt >> 30) & 0x1ff;
+    uint64_t pml4_idx = (virt >> 39) & 0x1ff;
+
+    if (!(pm->entries[pml4_idx] & 1)) {
+        void *pml4 = mem_alloc(PAGE_SIZE);
+        memset(pml4, 0, sizeof(pagetable));
+        pm->entries[pml4_idx] = (uint64_t)pml4 | VMM_PRESENT | VMM_WRITABLE | VMM_USER;
+    }
+
+    pagetable *pml3_table = (pagetable *)(pm->entries[pml4_idx] & 0x000FFFFFFFFFF000);
+    if (!(pml3_table->entries[pml3_idx] & 1)) {
+        void *pml3 = mem_alloc(PAGE_SIZE);
+        memset(pml3, 0, sizeof(pagetable));
+        pml3_table->entries[pml3_idx] = (uint64_t)pml3 | VMM_PRESENT | VMM_WRITABLE | VMM_USER;
+    }
+
+    pagetable *pml2_table = (pagetable *)(pml3_table->entries[pml3_idx] & 0x000FFFFFFFFFF000);
+    if (!(pml2_table->entries[pml2_idx] & 1)) {
+        void *pml2 = mem_alloc(PAGE_SIZE);
+        memset(pml2, 0, sizeof(pagetable));
+        pml2_table->entries[pml2_idx] = (uint64_t)pml2 | VMM_PRESENT | VMM_WRITABLE | VMM_USER;
+    }
+
+    pagetable *pml1_table = (pagetable *)(pml2_table->entries[pml2_idx] & 0x000FFFFFFFFFF000);
+    if (!(pml1_table->entries[pml1_idx] & 1)) {
+        pml1_table->entries[pml1_idx] = (phys | 0x000FFFFFFFFFF000) | flags;
+    }
+
+	debug("map_page(): Mapped 0x%llx -> 0x%llx\n", phys, virt);
+}
+
+pagetable *create_pagemap()
+{
+    pagetable *pm = (pagetable *)mem_alloc(PAGE_SIZE);
     if (!pm) {
         debug("create_pagemap(): Failed to allocate memory for a new pm.\n");
         return NULL;
     }
-    memset(pm, 0, PAGE_SIZE);
+    memset(pm, 0, sizeof(pagetable));
 
-    debug("create_pagemap(): Created new pm at 0x%lx\n", (uint64_t)pm);
+    debug("create_pagemap(): Created new pm at 0x%llx\n", (uint64_t)pm);
     return pm;
 }

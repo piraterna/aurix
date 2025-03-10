@@ -31,8 +31,8 @@ PHDRS
 
 SECTIONS
 {
-	/* AxBoot remaps this to 0xffffffff80000000 for us */
-	. = 0x1000;
+	/* TODO: 0xffffffff80000000 */
+	. = 0xffffffff80000000;
 
 	_linker_start_text = .;
 

@@ -23,13 +23,9 @@
 #include <arch/mm/paging.h>
 #include <stdint.h>
 
-#define VMM_PRESENT 1
-#define VMM_WRITABLE 2
-#define VMM_NX (1ull << 63)
-#define VMM_USER 4
+pagetable *create_pagemap(void);
 
-uintptr_t *create_pagemap(void);
-
-void map_page(uintptr_t *pm, uintptr_t virt, uintptr_t phys, uint64_t flags);
+void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags);
+void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size, uint64_t flags);
 
 #endif /* _MM_VMM_H */
