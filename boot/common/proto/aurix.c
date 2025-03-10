@@ -60,7 +60,7 @@ void aurix_load(char *kernel)
 
 	debug("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
 
-	aurix_handoff(pm, (void *)((uint8_t)stack - 16*1024), (uint64_t)kernel_entry, (void *)parameters);
+	aurix_handoff(pm, (void *)((uint8_t)stack + 16*1024), (uint64_t)kernel_entry, (void *)parameters);
 
 	// __asm__ volatile("movq %[pml4], %%cr3\n" :: [pml4]"r"(pm) : "memory");
 	// __asm__ volatile("callq *%[entry]\n"
