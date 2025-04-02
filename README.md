@@ -42,6 +42,8 @@
 
 ## About
 
+*Note: Now on git.piraterna.og*
+
 AurixOS is a general-purpose operating system, meant to take security, performance and usability to the next level.
 
 <!-- 
