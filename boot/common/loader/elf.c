@@ -65,21 +65,21 @@ uintptr_t elf64_load(char *data, pagetable *pagemap)
             flags |= VMM_WRITABLE;
         if (!(ph[i].p_flags & PF_X))
             flags |= VMM_NX;
-        
-        debug("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", ph[i].p_paddr, ph[i].p_vaddr, ph[i].p_filesz);
-        
+    
         uint64_t phys = (uint64_t)mem_alloc(ph[i].p_memsz);
         if (!phys) {
             debug("elf64_load(): Out of memory\n");
             return 0;
         }
+        
+        debug("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
 
         map_page(pagemap, ph[i].p_vaddr, phys, flags);
         memcpy((void*)ph[i].p_vaddr - lowest, data + ph[i].p_offset, ph[i].p_filesz);
     }
 
     debug("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);
-    return (uintptr_t)((uint8_t *)data + (header->e_entry - lowest));
+    return (uintptr_t)((uint8_t *)data + header->e_entry);
 }
 
 uintptr_t elf_load(char *data, pagetable *pagemap)
