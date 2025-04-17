@@ -20,6 +20,7 @@
 #include <proto/aurix.h>
 #include <loader/elf.h>
 #include <mm/mman.h>
+#include <mm/memmap.h>
 #include <mm/vmm.h>
 #include <vfs/vfs.h>
 #include <print.h>
@@ -30,20 +31,21 @@
 extern __attribute__((noreturn)) void aurix_handoff(void *pagemap, void *stack, uint64_t entry, void *params);
 extern char _aurix_handoff_start[], _aurix_handoff_end[];
 
-void aurix_load(char *kernel)
+void aurix_load(char *kernel_path)
 {
 	// read kernel -> test read
 	char *kbuf = NULL;
-	vfs_read(kernel, &kbuf);
-
+	vfs_read(kernel_path, &kbuf);
+	
 	// TODO: Do something with the kernel :p
 	pagetable *pm = create_pagemap();
-	// __asm__ volatile("mov %%cr3, %0" : "=r"(pm));
 	if (!pm) {
 		debug("aurix_load(): Failed to create kernel pagemap! Halting...\n");
 		// TODO: Halt
 		while (1);
 	}
+
+	axboot_memmap *memmap = get_memmap(pm);
 
 	map_pages(pm, (uintptr_t)pm, (uintptr_t)pm, PAGE_SIZE, VMM_WRITABLE);
 	map_pages(pm, (uintptr_t)_aurix_handoff_start, (uintptr_t)_aurix_handoff_start, (uint64_t)_aurix_handoff_end - (uint64_t)_aurix_handoff_start, 0);
@@ -58,7 +60,7 @@ void aurix_load(char *kernel)
 
 	void *kernel_entry = (void *)elf_load(kbuf, pm);
 	if (!kernel_entry) {
-		debug("aurix_load(): Failed to load '%s'! Halting...\n", kernel);
+		debug("aurix_load(): Failed to load '%s'! Halting...\n", kernel_path);
 		mem_free(kbuf);
 		while (1);
 	}
@@ -75,6 +77,5 @@ void aurix_load(char *kernel)
 					"movq %[stack], %%rsp\n"
 					"callq *%[entry]\n"
 					:: [pml4]"r"(pm), [stack]"r"(stack), [entry]"r"(kernel_entry) : "memory");
-	// __asm__ volatile("callq *%[entry]\n"
-	// 				:: [entry]"r"(kernel_entry));
+	__builtin_unreachable();
 }
