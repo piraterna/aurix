@@ -18,9 +18,7 @@
 /*********************************************************************************/
 
 #include <vfs/vfs.h>
-#include <mm/mman.h>
-#include <mm/vmm.h>
-#include <proto/aurix.h>
+#include <ui/ui.h>
 #include <print.h>
 
 void axboot_init()
@@ -31,7 +29,5 @@ void axboot_init()
 		while (1);
 	}
 
-	aurix_load("\\System\\axkrnl");
-
-	while (1);
+	ui_init();
 }
