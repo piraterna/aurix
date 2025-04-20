@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  print.c                                                         */
+/* Module Name:  uart.c                                                          */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,14 +17,40 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <lib/string.h>
-#include <efi.h>
-#include <efilib.h>
+#include <stdint.h>
 
-void printstr(const char *str)
+#include <arch/cpu/cpu.h>
+#include <uart/uart.h>
+
+#define COM1 0x3f8
+
+void uart_init(uint16_t baud_rate)
 {
-	CHAR16 wstr[4096];
-	mbstowcs(wstr, &str, strlen(str));
-	wstr[strlen(str)] = '\0';
-	gSystemTable->ConOut->OutputString(gSystemTable->ConOut, wstr);
+	uint8_t divisor = 115200 / baud_rate;
+
+	outb(COM1 + 1, 0x00);
+	outb(COM1 + 3, 0x80);
+	outb(COM1 + 0, divisor & 0xFF);
+	outb(COM1 + 1, (divisor >> 8) & 0xFF);
+	outb(COM1 + 3, 0x03);
+	outb(COM1 + 2, 0xC7);
+	outb(COM1 + 4, 0x0B);
+	outb(COM1 + 4, 0x0F);
+}
+
+void uart_send(char c)
+{
+	while ((inb(COM1 + 5) & 0x20) == 0);
+	outb(COM1, c);
+}
+
+void uart_sendstr(char *str)
+{
+	while (*str != '\0') {
+		if (*str == '\n') {
+			uart_send('\r');
+		}
+		uart_send(*str);
+		str++;
+	}
 }

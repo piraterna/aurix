@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  gui.c                                                           */
+/* Module Name:  ui.c                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */

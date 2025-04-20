@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  init.c                                                          */
+/* Module Name:  uart.h                                                          */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,20 +17,14 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <uart/uart.h>
-#include <vfs/vfs.h>
-#include <ui/ui.h>
-#include <print.h>
+#ifndef _UART_UART_H
+#define _UART_UART_H
 
-void axboot_init()
-{
-	uart_init(115200);
+#include <stdint.h>
 
-	if (!vfs_init("\\")) {
-		debug("axboot_init(): Failed to mount boot drive! Halting...\n");
-		// TODO: Halt
-		while (1);
-	}
+void uart_init(uint16_t baud_rate);
 
-	ui_init();
-}
+void uart_send(char c);
+void uart_sendstr(char *str);
+
+#endif /* _UART_UART_H */
