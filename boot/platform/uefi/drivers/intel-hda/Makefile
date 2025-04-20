@@ -17,60 +17,61 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-.DEFAULT_GOAL := all
+UEFI_DRIVER := $(BUILD_DIR)/boot/uefi/drivers/intel-hda.efi
 
-export INCLUDE_DIRS := $(BOOT_ROOT)/include
+INCLUDE_DIRS += $(BOOT_ROOT)/drivers/intel-hda \
+				$(BOOT_ROOT)/drivers/intel-hda/include \
+				$(BOOT_ROOT)/platform/uefi/libefi
 
-export DEFINES += __$(ARCH)__ \
-				_AXBOOT
+UEFI_CC := clang
+UEFI_LD := clang
 
-export BUILD_DIR ?= build
-export SYSROOT_DIR ?= sysroot
+UEFI_ASFLAGS := $(ASFLAGS) \
+				-DAXBOOT_UEFI=1 \
+				$(foreach d, $(INCLUDE_DIRS), -I$d)
 
-export ASFLAGS := $(foreach d, $(DEFINES), -D$d)
-export CFLAGS := $(foreach d, $(DEFINES), -D$d) -Wall -Wextra -ffreestanding -fno-stack-protector -fno-stack-check -MMD -MP
-export LDFLAGS := -nostdlib
+UEFI_CFLAGS := $(CFLAGS) \
+				-DAXBOOT_UEFI=1 \
+				$(foreach d, $(INCLUDE_DIRS), -I$d) \
+				-target $(ARCH)-unknown-windows \
+				-fshort-wchar \
+				-mno-red-zone \
+				-mno-stack-arg-probe
 
-export BOOT_ROOT := $(ROOT_DIR)/boot
-
-ifeq ($(BUILD_TYPE),debug)
-CFLAGS += -O0 -g3
-else
-CFLAGS += -O2
+ifneq (,$(filter $(ARCH),i686 x86_64))
+UEFI_CFLAGS += -mno-80387 \
+				-mno-mmx \
+				-mno-sse \
+				-mno-sse2
 endif
+
+UEFI_LDFLAGS := $(LDFLAGS) \
+				-target $(ARCH)-unknown-windows \
+				-fuse-ld=lld-link \
+				-Wl,-subsystem:efi_boot_service_driver \
+				-Wl,-entry:InitHda
+
+DRIVER_CFILES := $(shell find $(BOOT_ROOT)/drivers/intel-hda -name '*.c')
+
+UEFI_OBJ := $(DRIVER_CFILES:$(BOOT_ROOT)/drivers/intel-hda/%.c=$(BUILD_DIR)/boot/uefi/drivers/intel-hda/%.c.o)
 
 .PHONY: all
-all: sounds
-ifneq (,$(filter $(ARCH),i686 x86_64))
-	@$(MAKE) -C platform/pc-bios all
-else
-	@$(MAKE) -C platform/$(PLATFORM) all
-endif
-ifneq (,$(filter $(ARCH),i686 x86_64 arm32 aarch64))
-ifeq ($(NOUEFI),n)
-	@$(MAKE) -C platform/uefi all
-#	@$(MAKE) -C drivers all
-endif
-endif
-
-.PHONY: sounds
-sounds:
-	@mkdir -p $(BUILD_DIR)/boot/sounds
-	@mkdir -p $(BOOT_ROOT)/include/sounds
-	@for f in $(BOOT_ROOT)/sound/*.mp3; do \
-		file=$$(basename $$f ".$${f##*.}") ; \
-		printf "  GEN\t$$file.h\n" ; \
-    	ffmpeg -i "$$f" -acodec pcm_s16le -f s16le -ac 2 "$(BUILD_DIR)/boot/sounds/$$file.raw" -y 2>/dev/null ; \
-		python3 $(ROOT_DIR)/utils/bin_to_header.py "$(BUILD_DIR)/boot/sounds/$$file.raw" "$(BOOT_ROOT)/include/sounds/$$file.h" $$file ; \
-	done
+all: $(UEFI_DRIVER)
 
 .PHONY: install
-install:
-	@$(MAKE) -C platform/$(PLATFORM) install
-#	@$(MAKE) -C drivers install
-	@mkdir -p $(SYSROOT_DIR)/AxBoot
-	@cp -r base/* $(SYSROOT_DIR)/AxBoot
+install: $(UEFI_DRIVER)
+	@mkdir -p $(SYSROOT_DIR)/AxBoot/drivers
+	@printf "  INSTALL\t/AxBoot/drivers/$(shell basename $(UEFI_DRIVER))\n"
+	@cp $(UEFI_DRIVER) $(SYSROOT_DIR)/AxBoot/drivers/
 
-.PHONY: clean
-clean:
-	@rm -rf $(BOOT_ROOT)/include/sounds
+$(UEFI_DRIVER): $(UEFI_OBJ)
+	@mkdir -p $(@D)
+	@printf "  LD\t$(notdir $@)\n"
+	@$(UEFI_LD) $(UEFI_LDFLAGS) $^ -o $@
+
+-include $(wildcard $(BUILD_DIR)/boot/*.d)
+
+$(BUILD_DIR)/boot/uefi/drivers/intel-hda/%.c.o: $(BOOT_ROOT)/drivers/intel-hda/%.c
+	@mkdir -p $(@D)
+	@printf "  CC\t$(subst $(ROOT_DIR)/,,$<)\n"
+	@$(UEFI_CC) $(UEFI_CFLAGS) -c $< -o $@

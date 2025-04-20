@@ -75,7 +75,7 @@ uintptr_t elf64_load(char *data, pagetable *pagemap)
         debug("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
 
         map_page(pagemap, ph[i].p_vaddr, phys, flags);
-        memcpy((void*)ph[i].p_vaddr - lowest, data + ph[i].p_offset, ph[i].p_filesz);
+        memcpy((void*)ph[i].p_vaddr, data + ph[i].p_offset, ph[i].p_filesz);
     }
 
     debug("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);

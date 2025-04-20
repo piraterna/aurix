@@ -67,12 +67,12 @@ static int efi_type_to_axboot(uint32_t efi_type)
 
 axboot_memmap *get_memmap(pagetable *pm)
 {
-	EFI_MEMORY_DESCRIPTOR *efi_map;
-	EFI_UINTN efi_map_key;
+	EFI_MEMORY_DESCRIPTOR *efi_map = NULL;
+	EFI_UINTN efi_map_key = 0;
 	EFI_UINTN size = 0;
-	EFI_UINTN desc_size;
-	EFI_UINT32 desc_ver;
-	EFI_STATUS status;
+	EFI_UINTN desc_size = 0;
+	EFI_UINT32 desc_ver = 0;
+	EFI_STATUS status = 0;
 
 	status = gBootServices->GetMemoryMap(&size, efi_map, &efi_map_key, &desc_size, &desc_ver);
 	if (EFI_ERROR(status) && status != EFI_BUFFER_TOO_SMALL) {
@@ -99,7 +99,7 @@ axboot_memmap *get_memmap(pagetable *pm)
 	uint32_t entry_count = size / desc_size;
 
 	// map all the memory
-	for (int i = 0; i < entry_count; i++) {
+	for (uint32_t i = 0; i < entry_count; i++) {
 		uint64_t flags;
 		switch (cur_entry->Type) {
 			case EfiConventionalMemory:
@@ -139,10 +139,12 @@ axboot_memmap *get_memmap(pagetable *pm)
 	cur_entry = efi_map;
 	
 	// translate efi memmap to axboot memmap
-	for (int i = 0; i < entry_count; i++) {
+	for (uint32_t i = 0; i < entry_count; i++) {
 		new_map[i].base = cur_entry->PhysicalStart;
 		new_map[i].size = cur_entry->NumberOfPages * PAGE_SIZE;
 		new_map[i].type = efi_type_to_axboot(efi_map[i].Type);
+
+		debug("get_memmap(): Entry %d: base=0x%llx, size=%u bytes, type=%x\n", i, new_map[i].base, new_map[i].size, new_map[i].type);
 
 		cur_entry = (EFI_MEMORY_DESCRIPTOR *)((uint8_t *)cur_entry + desc_size);
 	}

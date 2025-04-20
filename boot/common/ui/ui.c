@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  memmap.h                                                        */
+/* Module Name:  gui.c                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,35 +17,18 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#ifndef _MEM_MEMMAP_H
-#define _MEM_MEMMAP_H
-
-#include <mm/vmm.h>
 #include <stdint.h>
 
-enum AxBootMemMapType {
-	MemMapReserved = 0,
-	MemMapFaulty = 1,
-
-	MemMapACPIReclaimable = 2,
-	MemMapACPIMappedIO = 3,
-	MemMapACPIMappedIOPortSpace = 4,
-	MemMapACPINVS = 5,
-
-	MemMapFirmware = 6,
-
-	// stuff we can consider usable after loading the kernel
-	MemMapFreeOnLoad = 7,
-
-	MemMapUsable = 10,
+enum framebuffer_type {
+	FB_ARGB = 0,
+	FB_RGBA = 1,
 };
 
-typedef struct _axboot_memmap {
-	uintptr_t base;
-	uintptr_t size;
-	int type;
-} axboot_memmap;
+struct ui_config {
+	uintptr_t framebuffer;
+	int framebuffer_type;
+};
 
-axboot_memmap *get_memmap(pagetable *pm);
-
-#endif /* _MEM_MEMMAP_H */
+void init_ui()
+{
+}

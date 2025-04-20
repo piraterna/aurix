@@ -1,0 +1,7 @@
+1. Convert an audio file to .raw format:
+
+ffmpeg -i $file -acodec pcm_s16le -f s16le -ac 2 $file.raw
+
+2. Convert .raw to C header:
+
+python3 utils/gen_sound_header.py $file.raw

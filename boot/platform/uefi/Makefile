@@ -37,7 +37,8 @@ INCLUDE_DIRS += $(BOOT_ROOT)/include \
 				$(BOOT_ROOT)/include/arch/$(ARCH) \
 				$(BOOT_ROOT)/include/arch/$(ARCH)/uefi \
 				$(BOOT_ROOT)/include/platform/$(PLATFORM) \
-				$(BOOT_ROOT)/platform/uefi/libefi
+				$(BOOT_ROOT)/platform/uefi/libefi \
+				$(BOOT_ROOT)/platform/uefi/drivers/intel-hda
 
 UEFI_AS := $(ARCH)-w64-mingw32-as
 UEFI_CC := clang

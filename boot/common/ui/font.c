@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  memmap.h                                                        */
+/* Module Name:  font.c                                                          */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,35 +17,9 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#ifndef _MEM_MEMMAP_H
-#define _MEM_MEMMAP_H
+#include <mm/mman.h>
 
-#include <mm/vmm.h>
-#include <stdint.h>
-
-enum AxBootMemMapType {
-	MemMapReserved = 0,
-	MemMapFaulty = 1,
-
-	MemMapACPIReclaimable = 2,
-	MemMapACPIMappedIO = 3,
-	MemMapACPIMappedIOPortSpace = 4,
-	MemMapACPINVS = 5,
-
-	MemMapFirmware = 6,
-
-	// stuff we can consider usable after loading the kernel
-	MemMapFreeOnLoad = 7,
-
-	MemMapUsable = 10,
-};
-
-typedef struct _axboot_memmap {
-	uintptr_t base;
-	uintptr_t size;
-	int type;
-} axboot_memmap;
-
-axboot_memmap *get_memmap(pagetable *pm);
-
-#endif /* _MEM_MEMMAP_H */
+//#define STBTT_malloc(x,u) ((void)(u),mem_alloc(x))
+//#define STBTT_free(x,u) ((void)(u),mem_free(x))
+//#define STB_TRUETYPE_IMPLEMENTATION
+//#include <ui/stb_truetype.h>

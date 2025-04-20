@@ -46,6 +46,7 @@ void aurix_load(char *kernel_path)
 	}
 
 	axboot_memmap *memmap = get_memmap(pm);
+	(void)memmap;
 
 	map_pages(pm, (uintptr_t)pm, (uintptr_t)pm, PAGE_SIZE, VMM_WRITABLE);
 	map_pages(pm, (uintptr_t)_aurix_handoff_start, (uintptr_t)_aurix_handoff_start, (uint64_t)_aurix_handoff_end - (uint64_t)_aurix_handoff_start, 0);
@@ -61,11 +62,12 @@ void aurix_load(char *kernel_path)
 	void *kernel_entry = (void *)elf_load(kbuf, pm);
 	if (!kernel_entry) {
 		debug("aurix_load(): Failed to load '%s'! Halting...\n", kernel_path);
-		mem_free(kbuf);
 		while (1);
 	}
+	// mem_free(kbuf);
 
 	void *parameters = NULL;
+	(void)parameters;
 
 	debug("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
 
@@ -76,6 +78,6 @@ void aurix_load(char *kernel_path)
 	__asm__ volatile("movq %[pml4], %%cr3\n"
 					"movq %[stack], %%rsp\n"
 					"callq *%[entry]\n"
-					:: [pml4]"r"(pm), [stack]"r"(stack), [entry]"r"(kernel_entry) : "memory");
+					:: [pml4]"r"(pm), [stack]"r"(stack + (16 * 1024)), [entry]"r"(kernel_entry) : "memory");
 	__builtin_unreachable();
 }
