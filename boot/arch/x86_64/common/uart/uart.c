@@ -24,7 +24,7 @@
 
 #define COM1 0x3f8
 
-void uart_init(uint16_t baud_rate)
+void uart_init(uint32_t baud_rate)
 {
 	uint8_t divisor = 115200 / baud_rate;
 

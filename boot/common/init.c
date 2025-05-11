@@ -17,9 +17,13 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
+#include <config/config.h>
+#include <loader/loader.h>
+#include <proto/aurix.h>
 #include <uart/uart.h>
 #include <vfs/vfs.h>
 #include <ui/ui.h>
+#include <axboot.h>
 #include <print.h>
 
 void axboot_init()
@@ -32,5 +36,20 @@ void axboot_init()
 		while (1);
 	}
 
-	ui_init();
+	//config_init();
+
+	//ui_init();
+
+	//debug("axboot_init(): Returned from main menu, something went wrong. Halting!");
+	//UNREACHABLE();
+
+	// just boot aurixos for now
+	struct axboot_entry axos = {
+		.name = "AurixOS",
+		.description = "",
+		.image_path = "\\System\\axkrnl",
+		.protocol = PROTO_AURIX
+	};
+	loader_load(&axos);
+	UNREACHABLE();
 }

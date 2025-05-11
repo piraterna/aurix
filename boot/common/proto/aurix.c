@@ -44,13 +44,13 @@ void aurix_load(char *kernel_path)
 		// TODO: Halt
 		while (1);
 	}
-
+	
 	axboot_memmap *memmap = get_memmap(pm);
 	(void)memmap;
 
 	map_pages(pm, (uintptr_t)pm, (uintptr_t)pm, PAGE_SIZE, VMM_WRITABLE);
 	map_pages(pm, (uintptr_t)_aurix_handoff_start, (uintptr_t)_aurix_handoff_start, (uint64_t)_aurix_handoff_end - (uint64_t)_aurix_handoff_start, 0);
-	
+
 	void *stack = mem_alloc(16*1024); // 16 KiB stack should be well more than enough
 	if (!stack) {
 		debug("aurix_load(): Failed to allocate stack! Halting...\n");

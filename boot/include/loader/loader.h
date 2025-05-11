@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ui.c                                                           */
+/* Module Name:  loader.h                                                        */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,40 +17,20 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <ui/framebuffer.h>
-#include <ui/mouse.h>
-#include <ui/font.h>
-#include <ui/ui.h>
-#include <config/config.h>
+#ifndef _LOADER_LOADER_H
+#define _LOADER_LOADER_H
 
-#include <print.h>
-#include <stdint.h>
+enum loader_protocol {
+	PROTO_AURIX,
+#ifdef AXBOOT_UEFI
+	PROTO_CHAINLOAD,
+#endif
 
-void ui_init()
-{
-	struct ui_context ctx;
+	PROTO_UNSUPPORTED
+};
 
-	if (!get_framebuffer(&ctx.fb_addr, &ctx.fb_modes, &ctx.total_modes, &ctx.current_mode)) {
-		debug("Failed to acquire a framebuffer!\n");
-		while (1);
-	}
+void loader_load(struct axboot_entry *entry);
 
-	debug("Dumping framebuffer information\n");
-	debug("--------------------------------\n");
-	debug("Address: 0x%llx\n", ctx.fb_addr);
+int proto_str_to_int(char *proto);
 
-	for (int i = 0; i < ctx.total_modes; i++) {
-		debug("\nMode %u:%s\n", i, (i == ctx.current_mode) ? " (current)" : "");
-		debug("Resolution: %ux%u\n", ctx.fb_modes[i].width, ctx.fb_modes[i].height);
-		debug("Bits Per Pixel: %u\n", ctx.fb_modes[i].bpp);
-		debug("Pitch: %u\n", ctx.fb_modes[i].pitch);
-		debug("Format: %s\n", ctx.fb_modes[i].format == FB_RGBA ? "RGBA" : "BGRA");
-	}
-
-	//font_init("\\AxBoot\\fonts\\DreamOrphans.ttf", 20);
-
-	//while (1) {
-		//get_mouse(&m_x, &m_y, &m_but);
-		//debug("Mouse X = %u | Mouse Y = %u\n", m_x, m_y);
-	//}
-}
+#endif /* _LOADER_LOADER_H */

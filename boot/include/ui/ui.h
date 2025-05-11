@@ -20,6 +20,17 @@
 #ifndef _UI_UI_H
 #define _UI_UI_H
 
+#include <ui/framebuffer.h>
+
+#include <stdint.h>
+
+struct ui_context {
+	uint32_t *fb_addr;
+	struct fb_mode *fb_modes;
+	int total_modes;
+	int current_mode;
+};
+
 void ui_init();
 
 #endif /* _UI_UI_H */

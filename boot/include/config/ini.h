@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ui.c                                                           */
+/* Module Name:  ini.h                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,40 +17,70 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <ui/framebuffer.h>
-#include <ui/mouse.h>
-#include <ui/font.h>
-#include <ui/ui.h>
-#include <config/config.h>
+#ifndef _CONFIG_INI_H
+#define _CONFIG_INI_H
 
-#include <print.h>
-#include <stdint.h>
+enum token_type {
+	SECTION,
+	KEY,
+	VALUE,
 
-void ui_init()
-{
-	struct ui_context ctx;
+	EOF,
+	ILLEGAL,
+};
 
-	if (!get_framebuffer(&ctx.fb_addr, &ctx.fb_modes, &ctx.total_modes, &ctx.current_mode)) {
-		debug("Failed to acquire a framebuffer!\n");
-		while (1);
-	}
+struct string_view {
+	char *data;
+	unsigned int len;
+};
 
-	debug("Dumping framebuffer information\n");
-	debug("--------------------------------\n");
-	debug("Address: 0x%llx\n", ctx.fb_addr);
+struct token {
+	enum token_type type;
+	struct string_view lit;
+};
 
-	for (int i = 0; i < ctx.total_modes; i++) {
-		debug("\nMode %u:%s\n", i, (i == ctx.current_mode) ? " (current)" : "");
-		debug("Resolution: %ux%u\n", ctx.fb_modes[i].width, ctx.fb_modes[i].height);
-		debug("Bits Per Pixel: %u\n", ctx.fb_modes[i].bpp);
-		debug("Pitch: %u\n", ctx.fb_modes[i].pitch);
-		debug("Format: %s\n", ctx.fb_modes[i].format == FB_RGBA ? "RGBA" : "BGRA");
-	}
+struct token_array {
+	struct token *items;
+	unsigned int count;
+	unsigned int capacity;
+};
 
-	//font_init("\\AxBoot\\fonts\\DreamOrphans.ttf", 20);
+struct lexer {
+	char *input;
+	unsigned int pos;
+	unsigned int read_pos;
+	char ch;
+};
 
-	//while (1) {
-		//get_mouse(&m_x, &m_y, &m_but);
-		//debug("Mouse X = %u | Mouse Y = %u\n", m_x, m_y);
-	//}
-}
+struct parser {
+	struct token_array *tokens;
+	unsigned int pos;
+	unsigned int read_pos;
+	struct token *cur_token;
+};
+
+struct key_value {
+	struct string_view key;
+	struct string_view value;
+};
+
+struct section {
+	struct string_view name;
+	struct key_value *items;
+	unsigned int count;
+	unsigned int capacity;
+};
+
+struct ini_file {
+	struct section root;
+	struct section *items;
+	unsigned int count;
+	unsigned int capacity;
+};
+
+void parse_ini(struct ini_file *ini, char *buf);
+
+char *ini_get_value(struct ini_file *ini, char *section, char *key);
+int ini_get_value_int(struct ini_file *ini, char *section, char *key);
+
+#endif /* _CONFIG_INI_H */

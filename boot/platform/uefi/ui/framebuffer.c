@@ -26,13 +26,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
-bool get_framebuffer(uintptr_t *fb_addr, struct fb_mode **available_modes, int *total_modes, int *current_mode_index)
+bool get_framebuffer(uint32_t **fb_addr, struct fb_mode **available_modes, int *total_modes, int *current_mode_index)
 {
 	EFI_GUID gop_guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID; 
     EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *mode_info = NULL;
     EFI_UINTN mode_info_size = sizeof(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION);
-	EFI_UINTN SizeOfInfo, numModes, nativeMode;
+	EFI_UINTN SizeOfInfo;
+	EFI_UINTN numModes = 0;
+	EFI_UINTN nativeMode = 0;
     EFI_UINTN mode_index = 0;
 	EFI_STATUS Status;
 
@@ -45,10 +47,9 @@ bool get_framebuffer(uintptr_t *fb_addr, struct fb_mode **available_modes, int *
 	// this is needed to get the current video mode
 	if (Status == EFI_NOT_STARTED) {
 		Status = gop->SetMode(gop, 0);
-	}
-
-	if (EFI_ERROR(Status)) {
+	} else if (EFI_ERROR(Status)) {
 		debug("Unable to get native mode\n");
+		return false;
 	} else {
 		nativeMode = gop->Mode->Mode;
 		numModes = gop->Mode->MaxMode;
@@ -57,10 +58,10 @@ bool get_framebuffer(uintptr_t *fb_addr, struct fb_mode **available_modes, int *
 	*total_modes = numModes;
 	*available_modes = (struct fb_mode *)mem_alloc(sizeof(struct fb_mode) * numModes);
 
-	*fb_addr = gop->Mode->FrameBufferBase;
+	*fb_addr = (uint32_t *)gop->Mode->FrameBufferBase;
 
 	// get all available modes
-	for (int i = 0; i < numModes; i++) {
+	for (int i = 0; i < (int)numModes; i++) {
 		Status = gop->QueryMode(gop, i, &SizeOfInfo, &mode_info);
 
 		(*available_modes)[i].width = mode_info->HorizontalResolution;
@@ -77,7 +78,7 @@ bool get_framebuffer(uintptr_t *fb_addr, struct fb_mode **available_modes, int *
 			(*available_modes)[i].format = FB_BGRA;
 		}
 		
-		if (i == nativeMode) {
+		if (i == (int)nativeMode) {
 			*current_mode_index = i;
 		}
 	  }

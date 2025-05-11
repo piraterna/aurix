@@ -36,6 +36,6 @@ struct fb_mode {
 	int format;
 };
 
-bool get_framebuffer(uintptr_t *fb_addr, struct fb_mode **available_modes, int *total_modes, int *current_mode_index);
+bool get_framebuffer(uint32_t **fb_addr, struct fb_mode **available_modes, int *total_modes, int *current_mode_index);
 
 #endif /* _UI_FRAMEBUFFER_H */

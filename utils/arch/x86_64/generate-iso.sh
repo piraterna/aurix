@@ -13,12 +13,10 @@ tempmountdir=$(mktemp -d 2>/dev/null)
 # Create UEFI image
 dd if=/dev/zero of=$uefi_image bs=1k count=1440 >/dev/null 2>&1
 mformat -i $uefi_image -f 1440 :: >/dev/null 2>&1
-mmd -i $uefi_image ::/EFI >/dev/null 2>&1
-mmd -i $uefi_image ::/EFI/BOOT >/dev/null 2>&1
-mcopy -i $uefi_image $SYSROOT_DIR/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT >/dev/null 2>&1
 ## !FIXME: Huge hack! Make a filesystem.
-mmd -i $uefi_image ::/System >/dev/null 2>&1
-mcopy -i $uefi_image $SYSROOT_DIR/System/axkrnl ::/System >/dev/null 2>&1
+mcopy -i $uefi_image -s $SYSROOT_DIR/EFI :: >/dev/null 2>&1
+mcopy -i $uefi_image -s $SYSROOT_DIR/System :: >/dev/null 2>&1
+mcopy -i $uefi_image -s $SYSROOT_DIR/AxBoot :: >/dev/null 2>&1
 
 # Create directory structure
 mkdir -p $tempmountdir/boot

@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ui.c                                                           */
+/* Module Name:  list.h                                                          */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,40 +17,29 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <ui/framebuffer.h>
-#include <ui/mouse.h>
-#include <ui/font.h>
-#include <ui/ui.h>
-#include <config/config.h>
+#ifndef _DATA_LIST_H
+#define _DATA_LIST_H
 
-#include <print.h>
 #include <stdint.h>
 
-void ui_init()
-{
-	struct ui_context ctx;
+typedef struct _ListNode {
+	void *data;
+	struct _ListNode *prev;
+	struct _ListNode *next;
+} ListNode;
 
-	if (!get_framebuffer(&ctx.fb_addr, &ctx.fb_modes, &ctx.total_modes, &ctx.current_mode)) {
-		debug("Failed to acquire a framebuffer!\n");
-		while (1);
-	}
+typedef struct _List {
+	uint32_t count;
+	ListNode *root;
+} List;
 
-	debug("Dumping framebuffer information\n");
-	debug("--------------------------------\n");
-	debug("Address: 0x%llx\n", ctx.fb_addr);
+List *list_new();
 
-	for (int i = 0; i < ctx.total_modes; i++) {
-		debug("\nMode %u:%s\n", i, (i == ctx.current_mode) ? " (current)" : "");
-		debug("Resolution: %ux%u\n", ctx.fb_modes[i].width, ctx.fb_modes[i].height);
-		debug("Bits Per Pixel: %u\n", ctx.fb_modes[i].bpp);
-		debug("Pitch: %u\n", ctx.fb_modes[i].pitch);
-		debug("Format: %s\n", ctx.fb_modes[i].format == FB_RGBA ? "RGBA" : "BGRA");
-	}
+int list_add(List *list, void *data);
+void *list_remove_at(List *list, uint32_t idx);
 
-	//font_init("\\AxBoot\\fonts\\DreamOrphans.ttf", 20);
+ListNode *listnode_new(void *data);
 
-	//while (1) {
-		//get_mouse(&m_x, &m_y, &m_but);
-		//debug("Mouse X = %u | Mouse Y = %u\n", m_x, m_y);
-	//}
-}
+void *list_get_at(List *list, uint32_t idx);
+
+#endif /* _DATA_LIST_H */

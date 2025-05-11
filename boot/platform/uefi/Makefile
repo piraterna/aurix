@@ -52,7 +52,10 @@ UEFI_CFLAGS := $(CFLAGS) \
 				-DAXBOOT_UEFI=1 \
 				$(foreach d, $(INCLUDE_DIRS), -I$d) \
 				-target $(ARCH)-unknown-windows \
+				-std=c11 \
+				-flto \
 				-fshort-wchar \
+				-msoft-float \
 				-mno-red-zone \
 				-mno-stack-arg-probe
 
@@ -68,6 +71,7 @@ UEFI_LDFLAGS := $(LDFLAGS) \
 				-fuse-ld=lld-link \
 				-Wl,-subsystem:efi_application \
 				-Wl,-entry:uefi_entry
+
 COMMON_CFILES := $(shell find $(BOOT_ROOT)/common -name '*.c')
 COMMON_ARCH_CFILES := $(shell find $(BOOT_ROOT)/arch/$(ARCH)/common -name '*.c')
 COMMON_ARCH_ASFILES := $(shell find $(BOOT_ROOT)/arch/$(ARCH)/common -name '*.S')

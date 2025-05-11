@@ -29,6 +29,9 @@
 	#define UNREACHABLE() __builtin_unreachable()
 #endif
 
+// TODO: This is hacky
+#define axboot_halt() while (1);
+
 void axboot_init(void);
 
 #endif /* _AXBOOT_H */

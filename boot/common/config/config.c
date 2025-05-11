@@ -17,7 +17,10 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
+#include <config/config.h>
+#include <config/ini.h>
 #include <lib/string.h>
+#include <loader/loader.h>
 #include <mm/mman.h>
 #include <vfs/vfs.h>
 #include <print.h>
@@ -26,20 +29,47 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define DEFAULT_ENTRY 0
+#define DEFAULT_TIMEOUT 30
+
 char *config_paths[] = {
+	"\\AxBoot\\axboot.cfg",
 	"\\axboot.cfg",
-	"\\System\\axboot.cfg",
 	"\\EFI\\axboot.cfg",
 	"\\EFI\\BOOT\\axboot.cfg",
 };
 
+struct axboot_cfg cfg = {
+	.default_entry = DEFAULT_ENTRY,
+	.timeout = DEFAULT_TIMEOUT,
+
+	//.entry_count = 0
+	.entry_count = 2
+};
+
+struct axboot_entry entries[2] = {
+	{
+		.name = "AurixOS",
+		.description = "Boot the Aurix Operating System",
+		.image_path = "\\System\\axkrnl",
+		.protocol = PROTO_AURIX
+	},
+	{
+		.name = "Windows 10",
+		.description = "",
+		.image_path = "\\EFI\\Microsoft\\bootmgfw.efi",
+		.protocol = PROTO_CHAINLOAD
+	}
+};
+
+
 void config_init(void)
 {
-	char *config_buf;
+	char *config_buf = NULL;
 	uint8_t open = 0;
 	
 	for (size_t i = 0; i < ARRAY_LENGTH(config_paths); i++) {
-		vfs_read("\\System\\axkrnl", &config_buf);
+		vfs_read(config_paths[i], &config_buf);
 		if (config_buf != NULL) {
 			open = 1;
 			break;
@@ -52,7 +82,25 @@ void config_init(void)
 		while (1);
 	}
 
-	// TODO: parse configuration file
-
 	mem_free(config_buf);
+}
+
+int config_get_timeout()
+{
+	return cfg.timeout;
+}
+
+int config_get_default()
+{
+	return cfg.default_entry;
+}
+
+int config_get_entry_count()
+{
+	return cfg.entry_count;
+}
+
+struct axboot_entry *config_get_entries()
+{
+	return entries;
 }

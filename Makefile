@@ -46,7 +46,13 @@ LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 QEMU_FLAGS := -m 2G -smp 4 -serial stdio
 
 # QEMU Audio support
-QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
+#QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
+
+# QEMU Mouse support
+QEMU_FLAGS += -usb -device usb-mouse
+
+# x86_64
+QEMU_FLAGS += -machine q35
 
 ##
 # General info
