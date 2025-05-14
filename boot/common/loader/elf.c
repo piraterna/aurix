@@ -52,13 +52,13 @@ uintptr_t elf64_load(char *data, pagetable *pagemap)
         }
     }
 
+    uintptr_t kernel_address = 0;// OR OTHER INVALID
+
     for (uint16_t i = 0; i < header->e_phnum; i++) {
         if (ph[i].p_type != PT_LOAD)
             continue;
         
-        if ((ph[i].p_vaddr & (~(max_align - 1))) < lowest) {
-            lowest = ph[i].p_vaddr & ~(max_align - 1);
-        }
+        lowest = ph[i].p_vaddr & ~(max_align - 1);
 
         uint64_t flags = VMM_PRESENT;
         if (ph[i].p_flags & PF_W)
@@ -66,7 +66,7 @@ uintptr_t elf64_load(char *data, pagetable *pagemap)
         if (!(ph[i].p_flags & PF_X))
             flags |= VMM_NX;
     
-        uint64_t phys = (uint64_t)mem_alloc(ph[i].p_memsz);
+        uint64_t phys = ((uint64_t)mem_alloc(ph[i].p_memsz + ph[i].p_vaddr - lowest + 4096) + 4096) & ~0xFFF;
         if (!phys) {
             debug("elf64_load(): Out of memory\n");
             return 0;
@@ -74,12 +74,25 @@ uintptr_t elf64_load(char *data, pagetable *pagemap)
         
         debug("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
 
-        map_page(pagemap, ph[i].p_vaddr, phys, flags);
-        memcpy((void*)ph[i].p_vaddr - lowest, data + ph[i].p_offset, ph[i].p_filesz);
+        if (ph[i].p_vaddr <= header->e_entry && ph[i].p_vaddr + ph[i].p_memsz >= header->e_entry) {
+            kernel_address = header->e_entry;
+
+            debug("elf64_load(): found kernel entry at 0x%llx\n", kernel_address);
+            debug("elf64_load(): comparison to old at 0x%llx\n", (uintptr_t)data + header->e_entry - 0xffffffff80000000 + 0x1000);
+        }
+
+        map_page(pagemap, lowest, phys, flags);
+        debug("elf64_load(): memcpy(0x%llx, 0x%llx, 0x%llx)\n", (void*)(phys + ph[i].p_vaddr - lowest), data + ph[i].p_offset, ph[i].p_filesz);
+        debug("\n");
+        memcpy((void*)(phys + ph[i].p_vaddr - lowest), data + ph[i].p_offset, ph[i].p_filesz);
+    }
+
+    if (kernel_address == 0) {
+        //SOMETHING
     }
 
     debug("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);
-    return (uintptr_t)((uint8_t *)data + header->e_entry);
+    return (uintptr_t)kernel_address;
 }
 
 uintptr_t elf_load(char *data, pagetable *pagemap)
