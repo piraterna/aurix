@@ -57,7 +57,7 @@ EFI_STATUS uefi_entry(EFI_HANDLE ImageHandle,
 	// disable UEFI watchdog
 	Status = gSystemTable->BootServices->SetWatchdogTimer(0, 0, 0, NULL);
 	if (EFI_ERROR(Status)) {
-		debug("Couldn't disable UEFI watchdog: %s (%x)\n", efi_status_to_str(Status), Status);
+		debug("uefi_entry(): Couldn't disable UEFI watchdog: %s (%x)\n", efi_status_to_str(Status), Status);
 	}
 
 	// load that mouse up
@@ -75,7 +75,7 @@ EFI_STATUS uefi_entry(EFI_HANDLE ImageHandle,
 				continue;
 			}
 
-			debug("Found SPP with ResX=%u, ResY=%u\n", spp[i]->Mode->ResolutionX, spp[i]->Mode->ResolutionY);
+			debug("uefi_entry(): Found SPP with ResX=%u, ResY=%u\n", spp[i]->Mode->ResolutionX, spp[i]->Mode->ResolutionY);
 			if (spp[i]->Reset(spp[i], EFI_TRUE) == EFI_DEVICE_ERROR) {
 				debug("uefi_entry(): Failed to reset device\n");
 				continue;

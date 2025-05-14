@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  print.h                                                         */
+/* Module Name:  terminal.h                                                      */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,19 +17,21 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#ifndef _PRINT_H
-#define _PRINT_H
+#ifndef _UI_TERMINAL_H
+#define _UI_TERMINAL_H
 
-#include "nanoprintf.h"
-#include <stdarg.h>
 #include <stdint.h>
-#include <stdbool.h>
 
-void log(const char *fmt, ...);
-void debug(const char *fmt, ...);
+struct terminal {
+	uint32_t cx;
+	uint32_t cy;
 
-void printstr(const char *str);
+	int font_size;
+};
 
-void snprintf(char *buf, size_t size, const char *fmt, va_list args);
+struct ui_context;
 
-#endif /* _PRINT_H */
+void terminal_print(struct ui_context *ctx, char *fmt, ...);
+void terminal_setcur(struct ui_context *ui, uint32_t x, uint32_t y);
+
+#endif /* _UI_TERMINAL_H */

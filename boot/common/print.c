@@ -62,10 +62,7 @@ void debug(const char *fmt, ...)
 	uart_sendstr(buf);
 }
 
-void snprintf(char *buf, size_t size, const char *fmt, ...)
+void snprintf(char *buf, size_t size, const char *fmt, va_list args)
 {
-	va_list args;
-	va_start(args, fmt);
 	npf_vsnprintf(buf, size, fmt, args);
-	va_end(args);
 }

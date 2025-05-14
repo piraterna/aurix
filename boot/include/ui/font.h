@@ -20,6 +20,14 @@
 #ifndef _UI_FONT_H
 #define _UI_FONT_H
 
-void font_init(char *font_path, int initial_size);
+#include <stdbool.h>
+#include <stdint.h>
+
+struct ui_context;
+
+bool font_init(struct ui_context *ctx, char *font_path, int size);
+void font_free(struct ui_context *ctx);
+
+void font_write(struct ui_context *ctx, char *s, uint32_t cx, uint32_t cy);
 
 #endif /* _UI_FONT_H */

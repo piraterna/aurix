@@ -38,9 +38,9 @@ void axboot_init()
 
 	//config_init();
 
-	//ui_init();
+	ui_init();
 
-	//debug("axboot_init(): Returned from main menu, something went wrong. Halting!");
+	debug("axboot_init(): Returned from main menu, something went wrong. Halting!");
 	//UNREACHABLE();
 
 	// just boot aurixos for now

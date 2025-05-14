@@ -42,6 +42,7 @@ char *config_paths[] = {
 struct axboot_cfg cfg = {
 	.default_entry = DEFAULT_ENTRY,
 	.timeout = DEFAULT_TIMEOUT,
+	.ui_mode = UI_TEXT,
 
 	//.entry_count = 0
 	.entry_count = 2
@@ -103,4 +104,9 @@ int config_get_entry_count()
 struct axboot_entry *config_get_entries()
 {
 	return entries;
+}
+
+int config_get_ui_mode()
+{
+	return cfg.ui_mode;
 }
