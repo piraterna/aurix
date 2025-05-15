@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  print.c                                                         */
+/* Module Name:  datetime.c                                                      */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,61 +17,30 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#define NANOPRINTF_IMPLEMENTATION
-#define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_PRECISION_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_FLOAT_FORMAT_SPECIFIERS 0
-#define NANOPRINTF_USE_LARGE_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_BINARY_FORMAT_SPECIFIERS 0
-#define NANOPRINTF_USE_WRITEBACK_FORMAT_SPECIFIERS 0
-#include <nanoprintf.h>
-
-#include <uart/uart.h>
+#include <time/dt.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <axboot.h>
 #include <print.h>
 
-#include <stddef.h>
-#include <stdint.h>
-#include <stdarg.h>
-#include <stdbool.h>
+#include <efi.h>
+#include <efilib.h>
 
-int32_t _fltused = 0;
-int32_t __eqdf2 = 0;
-int32_t __ltdf2 = 0;
-
-void log(const char *fmt, ...)
+void get_datetime(struct datetime *dt)
 {
-	va_list args;
-	char buf[4096];
+	EFI_STATUS status;
+	EFI_TIME uefi_dt;
 
-	va_start(args, fmt);
-	npf_vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
+	status = gSystemTable->RuntimeServices->GetTime(&uefi_dt, NULL);
+	if (EFI_ERROR(status)) {
+		debug("get_datetime(): Failed to acquire current time, setting to 1970/01/01 00:00:00!\n");
+		return;
+	}
 
-	uart_sendstr(buf);
-}
-
-void debug(const char *fmt, ...)
-{
-	va_list args;
-	char buf[4096];
-
-	va_start(args, fmt);
-	npf_vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	uart_sendstr(buf);
-}
-
-void snprintf(char *buf, size_t size, const char *fmt, ...)
-{
-	va_list args;
-
-	va_start(args, fmt);
-	npf_vsnprintf(buf, size, fmt, args);
-	va_end(args);
-}
-
-void vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
-{
-	npf_vsnprintf(buf, size, fmt, args);
+	dt->year = uefi_dt.Year;
+	dt->month = uefi_dt.Month;
+	dt->day = uefi_dt.Day;
+	dt->h = uefi_dt.Hour;
+	dt->m = uefi_dt.Minute;
+	dt->s = uefi_dt.Second;
 }

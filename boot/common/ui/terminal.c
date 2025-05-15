@@ -33,7 +33,7 @@ void terminal_print(struct ui_context *ctx, char *fmt, ...)
 	char *s = (char *)&buf;
 
 	va_start(args, fmt);
-	snprintf((char *)&buf, sizeof(buf), fmt, args);
+	vsnprintf((char *)&buf, sizeof(buf), fmt, args);
 	va_end(args);
 
 	while (*s) {

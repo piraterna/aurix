@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  print.c                                                         */
+/* Module Name:  power.h                                                         */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,61 +17,14 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#define NANOPRINTF_IMPLEMENTATION
-#define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_PRECISION_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_FLOAT_FORMAT_SPECIFIERS 0
-#define NANOPRINTF_USE_LARGE_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_BINARY_FORMAT_SPECIFIERS 0
-#define NANOPRINTF_USE_WRITEBACK_FORMAT_SPECIFIERS 0
-#include <nanoprintf.h>
+#ifndef _POWER_H
+#define _POWER_H
 
-#include <uart/uart.h>
-#include <print.h>
-
-#include <stddef.h>
-#include <stdint.h>
-#include <stdarg.h>
 #include <stdbool.h>
 
-int32_t _fltused = 0;
-int32_t __eqdf2 = 0;
-int32_t __ltdf2 = 0;
+bool platform_is_reboot_to_fw_possible();
+void platform_reboot_to_fw();
+void platform_reboot();
+void platform_shutdown();
 
-void log(const char *fmt, ...)
-{
-	va_list args;
-	char buf[4096];
-
-	va_start(args, fmt);
-	npf_vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	uart_sendstr(buf);
-}
-
-void debug(const char *fmt, ...)
-{
-	va_list args;
-	char buf[4096];
-
-	va_start(args, fmt);
-	npf_vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	uart_sendstr(buf);
-}
-
-void snprintf(char *buf, size_t size, const char *fmt, ...)
-{
-	va_list args;
-
-	va_start(args, fmt);
-	npf_vsnprintf(buf, size, fmt, args);
-	va_end(args);
-}
-
-void vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
-{
-	npf_vsnprintf(buf, size, fmt, args);
-}
+#endif /* _POWER_H */
