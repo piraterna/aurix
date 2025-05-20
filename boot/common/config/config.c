@@ -30,7 +30,10 @@
 #include <stddef.h>
 
 #define DEFAULT_ENTRY 0
-#define DEFAULT_TIMEOUT 30
+// default timeout of 0 disables the UI entirely, which is essentialy what *should* happen now since the UI
+// is... in a catastrophic state. Just remember to set this back to 30 once the UI is ready
+#define DEFAULT_TIMEOUT 0
+// #define DEFAULT_TIMEOUT 30
 
 char *config_paths[] = {
 	"\\AxBoot\\axboot.cfg",

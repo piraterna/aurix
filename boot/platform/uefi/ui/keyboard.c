@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  i18n.h                                                          */
+/* Module Name:  keyboard.c                                                      */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,24 +17,23 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#ifndef _I18N_H
-#define _I18N_H
+#include <ui/keyboard.h>
+#include <stdint.h>
+#include <print.h>
 
-struct language {
-	char *shutdown;
-	char *reboot;
-	char *reboot_to_firmware;
-	char *resolution;
+#include <efi.h>
+#include <efilib.h>
 
-	char *language;
-};
-
-struct language_selection {
-	char *name;
-	char *code;
-	struct language *lang;
-};
-
-extern struct language_selection *i18n_curlang;
-
-#endif /* _I18N_H */
+void get_keypress(uint16_t *scancode)
+{
+	EFI_INPUT_KEY key;
+	if (gSystemTable->ConIn->ReadKeyStroke(gSystemTable->ConIn, &key) == EFI_SUCCESS) {
+		if (key.UnicodeChar == L'\r') {
+			*scancode = SCANCODE_ENTER;
+			return;
+		}
+		*scancode = key.ScanCode;
+	} else {
+		*scancode = 0;
+	}
+}

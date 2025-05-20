@@ -38,6 +38,12 @@ void axboot_init()
 
 	//config_init();
 
+	// boot straight away
+	if (config_get_timeout() < 1) {
+		struct axboot_entry *entries = config_get_entries();
+		loader_load(&(entries[config_get_default()]));
+	}
+
 	ui_init();
 
 	debug("axboot_init(): Returned from main menu, something went wrong. Halting!");

@@ -22,5 +22,8 @@
 struct language i18n_csCZ = {
 	.shutdown = "Vypnout",
 	.reboot = "Restartovat",
-	.reboot_to_firmware = "Přejít do nastavení firmwaru"
+	.reboot_to_firmware = "Přejít do nastavení firmwaru",
+	.resolution = "Rozlišení",
+
+	.language = "Jazyk"
 };

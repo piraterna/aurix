@@ -19,6 +19,20 @@
 
 #include <i18n.h>
 
+extern struct language i18n_csCZ;
 extern struct language i18n_enUS;
 
-struct language *i18n_lang = &i18n_enUS;
+struct language_selection i18n_languages[] = {
+	{
+		"Čeština",
+		"cs_CZ",
+		&i18n_csCZ
+	},
+	{
+		"English",
+		"en_US",
+		&i18n_enUS
+	}
+};
+
+struct language_selection *i18n_curlang = &i18n_languages[1]; // english

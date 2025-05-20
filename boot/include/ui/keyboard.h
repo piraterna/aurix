@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  i18n.h                                                          */
+/* Module Name:  keyboard.c                                                      */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,24 +17,15 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#ifndef _I18N_H
-#define _I18N_H
+#ifndef _UI_KEYBOARD_H
+#define _UI_KEYBOARD_H
 
-struct language {
-	char *shutdown;
-	char *reboot;
-	char *reboot_to_firmware;
-	char *resolution;
+#include <stdint.h>
 
-	char *language;
-};
+#define SCANCODE_ARROW_UP 0x1
+#define SCANCODE_ARROW_DOWN 0x2
+#define SCANCODE_ENTER 43
 
-struct language_selection {
-	char *name;
-	char *code;
-	struct language *lang;
-};
+void get_keypress(uint16_t *scancode);
 
-extern struct language_selection *i18n_curlang;
-
-#endif /* _I18N_H */
+#endif /* _UI_KEYBOARD_H */

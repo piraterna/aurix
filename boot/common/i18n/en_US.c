@@ -22,5 +22,8 @@
 struct language i18n_enUS = {
 	.shutdown = "Shutdown",
 	.reboot = "Reboot",
-	.reboot_to_firmware = "Reboot to Firmware"
+	.reboot_to_firmware = "Reboot to Firmware",
+	.resolution = "Resolution",
+
+	.language = "Language"
 };

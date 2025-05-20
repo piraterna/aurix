@@ -51,6 +51,9 @@ EFI_STATUS uefi_entry(EFI_HANDLE ImageHandle,
 	gSystemTable = SystemTable;
 	gBootServices = SystemTable->BootServices;
 
+	// reset input
+	gSystemTable->ConIn->Reset(gSystemTable->ConIn, EFI_FALSE);
+
 	// clear the screen
 	gSystemTable->ConOut->ClearScreen(gSystemTable->ConOut);
 

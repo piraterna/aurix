@@ -39,12 +39,23 @@
 
 #include <stdint.h>
 
+struct mouse_event {
+	uint16_t x;
+	uint16_t y;
+	uint8_t but;
+};
+
 struct ui_context {
 	uint32_t *fb_addr;
 	struct fb_mode *fb_modes;
 	int total_modes;
 	int current_mode;
 	int ui;
+
+	struct mouse_event last_mouse;
+
+	int current_selection;
+	int last_selection;
 
 	struct terminal terminal;
 
