@@ -31,8 +31,7 @@ PHDRS
 
 SECTIONS
 {
-	/* TODO: 0xffffffff80000000 */
-	. = 0x1000;
+	. = 0xffffffff80000000;
 
 	_linker_start_text = .;
 

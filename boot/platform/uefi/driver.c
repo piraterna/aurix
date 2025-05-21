@@ -49,7 +49,7 @@ bool verify_secure_boot()
 
 void load_drivers()
 {
-	EFI_STATUS status;
+	// EFI_STATUS status;
 	if (!verify_secure_boot()) {
 		debug("load_drivers(): Secure boot is enabled! Won't load drivers...\n");
 		return;
