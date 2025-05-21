@@ -10,6 +10,7 @@ brew "make"
 brew "gptfdisk"
 brew "xorriso"
 brew "qemu"
+brew "ffmpeg"
 brew "llvm"
 brew "lld"
 brew "util-linux" if OS.mac?

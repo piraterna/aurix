@@ -19,13 +19,14 @@
 
 #define NANOPRINTF_IMPLEMENTATION
 #define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_PRECISION_FORMAT_SPECIFIERS 0
+#define NANOPRINTF_USE_PRECISION_FORMAT_SPECIFIERS 1
 #define NANOPRINTF_USE_FLOAT_FORMAT_SPECIFIERS 0
 #define NANOPRINTF_USE_LARGE_FORMAT_SPECIFIERS 1
 #define NANOPRINTF_USE_BINARY_FORMAT_SPECIFIERS 0
 #define NANOPRINTF_USE_WRITEBACK_FORMAT_SPECIFIERS 0
 #include <nanoprintf.h>
 
+#include <uart/uart.h>
 #include <print.h>
 
 #include <stddef.h>
@@ -46,10 +47,7 @@ void log(const char *fmt, ...)
 	npf_vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
-// TODO: Get rid of this
-#ifdef AXBOOT_UEFI
-	printstr(buf);
-#endif
+	uart_sendstr(buf);
 }
 
 void debug(const char *fmt, ...)
@@ -61,15 +59,19 @@ void debug(const char *fmt, ...)
 	npf_vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
-#ifdef AXBOOT_UEFI
-	printstr(buf);
-#endif
+	uart_sendstr(buf);
 }
 
 void snprintf(char *buf, size_t size, const char *fmt, ...)
 {
 	va_list args;
+
 	va_start(args, fmt);
 	npf_vsnprintf(buf, size, fmt, args);
 	va_end(args);
+}
+
+void vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
+{
+	npf_vsnprintf(buf, size, fmt, args);
 }

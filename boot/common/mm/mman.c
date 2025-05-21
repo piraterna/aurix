@@ -113,6 +113,7 @@ void *mem_alloc(size_t n)
 
 	add_alloc(alloc, n);
 
+	debug("mem_alloc(): Allocated %u bytes\n", n);
 	return alloc;
 }
 
@@ -122,7 +123,7 @@ int mem_allocat(void *addr, size_t npages)
 
 	status = gBootServices->AllocatePages(AllocateAddress, EfiLoaderData, (EFI_UINTN)npages, addr);
 	if (EFI_ERROR(status)) {
-		debug("mem_allocat(): Couldn't allocate %u bytes at 0x%lx: %s (%lx)\n", npages, addr, efi_status_to_str(status), status);
+		debug("mem_allocat(): Couldn't allocate %u pages at 0x%lx: %s (%lx)\n", npages, addr, efi_status_to_str(status), status);
 		return 0;
 	}
 
@@ -137,9 +138,9 @@ void *mem_realloc(void *addr, size_t n)
 	void *new = NULL;
 	
 	int i = find_alloc(addr);
-	if (i == -1) {
-		debug("mem_realloc(): Couldn't find allocation for 0x%lx.\n");
-		return NULL;
+	if (i == -1 || addr == NULL) {
+		debug("mem_realloc(): Couldn't find allocation for 0x%lx, allocating new memory.\n");
+		return mem_alloc(n);
 	}
 
 	old_size = allocation_list[i].size;
@@ -168,6 +169,8 @@ void mem_free(void *addr)
 		debug("mem_free(): Couldn't free 0x%lx: %s (%lx)\n", addr, efi_status_to_str(status), status);
 		return;
 	}
+
+	debug("mem_free(): Freed 0x%llx\n", addr);
 
 	remove_alloc(addr);
 }

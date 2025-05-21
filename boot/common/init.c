@@ -17,21 +17,50 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <vfs/vfs.h>
-#include <mm/mman.h>
-#include <mm/vmm.h>
+#include <config/config.h>
+#include <loader/loader.h>
 #include <proto/aurix.h>
+#include <uart/uart.h>
+#include <vfs/vfs.h>
+#include <ui/ui.h>
+#include <axboot.h>
 #include <print.h>
 
 void axboot_init()
 {
+	uart_init(115200);
+
 	if (!vfs_init("\\")) {
 		debug("axboot_init(): Failed to mount boot drive! Halting...\n");
 		// TODO: Halt
 		while (1);
 	}
 
-	aurix_load("\\System\\axkrnl");
+#ifdef AXBOOT_UEFI
+#include <driver.h>
+	load_drivers();
+#endif
 
-	while (1);
+	//config_init();
+
+	// boot straight away
+	if (config_get_timeout() < 1) {
+		struct axboot_entry *entries = config_get_entries();
+		loader_load(&(entries[config_get_default()]));
+	}
+
+	ui_init();
+
+	debug("axboot_init(): Returned from main menu, something went wrong. Halting!");
+	//UNREACHABLE();
+
+	// just boot aurixos for now
+	struct axboot_entry axos = {
+		.name = "AurixOS",
+		.description = "",
+		.image_path = "\\System\\axkrnl",
+		.protocol = PROTO_AURIX
+	};
+	loader_load(&axos);
+	UNREACHABLE();
 }

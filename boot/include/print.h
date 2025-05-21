@@ -31,5 +31,6 @@ void debug(const char *fmt, ...);
 void printstr(const char *str);
 
 void snprintf(char *buf, size_t size, const char *fmt, ...);
+void vsnprintf(char *buf, size_t size, const char *fmt, va_list args);
 
 #endif /* _PRINT_H */

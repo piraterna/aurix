@@ -33,7 +33,7 @@ export BUILD_DIR ?= $(ROOT_DIR)/build
 export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
 export RELEASE_DIR ?= $(ROOT_DIR)/release
 
-NOUEFI ?= n
+export NOUEFI ?= n
 
 ##
 # Image generation and running
@@ -43,7 +43,16 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
-QEMU_FLAGS := -m 2G -smp 4 -serial stdio
+QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
+
+# QEMU Audio support
+#QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
+
+# QEMU Mouse support
+QEMU_FLAGS += -usb -device usb-mouse
+
+# x86_64
+QEMU_FLAGS += -machine q35
 
 ##
 # General info
@@ -75,16 +84,7 @@ all: boot kernel
 .PHONY: boot
 boot:
 	@printf ">>> Building bootloader...\n"
-ifneq (,$(filter $(ARCH),i686 x86_64))
-	@$(MAKE) -C boot PLATFORM=pc-bios
-else
-	@$(MAKE) -C boot
-endif
-ifneq (,$(filter $(ARCH),i686 x86_64 arm32 aarch64))
-ifeq ($(NOUEFI),n)
-	@$(MAKE) -C boot PLATFORM=uefi
-endif
-endif
+	@$(MAKE) -C boot all
 
 .PHONY: kernel
 kernel:
@@ -142,6 +142,7 @@ run-uefi: livecd ovmf
 
 .PHONY: clean
 clean:
+	@$(MAKE) -C boot clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean

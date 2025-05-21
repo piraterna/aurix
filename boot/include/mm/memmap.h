@@ -20,6 +20,7 @@
 #ifndef _MEM_MEMMAP_H
 #define _MEM_MEMMAP_H
 
+#include <mm/vmm.h>
 #include <stdint.h>
 
 enum AxBootMemMapType {
@@ -45,6 +46,6 @@ typedef struct _axboot_memmap {
 	int type;
 } axboot_memmap;
 
-axboot_memmap *get_memmap();
+axboot_memmap *get_memmap(pagetable *pm);
 
 #endif /* _MEM_MEMMAP_H */

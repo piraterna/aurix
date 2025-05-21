@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  print.c                                                         */
+/* Module Name:  terminal.h                                                      */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,14 +17,21 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <lib/string.h>
-#include <efi.h>
-#include <efilib.h>
+#ifndef _UI_TERMINAL_H
+#define _UI_TERMINAL_H
 
-void printstr(const char *str)
-{
-	CHAR16 wstr[4096];
-	mbstowcs(wstr, &str, strlen(str));
-	wstr[strlen(str)] = '\0';
-	gSystemTable->ConOut->OutputString(gSystemTable->ConOut, wstr);
-}
+#include <stdint.h>
+
+struct terminal {
+	uint32_t cx;
+	uint32_t cy;
+
+	int font_size;
+};
+
+struct ui_context;
+
+void terminal_print(struct ui_context *ctx, char *fmt, ...);
+void terminal_setcur(struct ui_context *ui, uint32_t x, uint32_t y);
+
+#endif /* _UI_TERMINAL_H */

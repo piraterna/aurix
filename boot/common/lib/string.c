@@ -143,6 +143,38 @@ char *strcpy(char *dest, const char *src)
 	return pdest;
 }
 
+char *strncpy(char *dest, const char *src, size_t n)
+{
+	if (dest == NULL || src == NULL) {
+		return NULL;
+	}
+
+	char *pdest = dest;
+
+	while (*src != '\0' || n--) {
+		*pdest++ = *src++;
+	}
+
+	*pdest = '\0';
+	return dest;
+}
+
+char *strncat(char *dest, const char *src, size_t n)
+{
+	if (dest == 0 || src == 0) {
+		return NULL;
+	}
+
+	size_t i = strlen(dest);
+	size_t a = 0;
+	
+	while (a < n && src[a] != '\0') {
+		dest[i++] = src[a++];
+	}
+	dest[i] = '\0';
+	return dest;
+}
+
 // TODO: Get rid of this function
 char *strdup(const char *s)
 {

@@ -40,13 +40,37 @@ CFLAGS += -O2
 endif
 
 .PHONY: all
-all:
+all: sounds
+ifneq (,$(filter $(ARCH),i686 x86_64))
+	@$(MAKE) -C platform/pc-bios all
+else
 	@$(MAKE) -C platform/$(PLATFORM) all
+endif
+ifneq (,$(filter $(ARCH),i686 x86_64 arm32 aarch64))
+ifeq ($(NOUEFI),n)
+	@$(MAKE) -C platform/uefi all
+#	@$(MAKE) -C drivers all
+endif
+endif
+
+.PHONY: sounds
+sounds:
+	@mkdir -p $(BUILD_DIR)/boot/sounds
+	@mkdir -p $(BOOT_ROOT)/include/sounds
+	@for f in $(BOOT_ROOT)/sound/*.mp3; do \
+		file=$$(basename $$f ".$${f##*.}") ; \
+		printf "  GEN\t$$file.h\n" ; \
+    	ffmpeg -i "$$f" -acodec pcm_s16le -f s16le -ac 2 "$(BUILD_DIR)/boot/sounds/$$file.raw" -y 2>/dev/null ; \
+		python3 $(ROOT_DIR)/utils/bin_to_header.py "$(BUILD_DIR)/boot/sounds/$$file.raw" "$(BOOT_ROOT)/include/sounds/$$file.h" $$file ; \
+	done
 
 .PHONY: install
 install:
 	@$(MAKE) -C platform/$(PLATFORM) install
+#	@$(MAKE) -C drivers install
+	@mkdir -p $(SYSROOT_DIR)/AxBoot
+	@cp -r base/* $(SYSROOT_DIR)/AxBoot
 
 .PHONY: clean
 clean:
-	@$(MAKE) -C platform/$(PLATFORM) clean
+	@rm -rf $(BOOT_ROOT)/include/sounds

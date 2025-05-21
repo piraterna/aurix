@@ -1,0 +1,33 @@
+/*********************************************************************************/
+/* Module Name:  font.h                                                          */
+/* Project:      AurixOS                                                         */
+/*                                                                               */
+/* Copyright (c) 2024-2025 Jozef Nagy                                            */
+/*                                                                               */
+/* This source is subject to the MIT License.                                    */
+/* See License.txt in the root of this repository.                               */
+/* All other rights reserved.                                                    */
+/*                                                                               */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
+/* SOFTWARE.                                                                     */
+/*********************************************************************************/
+
+#ifndef _UI_FONT_H
+#define _UI_FONT_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+struct ui_context;
+
+bool font_init(struct ui_context *ctx, char *font_path, int size);
+void font_free(struct ui_context *ctx);
+
+void font_write(struct ui_context *ctx, char *s, uint32_t cx, uint32_t cy);
+
+#endif /* _UI_FONT_H */
