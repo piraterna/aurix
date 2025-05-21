@@ -17,8 +17,11 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-// #include <driver.h>
+#include <driver.h>
 #include <config/config.h>
+#include <mm/mman.h>
+#include <lib/string.h>
+#include <vfs/vfs.h>
 #include <print.h>
 
 #include <efi.h>
@@ -46,8 +49,40 @@ bool verify_secure_boot()
 
 void load_drivers()
 {
+	EFI_STATUS status;
 	if (!verify_secure_boot()) {
 		debug("load_drivers(): Secure boot is enabled! Won't load drivers...\n");
 		return;
 	}
+
+	// TODO: Create a vfs_list() function to get a list of files in a directory
+	// char *driver_path = "\\AxBoot\\drivers\\.efi";
+	// char *driver_binary;
+	// debug("load_drivers(): Loading '%s'...\n", driver_name);
+	//
+	// size_t driver_size = vfs_read(audio_path, &driver_binary);
+	//
+	// audio.devpath[0].Header.Length[0] = sizeof(EFI_MEMMAP_DEVICE_PATH);
+    // audio.devpath[0].Header.Length[1] = sizeof(EFI_MEMMAP_DEVICE_PATH) >> 8;
+    // audio.devpath[0].Header.Type = 1;
+    // audio.devpath[0].Header.SubType = 3;
+    // audio.devpath[0].MemoryType = EfiLoaderData;
+    // audio.devpath[0].StartingAddress = (EFI_UINTPTR)driver_binary;
+    // audio.devpath[0].EndingAddress = (EFI_UINTPTR)driver_binary + driver_size;
+    // audio.devpath[1].Header.Length[0] = sizeof(EFI_DEVICE_PATH_PROTOCOL);
+    // audio.devpath[1].Header.Length[1] = sizeof(EFI_DEVICE_PATH_PROTOCOL) >> 8;
+    // audio.devpath[1].Header.Type = 0x7F;
+    // audio.devpath[1].Header.SubType = 0xFF;
+	//
+	// status = gSystemTable->BootServices->LoadImage(EFI_FALSE, gImageHandle, (EFI_DEVICE_PATH_PROTOCOL *)driver_devpath, driver_binary, driver_size, &driver_handle);
+	// if (EFI_ERROR(status)) {
+		// debug("load_drivers(): Failed to load driver '%s': %s (%llx)\n", driver_name, efi_status_to_str(status), status);
+		// return;
+	// }
+	// 
+	// status = gSystemTable->BootServices->StartImage(driver_handle, NULL, NULL);
+	// if (EFI_ERROR(status)) {
+		// debug("load_drivers(): Failed to start driver '%s': %s (%llx)\n", driver_name, efi_status_to_str(status), status);
+		// return;
+	// }
 }

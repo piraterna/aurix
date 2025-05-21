@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  init.c                                                          */
+/* Module Name:  driver.h                                                        */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,50 +17,23 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <config/config.h>
-#include <loader/loader.h>
-#include <proto/aurix.h>
-#include <uart/uart.h>
-#include <vfs/vfs.h>
-#include <ui/ui.h>
-#include <axboot.h>
-#include <print.h>
-
-void axboot_init()
-{
-	uart_init(115200);
-
-	if (!vfs_init("\\")) {
-		debug("axboot_init(): Failed to mount boot drive! Halting...\n");
-		// TODO: Halt
-		while (1);
-	}
+#ifndef _DRIVER_H
+#define _DRIVER_H
 
 #ifdef AXBOOT_UEFI
-#include <driver.h>
-	load_drivers();
+
+#include <stddef.h>
+#include <efi.h>
+
+struct driver {
+	EFI_HANDLE handle;
+	char *binary;
+	size_t binsize;
+	EFI_MEMMAP_DEVICE_PATH devpath[2];
+};
+
 #endif
 
-	//config_init();
+void load_drivers();
 
-	// boot straight away
-	if (config_get_timeout() < 1) {
-		struct axboot_entry *entries = config_get_entries();
-		loader_load(&(entries[config_get_default()]));
-	}
-
-	ui_init();
-
-	debug("axboot_init(): Returned from main menu, something went wrong. Halting!");
-	//UNREACHABLE();
-
-	// just boot aurixos for now
-	struct axboot_entry axos = {
-		.name = "AurixOS",
-		.description = "",
-		.image_path = "\\System\\axkrnl",
-		.protocol = PROTO_AURIX
-	};
-	loader_load(&axos);
-	UNREACHABLE();
-}
+#endif /* _DRIVER_H */
