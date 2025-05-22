@@ -20,6 +20,7 @@
 KERNEL_CFLAGS += -m64 \
 				-march=x86-64 \
 				-mabi=sysv \
+				-mcmodel=kernel \
 				-mno-red-zone \
 				-mno-80387 \
 				-mno-mmx \
