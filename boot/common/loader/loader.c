@@ -49,7 +49,7 @@ void loader_load(struct axboot_entry *entry)
 			break;
 		}
 		default: {
-			log("Entry doesn't have a supported protocol!\n");
+			log("loader_load(): Entry doesn't have a supported protocol!\n");
 			break;
 		}
 	}

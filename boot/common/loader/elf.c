@@ -74,7 +74,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
             *addr = phys;
         }
         
-        log("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
+        debug("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
 
         map_page(pagemap, aligned_vaddr, phys, flags);
         memcpy((void*)(phys + ph[i].p_vaddr - aligned_vaddr), data + ph[i].p_offset, ph[i].p_filesz);
@@ -89,12 +89,12 @@ uintptr_t elf_load(char *data, uintptr_t *addr, pagetable *pagemap)
     struct elf_header *header = (struct elf_header *)data;
 
     if (header->e_magic != ELF_MAGIC) {
-        log("Invalid ELF magic: 0x%x", header->e_magic);
+        log("elf_load(): Invalid ELF magic: 0x%x", header->e_magic);
         return 0;
     }
 
     if (header->e_class != 2) {
-        log("Unsupported ELF class: %u", header->e_class);
+        log("elf_load(): Unsupported ELF class: %u", header->e_class);
         return 0;
     }
 
@@ -106,6 +106,6 @@ uintptr_t elf_load(char *data, uintptr_t *addr, pagetable *pagemap)
         return elf64_load(data, addr, pagemap);
     }
 
-    log("Unsupported ELF machine: %u", header->e_machine);
+    log("elf_load(): Unsupported ELF machine: %u", header->e_machine);
     return 0;
 }
