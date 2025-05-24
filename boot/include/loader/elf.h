@@ -73,6 +73,6 @@ struct elf_program_header {
 #define PF_W 0x2
 #define PF_R 0x4
 
-uintptr_t elf_load(char *kernel, pagetable *pagemap);
+uintptr_t elf_load(char *kernel, uintptr_t *addr, pagetable *pagemap);
 
 #endif /* _LOADER_ELF_H */

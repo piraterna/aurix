@@ -31,17 +31,17 @@ void axboot_init()
 	uart_init(115200);
 
 	if (!vfs_init("\\")) {
-		debug("axboot_init(): Failed to mount boot drive! Halting...\n");
+		log("axboot_init(): Failed to mount boot drive! Halting...\n");
 		// TODO: Halt
 		while (1);
 	}
+
+	config_init();
 
 #ifdef AXBOOT_UEFI
 #include <driver.h>
 	load_drivers();
 #endif
-
-	//config_init();
 
 	// boot straight away
 	if (config_get_timeout() < 1) {
@@ -51,16 +51,6 @@ void axboot_init()
 
 	ui_init();
 
-	debug("axboot_init(): Returned from main menu, something went wrong. Halting!");
-	//UNREACHABLE();
-
-	// just boot aurixos for now
-	struct axboot_entry axos = {
-		.name = "AurixOS",
-		.description = "",
-		.image_path = "\\System\\axkrnl",
-		.protocol = PROTO_AURIX
-	};
-	loader_load(&axos);
+	log("axboot_init(): Returned from main menu, something went wrong. Halting!");
 	UNREACHABLE();
 }

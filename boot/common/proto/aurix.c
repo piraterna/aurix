@@ -17,67 +17,190 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
+#include <acpi/acpi.h>
 #include <proto/aurix.h>
 #include <loader/elf.h>
 #include <mm/mman.h>
 #include <mm/memmap.h>
 #include <mm/vmm.h>
+#include <lib/string.h>
+#include <ui/framebuffer.h>
 #include <vfs/vfs.h>
 #include <print.h>
 #include <axboot.h>
-#include <efi.h>
-#include <efilib.h>
 
-extern __attribute__((noreturn)) void aurix_handoff(void *pagemap, void *stack, uint64_t entry, void *params);
-extern char _aurix_handoff_start[], _aurix_handoff_end[];
+#include <stdint.h>
+#include <stdbool.h>
+
+#define AURIX_STACK_SIZE 16*1024
+
+bool aurix_get_memmap(struct aurix_parameters *params, axboot_memmap *mmap, uint32_t mmap_entries, pagetable *pm)
+{
+	if (params == NULL || mmap == NULL || pm == NULL ||  mmap_entries == 0) {
+		log("aurix_get_memmap(): Invalid parameter!\n");
+		return false;
+	}
+
+	// UEFI returns an unnecessarily large memory map with regions of the same type
+	// being split into multiple entries (probably due to memory attributes, which we do not care about).
+	for (uint32_t i = 0; i < mmap_entries; i++) {
+		if (i == mmap_entries - 1) {
+			break;
+		}
+		if (mmap[i].base + mmap[i].size >= mmap[i+1].base && mmap[i].type == mmap[i+1].type) {
+			mmap[i].size += mmap[i+1].size;
+			for (uint32_t j = i+1; j < mmap_entries; j++) {
+				mmap[j].base = mmap[j+1].base;
+				mmap[j].size = mmap[j+1].size;
+				mmap[j].type = mmap[j+1].type;
+			}
+			mmap_entries--;
+			i--;
+		}
+	}
+
+	// copy the memory map over to kernel parameters
+	params->mmap = (struct aurix_memmap *)mem_alloc(sizeof(struct aurix_memmap) * mmap_entries);
+	if (!(params->mmap)) {
+		log("aurix_get_memmap(): Failed to allocate memory for storing memory map!\n");
+		return false;
+	}
+	params->mmap_entries = mmap_entries;
+
+	for (uint32_t i = 0; i < mmap_entries; i++) {
+		params->mmap[i].base = mmap[i].base;
+		params->mmap[i].size = mmap[i].size;
+		switch (mmap[i].type) {
+			case MemMapReserved:
+			case MemMapFaulty:
+			case MemMapFirmware:
+				params->mmap[i].type = AURIX_MMAP_RESERVED;
+				break;
+			case MemMapACPIReclaimable:
+				params->mmap[i].type = AURIX_MMAP_ACPI_RECLAIMABLE;
+				break;
+			case MemMapACPIMappedIO:
+				params->mmap[i].type = AURIX_MMAP_ACPI_MAPPED_IO;
+				break;
+			case MemMapACPIMappedIOPortSpace:
+				params->mmap[i].type = AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE;
+				break;
+			case MemMapACPINVS:
+				params->mmap[i].type = AURIX_MMAP_ACPI_NVS;
+				break;
+			case MemMapFreeOnLoad:
+				params->mmap[i].type = AURIX_MMAP_BOOTLOADER_RECLAIMABLE;
+				break;
+			case MemMapUsable:
+				params->mmap[i].type = AURIX_MMAP_USABLE;
+				break;
+			default:
+				log("aurix_get_memmap(): Unknown memory type in entry %u (%u), setting as reserved.\n", i, mmap[i].type);
+				params->mmap[i].type = AURIX_MMAP_RESERVED;
+				break;
+		}
+	}
+
+	return true;
+}
+
+bool aurix_get_framebuffer(struct aurix_parameters *params)
+{
+	struct fb_mode *modes;
+	int current_mode;
+	uint32_t *fb_addr;
+
+	params->framebuffer = (struct aurix_framebuffer *)mem_alloc(sizeof(struct aurix_framebuffer));
+	if (!(params->framebuffer)) {
+		log("aurix_get_framebuffer(): Failed to allocate memory for framebuffer information!\n");
+		return false;
+	}
+
+	if (!get_framebuffer(&fb_addr, &modes, NULL, &current_mode)) {
+		log("aurix_get_framebuffer(): get_framebuffer() returned false, setting everything to 0.\n");
+		memset(params->framebuffer, 0, sizeof(struct aurix_framebuffer));
+		return false;
+	}
+
+	params->framebuffer->addr = (uintptr_t)fb_addr;
+	params->framebuffer->width = modes[current_mode].width;
+	params->framebuffer->height = modes[current_mode].height;
+	params->framebuffer->bpp = modes[current_mode].bpp;
+	params->framebuffer->pitch = modes[current_mode].pitch;
+	params->framebuffer->format = modes[current_mode].format;
+
+	return true;
+}
 
 void aurix_load(char *kernel_path)
 {
-	// read kernel -> test read
 	char *kbuf = NULL;
 	vfs_read(kernel_path, &kbuf);
 	
-	// TODO: Do something with the kernel :p
 	pagetable *pm = create_pagemap();
 	if (!pm) {
-		debug("aurix_load(): Failed to create kernel pagemap! Halting...\n");
+		log("aurix_load(): Failed to create kernel pagemap! Halting...\n");
 		// TODO: Halt
 		while (1);
 	}
-	
-	axboot_memmap *memmap = get_memmap(pm);
-	(void)memmap;
+
+	axboot_memmap *mmap;
+	uint32_t mmap_entries = get_memmap(&mmap, pm);
 
 	map_pages(pm, (uintptr_t)pm, (uintptr_t)pm, PAGE_SIZE, VMM_WRITABLE);
-	map_pages(pm, (uintptr_t)_aurix_handoff_start, (uintptr_t)_aurix_handoff_start, (uint64_t)_aurix_handoff_end - (uint64_t)_aurix_handoff_start, 0);
 
-	void *stack = mem_alloc(16*1024); // 16 KiB stack should be well more than enough
+	void *stack = mem_alloc(AURIX_STACK_SIZE); // 16 KiB stack should be well more than enough
 	if (!stack) {
-		debug("aurix_load(): Failed to allocate stack! Halting...\n");
+		log("aurix_load(): Failed to allocate stack! Halting...\n");
 		while (1);
 	}
+	memset(stack, 0, AURIX_STACK_SIZE);
 
-	map_pages(pm, (uintptr_t)stack, (uintptr_t)stack, 16*1024, VMM_WRITABLE | VMM_NX);
+	map_pages(pm, (uintptr_t)stack, (uintptr_t)stack, AURIX_STACK_SIZE, VMM_WRITABLE | VMM_NX);
 
-	void *kernel_entry = (void *)elf_load(kbuf, pm);
+	uintptr_t kernel_addr = 0;
+	void *kernel_entry = (void *)elf_load(kbuf, &kernel_addr, pm);
 	if (!kernel_entry) {
-		debug("aurix_load(): Failed to load '%s'! Halting...\n", kernel_path);
+		log("aurix_load(): Failed to load '%s'! Halting...\n", kernel_path);
 		while (1);
 	}
-	// mem_free(kbuf);
+	mem_free(kbuf);
 
-	void *parameters = NULL;
-	(void)parameters;
+	struct aurix_parameters parameters = {0};
 
-	debug("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
+	// set current revision
+	parameters.revision = AURIX_PROTOCOL_REVISION;
 
-	// this triggers a #GP ????
-	// aurix_handoff(pm, stack, (uint64_t)kernel_entry, (void *)parameters);
-	// __builtin_unreachable();
+	// translate memory map
+	if (!aurix_get_memmap(&parameters, mmap, mmap_entries, pm)) {
+		log("aurix_load(): Failed to aqcuire memory map!");
+		while (1);
+	}
 
-	__asm__ volatile("movq %[pml4], %%cr3\n"
-					"movq %[stack], %%rsp\n"
-					"callq *%[entry]\n"
-					:: [pml4]"r"(pm), [stack]"r"(stack + (16 * 1024)), [entry]"r"(kernel_entry) : "memory");
+	parameters.kernel_addr = kernel_addr;
+
+	// get RSDP and SMBIOS
+#ifdef ARCH_ACPI_AVAILABLE
+	parameters.rsdp_addr = platform_get_rsdp();
+#endif
+
+#ifdef ARCH_SMBIOS_AVAILABLE
+	parameters.smbios_addr = platform_get_smbios();
+#endif
+
+	// get framebuffer information
+	if (!aurix_get_framebuffer(&parameters)) {
+		log("aurix_load(): Failed to aqcuire framebuffer information!\n");
+	}
+
+	// map framebuffer
+	map_pages(pm, parameters.framebuffer->addr, parameters.framebuffer->addr, parameters.framebuffer->height * parameters.framebuffer->pitch, VMM_WRITABLE);
+
+	log("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
+#ifdef AXBOOT_UEFI
+	uefi_exit_bs();
+#endif
+
+	aurix_arch_handoff(kernel_entry, pm, stack, AURIX_STACK_SIZE, &parameters);
 	__builtin_unreachable();
 }

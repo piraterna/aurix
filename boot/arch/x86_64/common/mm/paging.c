@@ -58,10 +58,6 @@ static void _map(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
     }
 
     pagetable *pml1_table = (pagetable *)(pml2_table->entries[pml2_idx] & 0x000FFFFFFFFFF000);
-    if ((pml1_table->entries[pml1_idx] & 1)) {
-        // debug("_map(): Remapping present page\n");
-    }
-
     pml1_table->entries[pml1_idx] = (phys & 0x000FFFFFFFFFF000) | flags;
 }
 

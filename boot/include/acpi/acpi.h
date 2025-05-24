@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c                                                         */
+/* Module Name:  acpi.h                                                          */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,31 +17,12 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <debug/uart.h>
+#ifndef _ACPI_ACPI_H
+#define _ACPI_ACPI_H
 
-void _start(struct aurix_parameters *params)
-{
-	serial_init();
+#include <stdint.h>
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		serial_sendstr("Aurix Protocol revision is not compatible!\n");
-	}
+uintptr_t platform_get_rsdp(void);
+uintptr_t platform_get_smbios(void);
 
-	for (int i = 0; i < 100; i++) {
-        volatile uint32_t *fb_ptr = (uint32_t *)params->framebuffer->addr;
-        fb_ptr[i * (params->framebuffer->pitch / 4) + i] = 0xffffff;
-    }
-
-	serial_sendstr("Hello from AurixOS!\n");
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
-
-	__builtin_unreachable();
-}
+#endif /* _ACPI_ACPI_H */

@@ -36,7 +36,7 @@ bool verify_secure_boot()
 	bool ret = 0;
 
 	if (!EFI_ERROR(gSystemTable->RuntimeServices->GetVariable(L"SecureBoot", &var_guid, NULL, &size, &val))) {
-		debug("verify_secure_boot(): Secure Boot Status: %u\n", val);
+		log("verify_secure_boot(): Secure Boot Status: %u\n", val);
 		ret = (bool)val;
 
 		if (!EFI_ERROR(gSystemTable->RuntimeServices->GetVariable(L"SetupMode", &var_guid, NULL, &size, &val)) && val != 0) {
@@ -51,14 +51,14 @@ void load_drivers()
 {
 	// EFI_STATUS status;
 	if (!verify_secure_boot()) {
-		debug("load_drivers(): Secure boot is enabled! Won't load drivers...\n");
+		log("load_drivers(): Secure boot is enabled! Won't load drivers...\n");
 		return;
 	}
 
 	// TODO: Create a vfs_list() function to get a list of files in a directory
 	// char *driver_path = "\\AxBoot\\drivers\\.efi";
 	// char *driver_binary;
-	// debug("load_drivers(): Loading '%s'...\n", driver_name);
+	// log("load_drivers(): Loading '%s'...\n", driver_name);
 	//
 	// size_t driver_size = vfs_read(driver_path, &driver_binary);
 	//
@@ -76,13 +76,13 @@ void load_drivers()
 	//
 	// status = gSystemTable->BootServices->LoadImage(EFI_FALSE, gImageHandle, (EFI_DEVICE_PATH_PROTOCOL *)driver_devpath, driver_binary, driver_size, &driver_handle);
 	// if (EFI_ERROR(status)) {
-		// debug("load_drivers(): Failed to load driver '%s': %s (%llx)\n", driver_name, efi_status_to_str(status), status);
+		// log("load_drivers(): Failed to load driver '%s': %s (%llx)\n", driver_name, efi_status_to_str(status), status);
 		// return;
 	// }
 	// 
 	// status = gSystemTable->BootServices->StartImage(driver_handle, NULL, NULL);
 	// if (EFI_ERROR(status)) {
-		// debug("load_drivers(): Failed to start driver '%s': %s (%llx)\n", driver_name, efi_status_to_str(status), status);
+		// log("load_drivers(): Failed to start driver '%s': %s (%llx)\n", driver_name, efi_status_to_str(status), status);
 		// return;
 	// }
 }

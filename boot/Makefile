@@ -31,6 +31,8 @@ export ASFLAGS := $(foreach d, $(DEFINES), -D$d)
 export CFLAGS := $(foreach d, $(DEFINES), -D$d) -Wall -Wextra -Wno-unused-local-typedef -ffreestanding -fno-stack-protector -fno-stack-check -MMD -MP
 export LDFLAGS := -nostdlib
 
+include arch/$(ARCH)/config.mk
+
 export BOOT_ROOT := $(ROOT_DIR)/boot
 
 ifeq ($(BUILD_TYPE),debug)

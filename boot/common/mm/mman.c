@@ -42,7 +42,7 @@ int find_alloc(void *addr)
 int add_alloc(void *addr, size_t size)
 {
 	for (int i = 0; i < MAX_ALLOCATIONS; i++) {
-		if (allocation_list[i].addr == 0) {
+		if (allocation_list[i].addr == NULL) {
 			allocation_list[i].addr = addr;
 			allocation_list[i].size = size;
 			return 1;
@@ -112,8 +112,6 @@ void *mem_alloc(size_t n)
 	}
 
 	add_alloc(alloc, n);
-
-	debug("mem_alloc(): Allocated %u bytes\n", n);
 	return alloc;
 }
 
@@ -128,7 +126,6 @@ int mem_allocat(void *addr, size_t npages)
 	}
 
 	add_alloc(addr, npages * PAGE_SIZE);
-
 	return 1;
 }
 
@@ -152,7 +149,6 @@ void *mem_realloc(void *addr, size_t n)
 
 	memcpy(new, addr, old_size);
 	mem_free(addr);
-
 	return new;
 }
 
@@ -170,9 +166,8 @@ void mem_free(void *addr)
 		return;
 	}
 
-	debug("mem_free(): Freed 0x%llx\n", addr);
-
 	remove_alloc(addr);
+	debug("mem_free(): Freed 0x%llx\n", addr);
 }
 
 #endif

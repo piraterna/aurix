@@ -32,6 +32,7 @@ struct axboot_cfg {
 	int ui_mode;
 
 	int entry_count;
+	char *bootlog_filename;
 };
 
 struct axboot_entry {

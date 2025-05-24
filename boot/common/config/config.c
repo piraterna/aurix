@@ -18,10 +18,10 @@
 /*********************************************************************************/
 
 #include <config/config.h>
-#include <config/ini.h>
 #include <lib/string.h>
 #include <loader/loader.h>
 #include <mm/mman.h>
+#include <time/dt.h>
 #include <vfs/vfs.h>
 #include <print.h>
 #include <axboot.h>
@@ -47,8 +47,9 @@ struct axboot_cfg cfg = {
 	.timeout = DEFAULT_TIMEOUT,
 	.ui_mode = UI_TEXT,
 
-	//.entry_count = 0
-	.entry_count = 2
+	//.entry_count = 0,
+	.entry_count = 2,
+	.bootlog_filename = NULL
 };
 
 struct axboot_entry entries[2] = {
@@ -69,6 +70,20 @@ struct axboot_entry entries[2] = {
 
 void config_init(void)
 {
+	// create a filename for boot log
+	// format: \AXBOOT_LOG-YY-MM-DD_HHMMSS.txt
+	char bootlog_fn[33];
+	struct datetime dt;
+	get_datetime(&dt);
+
+	snprintf(bootlog_fn, 33, "\\AXBOOT_LOG-%u-%u-%u_%u%u%u.txt", dt.year, dt.month, dt.day, dt.h, dt.m, dt.s);
+	cfg.bootlog_filename = (char *)mem_alloc(ARRAY_LENGTH(bootlog_fn));
+	if (!cfg.bootlog_filename) {
+		debug("Error!\n");
+	} else {
+		strncpy(cfg.bootlog_filename, (char *)&bootlog_fn, 33);
+	}
+
 	char *config_buf = NULL;
 	uint8_t open = 0;
 	
@@ -81,7 +96,7 @@ void config_init(void)
 	}
 
 	if (open == 0) {
-		debug("Couldn't open a configuration file! Entering console...\n");
+		debug("config_init(): Couldn't open a configuration file! Entering console...\n");
 		//console();
 		while (1);
 	}

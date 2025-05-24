@@ -28,14 +28,15 @@
 /* https://github.com/KevinAlavik/nekonix/blob/main/kernel/src/proc/elf.c */
 /* Thanks, Kevin <3 */
 
-uintptr_t elf32_load(char *data, pagetable *pagemap)
+uintptr_t elf32_load(char *data, uintptr_t *addr, pagetable *pagemap)
 {
     (void)data;
+    (void)addr;
     (void)pagemap;
     return 0;
 }
 
-uintptr_t elf64_load(char *data, pagetable *pagemap)
+uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 {
     struct elf_header *header = (struct elf_header *)data;
     struct elf_program_header *ph = (struct elf_program_header *)((uint8_t *)data + header->e_phoff);
@@ -65,42 +66,46 @@ uintptr_t elf64_load(char *data, pagetable *pagemap)
     
         uint64_t phys = ((uint64_t)mem_alloc(ph[i].p_memsz + ph[i].p_vaddr - aligned_vaddr + 4096) + 4096) & ~0xFFF;
         if (!phys) {
-            debug("elf64_load(): Out of memory\n");
+            log("elf64_load(): Out of memory\n");
             return 0;
         }
+
+        if (addr != NULL && *addr == 0) {
+            *addr = phys;
+        }
         
-        debug("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
+        log("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
 
         map_page(pagemap, aligned_vaddr, phys, flags);
         memcpy((void*)(phys + ph[i].p_vaddr - aligned_vaddr), data + ph[i].p_offset, ph[i].p_filesz);
     }
 
-    debug("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);
+    log("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);
     return (uintptr_t)header->e_entry;
 }
 
-uintptr_t elf_load(char *data, pagetable *pagemap)
+uintptr_t elf_load(char *data, uintptr_t *addr, pagetable *pagemap)
 {
     struct elf_header *header = (struct elf_header *)data;
 
     if (header->e_magic != ELF_MAGIC) {
-        debug("Invalid ELF magic: 0x%x", header->e_magic);
+        log("Invalid ELF magic: 0x%x", header->e_magic);
         return 0;
     }
 
     if (header->e_class != 2) {
-        debug("Unsupported ELF class: %u", header->e_class);
+        log("Unsupported ELF class: %u", header->e_class);
         return 0;
     }
 
     if (header->e_machine == 20 ||
         header->e_machine == 3 ||
         header->e_machine == 40) {
-        return elf32_load(data, pagemap);
+        return elf32_load(data, addr, pagemap);
     } else if (header->e_machine == 62) {
-        return elf64_load(data, pagemap);
+        return elf64_load(data, addr, pagemap);
     }
 
-    debug("Unsupported ELF machine: %u", header->e_machine);
+    log("Unsupported ELF machine: %u", header->e_machine);
     return 0;
 }

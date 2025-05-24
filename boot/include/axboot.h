@@ -34,4 +34,9 @@
 
 void axboot_init(void);
 
+// I really had no idea where to put this
+#ifdef AXBOOT_UEFI
+void uefi_exit_bs(void);
+#endif
+
 #endif /* _AXBOOT_H */

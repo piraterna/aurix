@@ -23,14 +23,11 @@
 #include <axboot.h>
 #include <mm/mman.h>
 #include <lib/string.h>
+#include <power.h>
 #include <print.h>
 
 #include <stdint.h>
 #include <stddef.h>
-
-#define INI_IMPLEMENTATION
-#include <config/ini.h>
-
 
 EFI_HANDLE gImageHandle;
 EFI_SYSTEM_TABLE *gSystemTable;
@@ -95,4 +92,51 @@ EFI_STATUS uefi_entry(EFI_HANDLE ImageHandle,
 
 	axboot_init();
 	UNREACHABLE();
+}
+
+#define EXIT_BS_MAX_TRIES 10
+
+void uefi_exit_bs(void)
+{
+	EFI_UINTN map_key = 0;
+	EFI_UINTN map_size = 0;
+	EFI_MEMORY_DESCRIPTOR *map = NULL;
+	EFI_UINTN desc_size = 0;
+	EFI_UINT32 desc_ver = 0;
+	EFI_STATUS status;
+	
+	int tries = 0;
+
+	do {
+		map_key = 0;
+		map_size = 0;
+		desc_size = 0;
+		desc_ver = 0;
+		map = NULL;
+
+		tries++;
+		debug("uefi_exit_bs(): Trying to exit Boot Services, try %u/%u...\n", tries, EXIT_BS_MAX_TRIES);
+
+		status = gBootServices->GetMemoryMap(&map_size, map, &map_key, &desc_size, &desc_ver);
+		if (EFI_ERROR(status) && status != EFI_BUFFER_TOO_SMALL) {
+			log("uefi_exit_bs(): Failed to acquire memory map key: %s (%llx)\n", efi_status_to_str(status), status);
+			continue;
+		}
+
+		status = gBootServices->ExitBootServices(gImageHandle, map_key);
+		if (EFI_ERROR(status)) {
+			log("uefi_exit_bs(): Failed to exit boot services: %s (%llx)\n", efi_status_to_str(status), status);
+			continue;
+		}
+
+		break;
+	} while (tries <= EXIT_BS_MAX_TRIES);
+
+	if (EFI_ERROR(status)) {
+		log("uefi_exit_bs(): Failed to exit Boot Services, rebooting!");
+		platform_reboot();
+		UNREACHABLE();
+	}
+
+	debug("uefi_exit_bs(): ExitBootServices() success!\n");
 }

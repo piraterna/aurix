@@ -80,7 +80,7 @@ struct vfs_drive *sfs_init(char *mountpoint)
 
 	fs->fsdata = fsdata;
 	fs->read = sfs_read;
-	fs->write = NULL; // sfs_write()
+	fs->write = sfs_write;
 
 	struct vfs_drive *drive = (struct vfs_drive *)mem_alloc(sizeof(struct vfs_drive));
 	if (drive == NULL) {
@@ -121,7 +121,7 @@ size_t sfs_read(char *filename, char **buffer, struct vfs_drive *dev, void *fsda
 	wfilename[n] = L'\0';
 
 	/* open the file */
-	status = volume->Open(volume, &file, wfilename, EFI_FILE_MODE_READ, EFI_FILE_READ_ONLY | EFI_FILE_HIDDEN | EFI_FILE_SYSTEM);
+	status = volume->Open(volume, &file, wfilename, EFI_FILE_MODE_READ, 0);
 	if (EFI_ERROR(status)) {
 		debug("sfs_read(): Failed to open file '%s': %s (%lx)\n", filename, efi_status_to_str(status), status);
 		mem_free(wfilename);
@@ -150,6 +150,51 @@ size_t sfs_read(char *filename, char **buffer, struct vfs_drive *dev, void *fsda
 	status = file->Read(file, &len, *buffer);
 	if (EFI_ERROR(status)) {
 		debug("sfs_read(): Failed to read file '%s': %s (%lx)\n", filename, efi_status_to_str(status), status);
+		return 0;
+	}
+
+	/* close the file */
+	file->Close(file);
+
+	return len;
+}
+
+uint8_t sfs_write(char *filename, char *buffer, size_t size, struct vfs_drive *dev, void *fsdata)
+{
+	(void)dev;
+
+	struct sfs_fsdata *data = (struct sfs_fsdata *)fsdata;
+	EFI_FILE_PROTOCOL *volume = data->volume;
+	EFI_FILE_PROTOCOL *file;
+	CHAR16 *wfilename;
+	EFI_STATUS status = EFI_SUCCESS;
+	size_t len = 0;
+
+	wfilename = (CHAR16 *)mem_alloc(strlen(filename) * sizeof(CHAR16));
+	if (!wfilename) {
+		debug("sfs_write(): Failed to allocate memory for wide strings!\n");
+		return 0;
+	}
+
+	size_t n = mbstowcs(wfilename, (const char **)&filename, strlen(filename));
+	wfilename[n] = L'\0';
+
+	/* open the file */
+	status = volume->Open(volume, &file, wfilename, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, EFI_FILE_SYSTEM);
+	if (EFI_ERROR(status)) {
+		debug("sfs_write(): Failed to open file '%s': %s (%lx)\n", filename, efi_status_to_str(status), status);
+		mem_free(wfilename);
+		return 0;
+	}
+
+	mem_free(wfilename);
+
+	// set position to the end of the file
+	file->SetPosition(file, 0xffffffffffffffff);
+
+	status = file->Write(file, &size, buffer);
+	if (EFI_ERROR(status)) {
+		debug("sfs_write(): Failed to read file '%s': %s (%lx)\n", filename, efi_status_to_str(status), status);
 		return 0;
 	}
 

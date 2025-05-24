@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ini.h                                                           */
+/* Module Name:  idt.h                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,70 +17,17 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#ifndef _CONFIG_INI_H
-#define _CONFIG_INI_H
+#ifndef _ARCH_CPU_IDT_H
+#define _ARCH_CPU_IDT_H
 
-enum token_type {
-	SECTION,
-	KEY,
-	VALUE,
+#include <stdint.h>
 
-	EOF,
-	ILLEGAL,
+struct idt_descriptor {
 };
 
-struct string_view {
-	char *data;
-	unsigned int len;
+struct idtr {
+	uint16_t limit;
+	uint64_t base;
 };
 
-struct token {
-	enum token_type type;
-	struct string_view lit;
-};
-
-struct token_array {
-	struct token *items;
-	unsigned int count;
-	unsigned int capacity;
-};
-
-struct lexer {
-	char *input;
-	unsigned int pos;
-	unsigned int read_pos;
-	char ch;
-};
-
-struct parser {
-	struct token_array *tokens;
-	unsigned int pos;
-	unsigned int read_pos;
-	struct token *cur_token;
-};
-
-struct key_value {
-	struct string_view key;
-	struct string_view value;
-};
-
-struct section {
-	struct string_view name;
-	struct key_value *items;
-	unsigned int count;
-	unsigned int capacity;
-};
-
-struct ini_file {
-	struct section root;
-	struct section *items;
-	unsigned int count;
-	unsigned int capacity;
-};
-
-void parse_ini(struct ini_file *ini, char *buf);
-
-char *ini_get_value(struct ini_file *ini, char *section, char *key);
-int ini_get_value_int(struct ini_file *ini, char *section, char *key);
-
-#endif /* _CONFIG_INI_H */
+#endif /* _ARCH_CPU_IDT_H */

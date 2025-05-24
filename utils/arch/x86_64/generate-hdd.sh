@@ -75,6 +75,7 @@ if [ "$unamestr" = 'Linux' ]; then
 	exit 200
 elif [ "$unamestr" = 'Darwin' ]; then
 	diskutil unmount "$tempmountdir" >/dev/null 2>&1
+	diskutil unmountDisk "$loopback" >/dev/null 2>&1
 	hdiutil detach "$loopback" >/dev/null 2>&1
 fi
 
@@ -83,5 +84,7 @@ rm -r "$tempmountdir"
 # Install legacy BIOS placeholder to the new image
 dd if="$BUILD_DIR/boot/pc-bios/stage1-hdd.bin" of="$disk_name" conv=notrunc bs=446 count=1 >/dev/null 2>&1
 dd if="$BUILD_DIR/boot/pc-bios/stage1-hdd.bin" of="$disk_name" conv=notrunc bs=1 count=2 skip=510 seek=510 >/dev/null 2>&1
+
+sync
 
 printf " done.\n"

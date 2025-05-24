@@ -19,6 +19,8 @@
 
 .DEFAULT_GOAL := all
 
+GITREV := $(shell git rev-parse --short HEAD)
+
 ##
 # Build configuration
 #
@@ -43,7 +45,7 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
-QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
+QEMU_FLAGS := -m 512m -smp 4 -rtc base=localtime -serial stdio
 
 # QEMU Audio support
 #QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
@@ -52,7 +54,10 @@ QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 QEMU_FLAGS += -usb -device usb-mouse
 
 # x86_64
+# TODO: Move this elsewhere
+ifeq ($(ARCH),x86_64)
 QEMU_FLAGS += -machine q35
+endif
 
 ##
 # General info
@@ -130,15 +135,17 @@ livesd: install
 	@mkdir -p $(RELEASE_DIR)
 	@utils/arch/$(ARCH)/generate-sd.sh $(LIVESD)
 
+# TODO: Maybe don't run with -hda but -drive?
 .PHONY: run
-run: livecd
+run: livehdd
 	@printf ">>> Running QEMU...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
+	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -hda $(LIVEHDD)
 
+# TODO: Maybe don't run with -hda but -drive?
 .PHONY: run-uefi
-run-uefi: livecd ovmf
+run-uefi: livehdd ovmf
 	@printf ">>> Running QEMU (UEFI)...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -bios ovmf/ovmf-$(ARCH).fd -cdrom $(LIVECD)
+	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -bios ovmf/ovmf-$(ARCH).fd -hda $(LIVEHDD)
 
 .PHONY: clean
 clean:

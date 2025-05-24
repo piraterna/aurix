@@ -30,42 +30,46 @@
 static int efi_type_to_axboot(uint32_t efi_type)
 {
 	switch (efi_type) {
-		case EfiReservedMemoryType:
-			return MemMapReserved;
-		case EfiLoaderCode:
-			return MemMapFirmware;
 		case EfiLoaderData:
-			return MemMapFirmware;
 		case EfiBootServicesCode:
 		case EfiBootServicesData:
 			return MemMapFreeOnLoad;
+
 		case EfiRuntimeServicesCode:
 		case EfiRuntimeServicesData:
+		case EfiLoaderCode:
 			return MemMapFirmware;
-		case EfiConventionalMemory:
-			return MemMapUsable;
+		
 		case EfiUnusableMemory:
 			return MemMapFaulty;
+
 		case EfiACPIReclaimMemory:
 			return MemMapACPIReclaimable;
+
 		case EfiACPIMemoryNVS:
 			return MemMapACPINVS;
+
 		case EfiMemoryMappedIO:
 			return MemMapACPIMappedIO;
+
 		case EfiMemoryMappedIOPortSpace:
 			return MemMapACPIMappedIOPortSpace;
+
 		case EfiPalCode:
-			return MemMapUsable;
 		case EfiPersistentMemory:
+		case EfiConventionalMemory:
 			return MemMapUsable;
+			return MemMapUsable;
+
 		case EfiUnacceptedMemoryType:
+		case EfiReservedMemoryType:
 			return MemMapReserved;
 		default:
 			return MemMapReserved;
 	}
 }
 
-axboot_memmap *get_memmap(pagetable *pm)
+uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 {
 	EFI_MEMORY_DESCRIPTOR *efi_map = NULL;
 	EFI_UINTN efi_map_key = 0;
@@ -76,8 +80,8 @@ axboot_memmap *get_memmap(pagetable *pm)
 
 	status = gBootServices->GetMemoryMap(&size, efi_map, &efi_map_key, &desc_size, &desc_ver);
 	if (EFI_ERROR(status) && status != EFI_BUFFER_TOO_SMALL) {
-		debug("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
-		return NULL;
+		log("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
+		return 0;
 	}
 
 	efi_map = (EFI_MEMORY_DESCRIPTOR *)mem_alloc(size);
@@ -90,8 +94,8 @@ axboot_memmap *get_memmap(pagetable *pm)
 			size += 2 * desc_size;
 			efi_map = (EFI_MEMORY_DESCRIPTOR *)mem_realloc(efi_map, size);
 		} else {
-			debug("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
-			return NULL;
+			log("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
+			return 0;
 		}
 	} while (status != EFI_SUCCESS);
 
@@ -133,23 +137,19 @@ axboot_memmap *get_memmap(pagetable *pm)
 		cur_entry = (EFI_MEMORY_DESCRIPTOR *)((uint8_t *)cur_entry + desc_size);
 	}
 
-	axboot_memmap *new_map = (axboot_memmap *)mem_alloc(sizeof(axboot_memmap) * entry_count);
-	memset(new_map, 0, sizeof(axboot_memmap) * entry_count);
-	
-	cur_entry = efi_map;
+	*map = mem_alloc(sizeof(axboot_memmap) * entry_count);
+	memset(*map, 0, sizeof(axboot_memmap) * entry_count);
 	
 	// translate efi memmap to axboot memmap
 	for (uint32_t i = 0; i < entry_count; i++) {
-		new_map[i].base = cur_entry->PhysicalStart;
-		new_map[i].size = cur_entry->NumberOfPages * PAGE_SIZE;
-		new_map[i].type = efi_type_to_axboot(efi_map[i].Type);
-
-		debug("get_memmap(): Entry %d: base=0x%llx, size=%u bytes, type=%x\n", i, new_map[i].base, new_map[i].size, new_map[i].type);
+		(*map)[i].base = cur_entry->PhysicalStart;
+		(*map)[i].size = cur_entry->NumberOfPages * PAGE_SIZE;
+		(*map)[i].type = efi_type_to_axboot(efi_map[i].Type);
 
 		cur_entry = (EFI_MEMORY_DESCRIPTOR *)((uint8_t *)cur_entry + desc_size);
 	}
 
 	mem_free(efi_map);
 
-	return new_map;
+	return entry_count;
 }

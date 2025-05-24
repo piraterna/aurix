@@ -32,8 +32,8 @@ struct driver {
 	EFI_MEMMAP_DEVICE_PATH devpath[2];
 };
 
-#endif
-
 void load_drivers();
+
+#endif
 
 #endif /* _DRIVER_H */

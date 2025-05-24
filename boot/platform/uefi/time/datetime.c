@@ -33,7 +33,7 @@ void get_datetime(struct datetime *dt)
 
 	status = gSystemTable->RuntimeServices->GetTime(&uefi_dt, NULL);
 	if (EFI_ERROR(status)) {
-		debug("get_datetime(): Failed to acquire current time, setting to 1970/01/01 00:00:00!\n");
+		log("get_datetime(): Failed to acquire current time, setting to 1970/01/01 00:00:00!\n");
 		return;
 	}
 

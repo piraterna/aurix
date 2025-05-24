@@ -24,8 +24,8 @@
 #include <stdbool.h>
 
 enum fb_format {
-	FB_RGBA,
-	FB_BGRA
+	FB_RGBA = 0,
+	FB_BGRA = 1
 };
 
 struct fb_mode {

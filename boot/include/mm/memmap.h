@@ -46,6 +46,6 @@ typedef struct _axboot_memmap {
 	int type;
 } axboot_memmap;
 
-axboot_memmap *get_memmap(pagetable *pm);
+uint32_t get_memmap(axboot_memmap **map, pagetable *pm);
 
 #endif /* _MEM_MEMMAP_H */

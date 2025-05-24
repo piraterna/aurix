@@ -26,7 +26,9 @@
 #define NANOPRINTF_USE_WRITEBACK_FORMAT_SPECIFIERS 0
 #include <nanoprintf.h>
 
+#include <config/config.h>
 #include <uart/uart.h>
+#include <vfs/vfs.h>
 #include <print.h>
 
 #include <stddef.h>
@@ -38,22 +40,29 @@ int32_t _fltused = 0;
 int32_t __eqdf2 = 0;
 int32_t __ltdf2 = 0;
 
+extern struct axboot_cfg cfg;
+
 void log(const char *fmt, ...)
 {
 	va_list args;
-	char buf[4096];
+	char buf[1024];
+	size_t size = 0;
 
 	va_start(args, fmt);
-	npf_vsnprintf(buf, sizeof(buf), fmt, args);
+	size = npf_vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
 	uart_sendstr(buf);
+
+	if (cfg.bootlog_filename != NULL) {
+		vfs_write(cfg.bootlog_filename, (char *)&buf, size);
+	}
 }
 
 void debug(const char *fmt, ...)
 {
 	va_list args;
-	char buf[4096];
+	char buf[1024];
 
 	va_start(args, fmt);
 	npf_vsnprintf(buf, sizeof(buf), fmt, args);
