@@ -87,7 +87,26 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t
 					"movq %[pml4], %%cr3\n"
 					"movq %[stack], %%rsp\n"
 					"movq %[params], %%rdi\n"
-					"callq *%[entry]\n"
+					"movq %[entry], %%rsi\n"
+
+					// rsi = kernel entry point addr
+					// rdi = kernel parameters
+					"xor %%rax, %%rax\n"
+					"xor %%rbx, %%rbx\n"
+					"xor %%rcx, %%rcx\n"
+					"xor %%rdx, %%rdx\n"
+					//"xor %%rdi, %%rdi\n"
+					//"xor %%rsi, %%rsi\n"
+					"xor %%r8, %%r8\n"
+					"xor %%r9, %%r9\n"
+					"xor %%r10, %%r10\n"
+					"xor %%r11, %%r11\n"
+					"xor %%r12, %%r12\n"
+					"xor %%r13, %%r13\n"
+					"xor %%r14, %%r14\n"
+					"xor %%r15, %%r15\n"
+
+					"callq *%%rsi\n"
 					:: [gdtr]"g"(gdtr), [tss]"r"((uint16_t)__builtin_offsetof(struct gdt, tss)),
 						[idt]"g"(idtr),
 						[pml4]"r"(pm), [stack]"r"(stack + stack_size),
