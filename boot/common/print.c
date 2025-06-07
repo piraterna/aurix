@@ -36,11 +36,18 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
+#include <efi.h>
+#include <efilib.h>
+#include <mm/mman.h>
+#include <lib/string.h>
+
 int32_t _fltused = 0;
 int32_t __eqdf2 = 0;
 int32_t __ltdf2 = 0;
 
 extern struct axboot_cfg cfg;
+
+CHAR16 wstr[1024];
 
 void log(const char *fmt, ...)
 {
@@ -57,6 +64,15 @@ void log(const char *fmt, ...)
 	if (cfg.bootlog_filename != NULL) {
 		vfs_write(cfg.bootlog_filename, (char *)&buf, size);
 	}
+
+#ifdef AXBOOT_UEFI
+	char *bufp = &buf;
+	size_t n = mbstowcs((wchar_t *)&wstr, (const char **)&bufp, 1024);
+	wstr[n] = L'\r';
+	wstr[n+1] = L'\0';
+	gSystemTable->ConOut->OutputString(gSystemTable->ConOut, wstr);
+	gBootServices->Stall(100000);
+#endif
 }
 
 void debug(const char *fmt, ...)
@@ -68,6 +84,14 @@ void debug(const char *fmt, ...)
 	npf_vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
+#ifdef AXBOOT_UEFI
+	char *bufp = &buf;
+	size_t n = mbstowcs((wchar_t *)&wstr, (const char **)&bufp, 1024);
+	wstr[n] = L'\r';
+	wstr[n+1] = L'\0';
+	gSystemTable->ConOut->OutputString(gSystemTable->ConOut, wstr);
+	gBootServices->Stall(100000);
+#endif
 	uart_sendstr(buf);
 }
 

@@ -21,6 +21,7 @@
 #include <arch/cpu/idt.h>
 #include <proto/aurix.h>
 #include <mm/vmm.h>
+#include <print.h>
 #include <stdint.h>
 
 struct gdt {
@@ -68,21 +69,21 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t
 
 	__asm__ volatile(
 					"cli\n"
-					"lgdt %[gdtr]\n"
-					"ltr %[tss]\n"
-					"pushq $0x08\n"
-					"lea 1f(%%rip), %%rax\n"
-					"pushq %%rax\n"
-					"lretq\n"
-					"1:\n"
-					"movq $0x10, %%rax\n"
-					"movq %%rax, %%ds\n"
-					"movq %%rax, %%es\n"
-					"movq %%rax, %%ss\n"
-					"movq %%rax, %%fs\n"
-					"movq %%rax, %%gs\n"
+					//"lgdt %[gdtr]\n"
+					//"ltr %[tss]\n"
+					//"pushq $0x08\n"
+					//"lea 1f(%%rip), %%rax\n"
+					//"pushq %%rax\n"
+					//"lretq\n"
+					//"1:\n"
+					//"movq $0x10, %%rax\n"
+					//"movq %%rax, %%ds\n"
+					//"movq %%rax, %%es\n"
+					//"movq %%rax, %%ss\n"
+					//"movq %%rax, %%fs\n"
+					//"movq %%rax, %%gs\n"
 
-					"lidt %[idt]\n"
+					//"lidt %[idt]\n"
 
 					"movq %[pml4], %%cr3\n"
 					"movq %[stack], %%rsp\n"

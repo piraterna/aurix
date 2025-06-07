@@ -107,6 +107,8 @@ void uefi_exit_bs(void)
 	
 	int tries = 0;
 
+	log("uefi_exit_bs(): Calling ExitBootServices(), this will be the last log you'll see before handoff!\n");
+
 	do {
 		map_key = 0;
 		map_size = 0;
@@ -137,6 +139,4 @@ void uefi_exit_bs(void)
 		platform_reboot();
 		UNREACHABLE();
 	}
-
-	debug("uefi_exit_bs(): ExitBootServices() success!\n");
 }

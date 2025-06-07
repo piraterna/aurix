@@ -38,6 +38,16 @@ void axboot_init()
 
 	config_init();
 
+#if defined(__aarch64__) && !defined(AXBOOT_UEFI)
+	struct axboot_entry rpi_kernel = {
+		.name = "AurixOS for Raspberry Pi",
+		.image_path = "\\System\\axkrnl",
+		.protocol = PROTO_AURIX
+	};
+	loader_load(&rpi_kernel);
+	UNREACHABLE();
+#endif
+
 #ifdef AXBOOT_UEFI
 #include <driver.h>
 	load_drivers();

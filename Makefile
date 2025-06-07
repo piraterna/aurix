@@ -45,7 +45,7 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
-QEMU_FLAGS := -m 512m -smp 4 -rtc base=localtime -serial stdio
+QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 
 # QEMU Audio support
 #QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
