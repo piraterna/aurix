@@ -64,15 +64,6 @@ void log(const char *fmt, ...)
 	if (cfg.bootlog_filename != NULL) {
 		vfs_write(cfg.bootlog_filename, (char *)&buf, size);
 	}
-
-#ifdef AXBOOT_UEFI
-	char *bufp = &buf;
-	size_t n = mbstowcs((wchar_t *)&wstr, (const char **)&bufp, 1024);
-	wstr[n] = L'\r';
-	wstr[n+1] = L'\0';
-	gSystemTable->ConOut->OutputString(gSystemTable->ConOut, wstr);
-	gBootServices->Stall(100000);
-#endif
 }
 
 void debug(const char *fmt, ...)
@@ -84,14 +75,6 @@ void debug(const char *fmt, ...)
 	npf_vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
-#ifdef AXBOOT_UEFI
-	char *bufp = &buf;
-	size_t n = mbstowcs((wchar_t *)&wstr, (const char **)&bufp, 1024);
-	wstr[n] = L'\r';
-	wstr[n+1] = L'\0';
-	gSystemTable->ConOut->OutputString(gSystemTable->ConOut, wstr);
-	gBootServices->Stall(100000);
-#endif
 	uart_sendstr(buf);
 }
 

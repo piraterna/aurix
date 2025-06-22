@@ -78,7 +78,7 @@ void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
 
 pagetable *create_pagemap()
 {
-    pagetable *pm = (pagetable *)mem_alloc(PAGE_SIZE);
+    pagetable *pm = (pagetable *)mem_alloc(PAGE_SIZE * 2);
     if (!pm) {
         debug("create_pagemap(): Failed to allocate memory for a new pm.\n");
         return NULL;

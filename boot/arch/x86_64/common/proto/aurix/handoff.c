@@ -24,43 +24,20 @@
 #include <print.h>
 #include <stdint.h>
 
-struct gdt {
-	struct gdt_descriptor null;
-	struct gdt_descriptor kcode;
-	struct gdt_descriptor kdata;
-	struct gdt_descriptor ucode;
-	struct gdt_descriptor udata;
-	struct tss_descriptor tss;
-};
-
 void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t stack_size, struct aurix_parameters *parameters)
 {
-	struct tss tss = {
-		.iomap_base = sizeof(struct tss),
-	};
-
-	struct gdt gdt = {
-		.tss = {
-			.gdt = {
-				.base_low = ((uintptr_t)&tss) & 0xFFFF,
-				.base_mid = (((uintptr_t)&tss) >> 16) & 0xFF,
-				.base_high = (((uintptr_t)&tss) >> 24) & 0xFF,
-				.access = 0b10001001
-			},
-			.base_high = (((uintptr_t)&tss) >> 32) & 0xFFFF
-		},
-	};
+	struct gdt_descriptor gdt[5];
+	
+	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
+	gdt_set_entry(&gdt[1], 0, 0, 0x9a, 0xaf);
+	gdt_set_entry(&gdt[2], 0, 0, 0x92, 0xcf);
+	gdt_set_entry(&gdt[3], 0, 0, 0xfa, 0xaf);
+	gdt_set_entry(&gdt[4], 0, 0, 0xf2, 0xcf);
 
 	struct gdtr gdtr = {
 		.base = (uint64_t)&gdt,
 		.limit = sizeof(gdt) - 1
 	};
-
-	gdt_set_entry(&gdt.null, 0, 0, 0, 0);
-	gdt_set_entry(&gdt.kcode, 0, 0, 0x9a, 0xaf);
-	gdt_set_entry(&gdt.kdata, 0, 0, 0x92, 0xcf);
-	gdt_set_entry(&gdt.ucode, 0, 0, 0xfa, 0xaf);
-	gdt_set_entry(&gdt.udata, 0, 0, 0xf2, 0xcf);
 
 	struct idtr idtr = {
 		.base = (uint64_t)0,
@@ -69,28 +46,29 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t
 
 	__asm__ volatile(
 					"cli\n"
-					//"lgdt %[gdtr]\n"
-					//"ltr %[tss]\n"
-					//"pushq $0x08\n"
-					//"lea 1f(%%rip), %%rax\n"
-					//"pushq %%rax\n"
-					//"lretq\n"
-					//"1:\n"
-					//"movq $0x10, %%rax\n"
-					//"movq %%rax, %%ds\n"
-					//"movq %%rax, %%es\n"
-					//"movq %%rax, %%ss\n"
-					//"movq %%rax, %%fs\n"
-					//"movq %%rax, %%gs\n"
+					"cld\n"
 
-					//"lidt %[idt]\n"
+					"lgdt %[gdtr]\n"
+					"pushq $0x08\n"
+					"lea 1f(%%rip), %%rax\n"
+					"pushq %%rax\n"
+					"lretq\n"
+					"1:\n"
+					"movq $0x10, %%rax\n"
+					"movq %%rax, %%ds\n"
+					"movq %%rax, %%es\n"
+					"movq %%rax, %%ss\n"
+					"movq %%rax, %%fs\n"
+					"movq %%rax, %%gs\n"
+
+					"lidt %[idt]\n"
 
 					"movq %[pml4], %%cr3\n"
 					"movq %[stack], %%rsp\n"
 					"movq %[params], %%rdi\n"
 					"movq %[entry], %%rsi\n"
 
-					// rsi = kernel entry point addr
+					// rsi = kernel entry point
 					// rdi = kernel parameters
 					"xor %%rax, %%rax\n"
 					"xor %%rbx, %%rbx\n"
@@ -108,8 +86,7 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t
 					"xor %%r15, %%r15\n"
 
 					"callq *%%rsi\n"
-					:: [gdtr]"g"(gdtr), [tss]"r"((uint16_t)__builtin_offsetof(struct gdt, tss)),
-						[idt]"g"(idtr),
+					:: [gdtr]"g"(gdtr), [idt]"g"(idtr),
 						[pml4]"r"(pm), [stack]"r"(stack + stack_size),
 						[entry]"r"(kernel_entry), [params]"d"(parameters) : "rax", "memory");
 }

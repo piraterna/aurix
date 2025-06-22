@@ -47,11 +47,13 @@ LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
 QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 
+QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
+
 # QEMU Audio support
 #QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
 
 # QEMU Mouse support
-QEMU_FLAGS += -usb -device usb-mouse
+#QEMU_FLAGS += -usb -device usb-mouse
 
 # x86_64
 # TODO: Move this elsewhere

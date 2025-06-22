@@ -36,82 +36,74 @@ The Aurix Boot Protocol presents a simple and minimal protocol for booting the A
 
 ## Kernel parameters
 
-The bootloader passes `abp_boot_info` structure as a parameter to the kernel.
-
-A non-zero value in `lvl5_paging` indicates that 5-level paging has been set up and is available.
+The bootloader passes `aurix_parameters` structure as a parameter to the kernel.
 
 ```c
-struct abp_boot_info {
-    // General
-    char *bootloader_name;
-    char *bootloader_version;
-    char *protocol_version;
+struct aurix_parameters {
+	// PROTOCOL INFO
+	uint8_t revision;
 
-    // ACPI and SMBIOS
-    struct acpi_info acpi;
-    struct smbios_info smbios;
+	// MEMORY
+	struct aurix_memmap *mmap;
+	uint32_t mmap_entries;
 
-    // Memory
-    struct memory_map *memmap;
-    int lvl5_paging;
+	uintptr_t kernel_addr; // physical address
 
-    // Framebuffer
-    struct framebuffer_info framebuffer;
+	// RSDP and SMBIOS
+	uintptr_t rsdp_addr;
+	uintptr_t smbios_addr;
+
+	// FRAMEBUFFER
+	struct aurix_framebuffer *framebuffer;
 };
 ```
 
 ## ACPI and SMBIOS
 
-These structures contain pointers to the Root System Description Pointer (ACPI) and System Management BIOS Entry Point (SMBIOS).
-If `is_valid` is set to a non-zero value, the pointer is guaranteed to be valid.
-Otherwise, the pointer is set to NULL and should not be used.
-
-```c
-struct acpi_info {
-    uint8_t is_valid;
-    void *rsdp;
-};
-```
-
-```c
-struct smbios_info {
-    uint8_t is_valid;
-    void *entry_point;
-};
-```
+If found, `rsdp_addr` and `smbios_addr` will always point to a valid ACPI RSDP and SMBIOS structures respectively, otherwise the addresses will be set to NULL.
 
 ## Memory map
 
-The memory map is a singly linked list containing the physical address of the entry, its length and type, as well as a pointer to the next entry.
+The memory map is an array of entries containing the physical address, its length and type. The amount of entries is specified in the `mmap_entries` variable.
 
-Entries are guaranteed to not overlap with each other, and sorted by base address from low to high.
+Entries are **not** guaranteed to not overlap with each other. They are however guaranteed to be sorted by base address from low to high.
 
 ```c
-#define ABP_MEMORY_RESERVED 0xf0
-#define ABP_MEMORY_USABLE 0xf1
-#define ABP_MEMORY_BOOTLOADER_RECLAIMABLE 0xf2
-#define ABP_MEMORY_MMIO 0xf3
-#define ABP_MEMORY_ACPI_NVS 0xf4
-#define ABP_MEMORY_ACPI_RECLAIMABLE 0xf5
-#define ABP_MEMORY_KERNEL 0xf7
-#define ABP_MEMORY_NOT_USABLE 0xff
+enum aurix_memmap_entry_type {
+	AURIX_MMAP_RESERVED = 0,
+	
+	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
+	AURIX_MMAP_ACPI_MAPPED_IO = 2,
+	AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE = 3,
+	AURIX_MMAP_ACPI_NVS = 4,
 
-struct memory_map {
-    uint64_t base;
-    uint64_t length;
-    uint64_t type;
+	AURIX_MMAP_BOOTLOADER_RECLAIMABLE = 6,
+	AURIX_MMAP_USABLE = 7
+};
 
-    struct memory_map *next;
+struct aurix_memmap {
+	uintptr_t base;
+	uint32_t size;
+	uint8_t type;
 };
 ```
 
 ## Framebuffer
 
+If a valid framebuffer was found, a pointer to a framebuffer structure is passed as a part of kernel parameters. If multiple framebuffers were found, AxBoot will pick the first (valid) one available.
+
 ```c
-struct framebuffer_info {
-    void *addr;
-    uint32_t width;
-    uint32_t height;
-    uint16_t bpp;
+enum aurix_framebuffer_format {
+	AURIX_FB_RGBA = 0,
+	AURIX_FB_BGRA = 1
+};
+
+struct aurix_framebuffer {
+	uintptr_t addr;
+	uint32_t width;
+	uint32_t height;
+	uint8_t bpp;
+	uint32_t pitch;
+	int format;
 };
 ```

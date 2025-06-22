@@ -28,11 +28,6 @@ void _start(struct aurix_parameters *params)
 		serial_sendstr("Aurix Protocol revision is not compatible!\n");
 	}
 
-	for (int i = 0; i < 100; i++) {
-        volatile uint32_t *fb_ptr = (uint32_t *)params->framebuffer->addr;
-        fb_ptr[i * (params->framebuffer->pitch / 4) + i] = 0xffffff;
-    }
-
 	serial_sendstr("Hello from AurixOS!\n");
 
 	for (;;) {

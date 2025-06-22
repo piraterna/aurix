@@ -162,7 +162,7 @@ void mem_free(void *addr)
 
 	status = gBootServices->FreePool(addr);
 	if (EFI_ERROR(status)) {
-		debug("mem_free(): Couldn't free 0x%lx: %s (%lx)\n", addr, efi_status_to_str(status), status);
+		debug("mem_free(): Couldn't free 0x%llx: %s (%lx)\n", addr, efi_status_to_str(status), status);
 		return;
 	}
 

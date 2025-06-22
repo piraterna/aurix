@@ -24,7 +24,7 @@
 
 #define AURIX_PROTOCOL_REVISION 1
 
-enum aurix_memmap_entry {
+enum aurix_memmap_entry_type {
 	AURIX_MMAP_RESERVED = 0,
 	
 	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
