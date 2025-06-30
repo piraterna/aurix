@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c                                                         */
+/* Module Name:  gdt.h                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,30 +17,28 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
+#ifndef _ARCH_CPU_GDT_H
+#define _ARCH_CPU_GDT_H
 
-void _start(struct aurix_parameters *params)
-{
-	serial_init();
+#include <stdint.h>
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		serial_sendstr("Aurix Protocol revision is not compatible!\n");
-	}
+struct gdt_descriptor {
+	uint16_t limit_low;
+	uint16_t base_low;
+	uint8_t base_mid;
+	uint8_t access;
+	uint8_t limit_high : 4;
+	uint8_t flags : 4;
+	uint8_t base_high;
+} __attribute__((packed));
 
-	serial_sendstr("Hello from AurixOS!\n");
-	
-	// initialize basic processor features and interrupts
-	cpu_early_init();
+struct gdtr {
+	uint16_t limit;
+	uint64_t base;
+} __attribute__((packed));
 
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
+void gdt_init(void);
+void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit, uint8_t access,
+				   uint8_t flags);
 
-	__builtin_unreachable();
-}
+#endif /* _ARCH_CPU_GDT_H */

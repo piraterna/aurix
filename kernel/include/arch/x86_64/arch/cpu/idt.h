@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c                                                         */
+/* Module Name:  idt.h                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,30 +17,25 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
+#ifndef _ARCH_CPU_IDT_H
+#define _ARCH_CPU_IDT_H
 
-void _start(struct aurix_parameters *params)
-{
-	serial_init();
+#include <stdint.h>
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		serial_sendstr("Aurix Protocol revision is not compatible!\n");
-	}
+struct idt_descriptor {
+	uint16_t base_low;
+	uint16_t codeseg;
+	uint16_t flags;
+	uint16_t base_mid;
+	uint64_t base_high;
+	uint64_t reserved;
+};
 
-	serial_sendstr("Hello from AurixOS!\n");
-	
-	// initialize basic processor features and interrupts
-	cpu_early_init();
+struct idtr {
+	uint16_t limit;
+	uint64_t base;
+};
 
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
+void idt_init(void);
 
-	__builtin_unreachable();
-}
+#endif /* _ARCH_CPU_IDT_H */

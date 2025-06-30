@@ -47,7 +47,7 @@ LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
 QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 
-QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
+#QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
 # QEMU Audio support
 #QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
@@ -139,15 +139,15 @@ livesd: install
 
 # TODO: Maybe don't run with -hda but -drive?
 .PHONY: run
-run: livehdd
+run: livecd
 	@printf ">>> Running QEMU...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -hda $(LIVEHDD)
+	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
 
 # TODO: Maybe don't run with -hda but -drive?
 .PHONY: run-uefi
-run-uefi: livehdd ovmf
+run-uefi: livecd ovmf
 	@printf ">>> Running QEMU (UEFI)...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -bios ovmf/ovmf-$(ARCH).fd -hda $(LIVEHDD)
+	qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -bios ovmf/ovmf-$(ARCH).fd -cdrom $(LIVECD)
 
 .PHONY: clean
 clean:

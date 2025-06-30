@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c                                                         */
+/* Module Name:  cpu.h                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,30 +17,9 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
+#ifndef _CPU_CPU_H
+#define _CPU_CPU_H
 
-void _start(struct aurix_parameters *params)
-{
-	serial_init();
+void cpu_early_init(void);
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		serial_sendstr("Aurix Protocol revision is not compatible!\n");
-	}
-
-	serial_sendstr("Hello from AurixOS!\n");
-	
-	// initialize basic processor features and interrupts
-	cpu_early_init();
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
-
-	__builtin_unreachable();
-}
+#endif /* _CPU_CPU_H */

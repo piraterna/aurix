@@ -1,8 +1,9 @@
-# Aurix Boot Protocol (revision 0.2)
+
+# Aurix Boot Protocol (revision 1-dev)
 
 The Aurix Boot Protocol presents a simple and minimal protocol for booting the AurixOS kernel.
 
-> [!NOTE]  
+> [!NOTE]
 > This document is still a work in progress and may contain incomplete information.
 
 ## Machine state
@@ -71,7 +72,7 @@ Entries are **not** guaranteed to not overlap with each other. They are however 
 ```c
 enum aurix_memmap_entry_type {
 	AURIX_MMAP_RESERVED = 0,
-	
+
 	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
 	AURIX_MMAP_ACPI_MAPPED_IO = 2,
 	AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE = 3,

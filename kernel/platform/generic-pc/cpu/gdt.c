@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c                                                         */
+/* Module Name:  gdt.c                                                           */
 /* Project:      AurixOS                                                         */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy                                            */
@@ -17,30 +17,49 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
+#include <arch/cpu/gdt.h>
+#include <stdint.h>
 
-void _start(struct aurix_parameters *params)
+void gdt_init()
 {
-	serial_init();
-
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		serial_sendstr("Aurix Protocol revision is not compatible!\n");
-	}
-
-	serial_sendstr("Hello from AurixOS!\n");
+	struct gdt_descriptor gdt[5];
 	
-	// initialize basic processor features and interrupts
-	cpu_early_init();
+	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
+	gdt_set_entry(&gdt[1], 0, 0, 0x9a, 0xaf);
+	gdt_set_entry(&gdt[2], 0, 0, 0x92, 0xcf);
+	gdt_set_entry(&gdt[3], 0, 0, 0xfa, 0xaf);
+	gdt_set_entry(&gdt[4], 0, 0, 0xf2, 0xcf);
 
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
+	struct gdtr gdtr = {
+		.base = (uintptr_t)&gdt,
+		.limit = sizeof(gdt) - 1
+	};
 
-	__builtin_unreachable();
+	__asm__ volatile(
+					"lgdt %[gdtr]\n"
+					"pushq $0x08\n"
+					"lea 1f(%%rip), %%rax\n"
+					"pushq %%rax\n"
+					"lretq\n"
+					"1:\n"
+					"movq $0x10, %%rax\n"
+					"movq %%rax, %%ds\n"
+					"movq %%rax, %%es\n"
+					"movq %%rax, %%ss\n"
+					"movq %%rax, %%fs\n"
+					"movq %%rax, %%gs\n"
+				:: [gdtr]"g"(gdtr)
+				:  "memory");
+}
+
+void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit, uint8_t access,
+				   uint8_t flags)
+{
+	entry->limit_low = (limit >> 8) & 0xffff;
+	entry->base_low = (base >> 8) & 0xffff;
+	entry->base_mid = (base >> 16) & 0xff;
+	entry->access = access;
+	entry->limit_high = (limit >> 16) & 0xf;
+	entry->flags = flags;
+	entry->base_high = (base >> 24) & 0xff;
 }
