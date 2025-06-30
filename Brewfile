@@ -14,6 +14,7 @@ brew "qemu"
 brew "ffmpeg"
 brew "llvm"
 brew "lld"
+brew "perl"
 brew "util-linux" if OS.mac?
 brew "gsed" if OS.mac?
 

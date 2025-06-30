@@ -20,6 +20,7 @@
 .DEFAULT_GOAL := all
 
 GITREV := $(shell git rev-parse --short HEAD)
+export AURIXBUILD
 
 ##
 # Build configuration
@@ -122,7 +123,7 @@ ovmf:
 livecd: install
 	@printf ">>> Generating Live CD..."
 	@mkdir -p $(RELEASE_DIR)
-	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD)
+	@perl utils/generate-iso.pl $(LIVECD)
 
 .PHONY: livehdd
 livehdd: install
