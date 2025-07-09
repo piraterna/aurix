@@ -129,7 +129,7 @@ livecd: install
 livehdd: install
 	@printf ">>> Generating Live HDD..."
 	@mkdir -p $(RELEASE_DIR)
-	@utils/arch/$(ARCH)/generate-hdd.sh $(LIVEHDD)
+	@perl utils/generate-hdd.pl $(LIVEHDD)
 
 .PHONY: livesd
 livesd: install
