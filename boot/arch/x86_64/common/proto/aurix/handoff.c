@@ -45,23 +45,25 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t
 	};
 
 	__asm__ volatile(
-					"cli\n"
-					"cld\n"
+					//< lol
 
-					"lgdt %[gdtr]\n"
-					"pushq $0x08\n"
-					"lea 1f(%%rip), %%rax\n"
-					"pushq %%rax\n"
-					"lretq\n"
-					"1:\n"
-					"movq $0x10, %%rax\n"
-					"movq %%rax, %%ds\n"
-					"movq %%rax, %%es\n"
-					"movq %%rax, %%ss\n"
-					"movq %%rax, %%fs\n"
-					"movq %%rax, %%gs\n"
+					//"cli\n"
+					//"cld\n"
 
-					"lidt %[idt]\n"
+					//"lgdt %[gdtr]\n"
+					//"pushq $0x08\n"
+					//"lea 1f(%%rip), %%rax\n"
+					//"pushq %%rax\n"
+					//"lretq\n"
+					//"1:\n"
+					//"movq $0x10, %%rax\n"
+					//"movq %%rax, %%ds\n"
+					//"movq %%rax, %%es\n"
+					//"movq %%rax, %%ss\n"
+					//"movq %%rax, %%fs\n"
+					//"movq %%rax, %%gs\n"
+
+					//"lidt %[idt]\n"
 
 					"movq %[pml4], %%cr3\n"
 					"movq %[stack], %%rsp\n"
