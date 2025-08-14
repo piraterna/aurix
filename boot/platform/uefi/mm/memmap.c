@@ -103,33 +103,32 @@ uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 	uint32_t entry_count = size / desc_size;
 
 	// map all the memory
+	uint64_t flags;
 	for (uint32_t i = 0; i < entry_count; i++) {
-		uint64_t flags;
+		flags = VMM_PRESENT;
 		switch (cur_entry->Type) {
 			case EfiConventionalMemory:
         	case EfiBootServicesCode:
         	case EfiBootServicesData:
-        	    flags = VMM_WRITABLE;
+			case EfiLoaderData:
+			case EfiLoaderCode:
+        	    flags |= VMM_WRITABLE;
         	    break;
-        	case EfiRuntimeServicesCode:
-        	    flags = 0;
-        	    break;
-        	case EfiRuntimeServicesData:
         	case EfiACPIReclaimMemory:
         	case EfiACPIMemoryNVS:
         	case EfiMemoryMappedIO:
         	case EfiMemoryMappedIOPortSpace:
-        	    flags = VMM_WRITABLE | VMM_NX;
+        	    flags |= VMM_WRITABLE | VMM_NX;
         	    break;
         	case EfiUnusableMemory:
         	case EfiReservedMemoryType:
-        	case EfiLoaderData:
-        	case EfiLoaderCode:
         	case EfiPalCode:
+			case EfiRuntimeServicesCode:
+			case EfiRuntimeServicesData:
         	    flags = 0;
         	    break;
 			default:
-        	    flags = VMM_WRITABLE | VMM_NX;
+        	    flags |= VMM_WRITABLE | VMM_NX;
         	    break;
 			}
 

@@ -51,7 +51,7 @@ QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
 # QEMU Audio support
-#QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
+QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
 
 # QEMU Mouse support
 #QEMU_FLAGS += -usb -device usb-mouse
@@ -123,13 +123,13 @@ ovmf:
 livecd: install
 	@printf ">>> Generating Live CD..."
 	@mkdir -p $(RELEASE_DIR)
-	@perl utils/generate-iso.pl $(LIVECD)
+	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD)
 
 .PHONY: livehdd
 livehdd: install
 	@printf ">>> Generating Live HDD..."
 	@mkdir -p $(RELEASE_DIR)
-	@perl utils/generate-hdd.pl $(LIVEHDD)
+	@utils/arch/$(ARCH)/generate-hdd.sh $(LIVEHDD)
 
 .PHONY: livesd
 livesd: install

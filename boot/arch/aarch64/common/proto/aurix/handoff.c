@@ -27,7 +27,7 @@
 void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t stack_size, struct aurix_parameters *parameters)
 {
 	struct gdt_descriptor gdt[5];
-
+	
 	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
 	gdt_set_entry(&gdt[1], 0, 0, 0x9a, 0xaf);
 	gdt_set_entry(&gdt[2], 0, 0, 0x92, 0xcf);
@@ -45,25 +45,23 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t
 	};
 
 	__asm__ volatile(
-					//< lol
+					"cli\n"
+					"cld\n"
 
-					//"cli\n"
-					//"cld\n"
+					"lgdt %[gdtr]\n"
+					"pushq $0x08\n"
+					"lea 1f(%%rip), %%rax\n"
+					"pushq %%rax\n"
+					"lretq\n"
+					"1:\n"
+					"movq $0x10, %%rax\n"
+					"movq %%rax, %%ds\n"
+					"movq %%rax, %%es\n"
+					"movq %%rax, %%ss\n"
+					"movq %%rax, %%fs\n"
+					"movq %%rax, %%gs\n"
 
-					//"lgdt %[gdtr]\n"
-					//"pushq $0x08\n"
-					//"lea 1f(%%rip), %%rax\n"
-					//"pushq %%rax\n"
-					//"lretq\n"
-					//"1:\n"
-					//"movq $0x10, %%rax\n"
-					//"movq %%rax, %%ds\n"
-					//"movq %%rax, %%es\n"
-					//"movq %%rax, %%ss\n"
-					//"movq %%rax, %%fs\n"
-					//"movq %%rax, %%gs\n"
-
-					//"lidt %[idt]\n"
+					"lidt %[idt]\n"
 
 					"movq %[pml4], %%cr3\n"
 					"movq %[stack], %%rsp\n"

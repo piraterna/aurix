@@ -147,7 +147,7 @@ void aurix_load(char *kernel_path)
 	axboot_memmap *mmap;
 	uint32_t mmap_entries = get_memmap(&mmap, pm);
 
-	map_pages(pm, (uintptr_t)pm, (uintptr_t)pm, PAGE_SIZE, VMM_WRITABLE);
+	map_pages(pm, (uintptr_t)pm, (uintptr_t)pm, PAGE_SIZE, VMM_PRESENT | VMM_WRITABLE);
 
 	void *stack = mem_alloc(AURIX_STACK_SIZE); // 16 KiB stack should be well more than enough
 	if (!stack) {
@@ -156,7 +156,7 @@ void aurix_load(char *kernel_path)
 	}
 	memset(stack, 0, AURIX_STACK_SIZE);
 
-	map_pages(pm, (uintptr_t)stack, (uintptr_t)stack, AURIX_STACK_SIZE, VMM_WRITABLE | VMM_NX);
+	map_pages(pm, (uintptr_t)stack, (uintptr_t)stack, AURIX_STACK_SIZE, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	uintptr_t kernel_addr = 0;
 	void *kernel_entry = (void *)elf_load(kbuf, &kernel_addr, pm);
@@ -194,7 +194,7 @@ void aurix_load(char *kernel_path)
 	}
 
 	// map framebuffer
-	map_pages(pm, parameters.framebuffer->addr, parameters.framebuffer->addr, parameters.framebuffer->height * parameters.framebuffer->pitch, VMM_WRITABLE);
+	map_pages(pm, parameters.framebuffer->addr, parameters.framebuffer->addr, parameters.framebuffer->height * parameters.framebuffer->pitch, VMM_PRESENT | VMM_WRITABLE);
 
 	log("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
 #ifdef AXBOOT_UEFI

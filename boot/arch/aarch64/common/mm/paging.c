@@ -35,7 +35,7 @@ static void _map(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
     uint64_t pml3_idx = (virt >> 30) & 0x1ff;
     uint64_t pml4_idx = (virt >> 39) & 0x1ff;
 
-    //flags |= VMM_PRESENT;
+    flags |= VMM_PRESENT;
     
     if (!(pm->entries[pml4_idx] & 1)) {
         void *pml4 = mem_alloc(PAGE_SIZE);
