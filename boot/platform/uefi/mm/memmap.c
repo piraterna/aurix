@@ -80,7 +80,7 @@ uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 
 	status = gBootServices->GetMemoryMap(&size, efi_map, &efi_map_key, &desc_size, &desc_ver);
 	if (EFI_ERROR(status) && status != EFI_BUFFER_TOO_SMALL) {
-		log("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
+		debug("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
 		return 0;
 	}
 
@@ -94,7 +94,7 @@ uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 			size += 2 * desc_size;
 			efi_map = (EFI_MEMORY_DESCRIPTOR *)mem_realloc(efi_map, size);
 		} else {
-			log("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
+			debug("get_memmap(): GetMemoryMap() returned an error: %s (0x%llx)\n", efi_status_to_str(status), status);
 			return 0;
 		}
 	} while (status != EFI_SUCCESS);

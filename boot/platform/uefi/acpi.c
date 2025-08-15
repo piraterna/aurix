@@ -32,19 +32,19 @@ uintptr_t platform_get_rsdp()
 
 	for (EFI_UINTN i = 0; i < gSystemTable->NumberOfTableEntries; i++) {
 		if (memcmp(&(gSystemTable->ConfigurationTable[i].VendorGuid), &acpi10_guid, sizeof(EFI_GUID)) == 0) {
-			log("platform_get_rsdp(): Found RSDP (ACPI 1.0) at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
+			debug("platform_get_rsdp(): Found RSDP (ACPI 1.0) at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
 			rsdp_addr = (uintptr_t)gSystemTable->ConfigurationTable[i].VendorTable;
 		}
 
 		// ACPI 2.0+ always takes higher priority over older version
 		if (memcmp(&(gSystemTable->ConfigurationTable[i].VendorGuid), &acpi20_guid, sizeof(EFI_GUID)) == 0) {
-			log("platform_get_rsdp(): Found RSDP (ACPI 2.0+) at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
+			debug("platform_get_rsdp(): Found RSDP (ACPI 2.0+) at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
 			return (uintptr_t)gSystemTable->ConfigurationTable[i].VendorTable;
 		}
 	}
 
 	if (rsdp_addr == 0) {
-		log("platform_get_rsdp(): RSDP not found!\n");
+		debug("platform_get_rsdp(): RSDP not found!\n");
 	}
 
 	return rsdp_addr;
@@ -58,19 +58,19 @@ uintptr_t platform_get_smbios()
 
 	for (EFI_UINTN i = 0; i < gSystemTable->NumberOfTableEntries; i++) {
 		if (memcmp(&(gSystemTable->ConfigurationTable[i].VendorGuid), &smbios_guid, sizeof(EFI_GUID)) == 0) {
-			log("platform_get_rsmbios(): Found SMBIOS at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
+			debug("platform_get_rsmbios(): Found SMBIOS at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
 			smbios_addr = (uintptr_t)gSystemTable->ConfigurationTable[i].VendorTable;
 		}
 
 		// SMBIOS3 always takes higher priority over older version
 		if (memcmp(&(gSystemTable->ConfigurationTable[i].VendorGuid), &smbios3_guid, sizeof(EFI_GUID)) == 0) {
-			log("platform_get_smbios(): Found SMBIOS3 at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
+			debug("platform_get_smbios(): Found SMBIOS3 at 0x%llx\n", gSystemTable->ConfigurationTable[i].VendorTable);
 			return (uintptr_t)gSystemTable->ConfigurationTable[i].VendorTable;
 		}
 	}
 
 	if (smbios_addr == 0) {
-		log("platform_get_smbios(): SMBIOS not found!\n");
+		debug("platform_get_smbios(): SMBIOS not found!\n");
 	}
 
 	return smbios_addr;

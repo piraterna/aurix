@@ -107,7 +107,7 @@ void *mem_alloc(size_t n)
 
 	status = gBootServices->AllocatePool(EfiLoaderData, (EFI_UINTN)n, &alloc);
 	if (EFI_ERROR(status)) {
-		debug("mem_alloc(): Couldn't allocate %u bytes: %s (%lx)\n", n, efi_status_to_str(status), status);
+		error("mem_alloc(): Couldn't allocate %u bytes: %s (%lx)\n", n, efi_status_to_str(status), status);
 		return NULL;
 	}
 
@@ -121,7 +121,7 @@ int mem_allocat(void *addr, size_t npages)
 
 	status = gBootServices->AllocatePages(AllocateAddress, EfiLoaderData, (EFI_UINTN)npages, addr);
 	if (EFI_ERROR(status)) {
-		debug("mem_allocat(): Couldn't allocate %u pages at 0x%lx: %s (%lx)\n", npages, addr, efi_status_to_str(status), status);
+		error("mem_allocat(): Couldn't allocate %u pages at 0x%lx: %s (%lx)\n", npages, addr, efi_status_to_str(status), status);
 		return 0;
 	}
 
@@ -162,7 +162,7 @@ void mem_free(void *addr)
 
 	status = gBootServices->FreePool(addr);
 	if (EFI_ERROR(status)) {
-		debug("mem_free(): Couldn't free 0x%llx: %s (%lx)\n", addr, efi_status_to_str(status), status);
+		error("mem_free(): Couldn't free 0x%llx: %s (%lx)\n", addr, efi_status_to_str(status), status);
 		return;
 	}
 

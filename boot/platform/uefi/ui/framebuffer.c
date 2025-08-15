@@ -40,7 +40,7 @@ bool get_framebuffer(uint32_t **fb_addr, struct fb_mode **available_modes, int *
 
 	Status = gBootServices->LocateProtocol(&gop_guid, NULL, (void**)&gop);
 	if (EFI_ERROR(Status)) {
-    	log("get_framebuffer(): Unable to locate GOP: %s (0x%llx)\n", efi_status_to_str(Status), Status);
+    	debug("get_framebuffer(): Unable to locate GOP: %s (0x%llx)\n", efi_status_to_str(Status), Status);
 	}
 
 	Status = gop->QueryMode(gop, gop->Mode == NULL ? 0 : gop->Mode->Mode, &SizeOfInfo, &mode_info);
@@ -48,7 +48,7 @@ bool get_framebuffer(uint32_t **fb_addr, struct fb_mode **available_modes, int *
 	if (Status == EFI_NOT_STARTED) {
 		Status = gop->SetMode(gop, 0);
 	} else if (EFI_ERROR(Status)) {
-		log("Unable to get native mode\n");
+		debug("Unable to get native mode\n");
 		return false;
 	} else {
 		nativeMode = gop->Mode->Mode;
@@ -76,7 +76,7 @@ bool get_framebuffer(uint32_t **fb_addr, struct fb_mode **available_modes, int *
 		} else if (mode_info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor) {
 			(*available_modes)[i].format = FB_BGRA;
 		} else {
-			log("get_framebuffer(): Unknown framebuffer format, assuming BGRA...\n");
+			debug("get_framebuffer(): Unknown framebuffer format, assuming BGRA...\n");
 			(*available_modes)[i].format = FB_BGRA;
 		}
 		

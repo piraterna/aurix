@@ -26,7 +26,7 @@
 #define assert(expr, msg) \
 	do { \
 		if (!!(expr)) { \
-			log("Assertion failed in file %s, line %u: %s\n", __FILE__, __LINE__, msg); \
+			error("Assertion failed in file %s, line %u: %s\n", __FILE__, __LINE__, msg); \
 			axboot_halt(); \
 		} \
 	} while (0)

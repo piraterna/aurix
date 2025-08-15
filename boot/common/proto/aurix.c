@@ -28,6 +28,7 @@
 #include <vfs/vfs.h>
 #include <print.h>
 #include <axboot.h>
+#include <aurix_logo.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -37,7 +38,7 @@
 bool aurix_get_memmap(struct aurix_parameters *params, axboot_memmap *mmap, uint32_t mmap_entries, pagetable *pm)
 {
 	if (params == NULL || mmap == NULL || pm == NULL ||  mmap_entries == 0) {
-		log("aurix_get_memmap(): Invalid parameter!\n");
+		error("aurix_get_memmap(): Invalid parameter!\n");
 		return false;
 	}
 
@@ -62,7 +63,7 @@ bool aurix_get_memmap(struct aurix_parameters *params, axboot_memmap *mmap, uint
 	// copy the memory map over to kernel parameters
 	params->mmap = (struct aurix_memmap *)mem_alloc(sizeof(struct aurix_memmap) * mmap_entries);
 	if (!(params->mmap)) {
-		log("aurix_get_memmap(): Failed to allocate memory for storing memory map!\n");
+		error("aurix_get_memmap(): Failed to allocate memory for storing memory map!\n");
 		return false;
 	}
 	params->mmap_entries = mmap_entries;
@@ -95,7 +96,7 @@ bool aurix_get_memmap(struct aurix_parameters *params, axboot_memmap *mmap, uint
 				params->mmap[i].type = AURIX_MMAP_USABLE;
 				break;
 			default:
-				log("aurix_get_memmap(): Unknown memory type in entry %u (%u), setting as reserved.\n", i, mmap[i].type);
+				debug("aurix_get_memmap(): Unknown memory type in entry %u (%u), setting as reserved.\n", i, mmap[i].type);
 				params->mmap[i].type = AURIX_MMAP_RESERVED;
 				break;
 		}
@@ -112,12 +113,12 @@ bool aurix_get_framebuffer(struct aurix_parameters *params)
 
 	params->framebuffer = (struct aurix_framebuffer *)mem_alloc(sizeof(struct aurix_framebuffer));
 	if (!(params->framebuffer)) {
-		log("aurix_get_framebuffer(): Failed to allocate memory for framebuffer information!\n");
+		error("aurix_get_framebuffer(): Failed to allocate memory for framebuffer information!\n");
 		return false;
 	}
 
 	if (!get_framebuffer(&fb_addr, &modes, NULL, &current_mode)) {
-		log("aurix_get_framebuffer(): get_framebuffer() returned false, setting everything to 0.\n");
+		error("aurix_get_framebuffer(): get_framebuffer() returned false, setting everything to 0.\n");
 		memset(params->framebuffer, 0, sizeof(struct aurix_framebuffer));
 		return false;
 	}
@@ -139,7 +140,7 @@ void aurix_load(char *kernel_path)
 	
 	pagetable *pm = create_pagemap();
 	if (!pm) {
-		log("aurix_load(): Failed to create kernel pagemap! Halting...\n");
+		error("aurix_load(): Failed to create kernel pagemap! Halting...\n");
 		// TODO: Halt
 		while (1);
 	}
@@ -151,7 +152,7 @@ void aurix_load(char *kernel_path)
 
 	void *stack = mem_alloc(AURIX_STACK_SIZE); // 16 KiB stack should be well more than enough
 	if (!stack) {
-		log("aurix_load(): Failed to allocate stack! Halting...\n");
+		error("aurix_load(): Failed to allocate stack! Halting...\n");
 		while (1);
 	}
 	memset(stack, 0, AURIX_STACK_SIZE);
@@ -161,7 +162,7 @@ void aurix_load(char *kernel_path)
 	uintptr_t kernel_addr = 0;
 	void *kernel_entry = (void *)elf_load(kbuf, &kernel_addr, pm);
 	if (!kernel_entry) {
-		log("aurix_load(): Failed to load '%s'! Halting...\n", kernel_path);
+		error("aurix_load(): Failed to load '%s'! Halting...\n", kernel_path);
 		while (1);
 	}
 	mem_free(kbuf);
@@ -173,7 +174,7 @@ void aurix_load(char *kernel_path)
 
 	// translate memory map
 	if (!aurix_get_memmap(&parameters, mmap, mmap_entries, pm)) {
-		log("aurix_load(): Failed to aqcuire memory map!");
+		error("aurix_load(): Failed to aqcuire memory map!");
 		while (1);
 	}
 
@@ -190,13 +191,24 @@ void aurix_load(char *kernel_path)
 
 	// get framebuffer information
 	if (!aurix_get_framebuffer(&parameters)) {
-		log("aurix_load(): Failed to aqcuire framebuffer information!\n");
+		error("aurix_load(): Failed to aqcuire framebuffer information!\n");
 	}
 
 	// map framebuffer
 	map_pages(pm, parameters.framebuffer->addr, parameters.framebuffer->addr, parameters.framebuffer->height * parameters.framebuffer->pitch, VMM_PRESENT | VMM_WRITABLE);
 
-	log("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
+	// paint the AurixOS logo on screen, very important!
+	uint32_t lx = (parameters.framebuffer->width / 2) - (aurix_logo.width / 2);
+	uint32_t ty = (parameters.framebuffer->height / 2) - (aurix_logo.height / 2);
+	for (uint32_t y = ty, idx = 0; y < ty + aurix_logo.height && idx < (aurix_logo.width * aurix_logo.height * 4); y++) {
+		for (uint32_t x = lx; x < lx + aurix_logo.width; x++) {
+			*((uint32_t *)(parameters.framebuffer->addr + parameters.framebuffer->pitch * y + 4 * x)) = 0xFF000000 | (aurix_logo.pixel_data[idx] << 16) | (aurix_logo.pixel_data[idx+1] << 8) | aurix_logo.pixel_data[idx+2];
+			idx+=4;
+		}
+	}
+	//parameters.framebuffer->addr
+
+	debug("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
 #ifdef AXBOOT_UEFI
 	uefi_exit_bs();
 #endif

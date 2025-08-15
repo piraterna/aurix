@@ -31,7 +31,7 @@ void axboot_init()
 	uart_init(115200);
 
 	if (!vfs_init("\\")) {
-		log("axboot_init(): Failed to mount boot drive! Halting...\n");
+		error("axboot_init(): Failed to mount boot drive! Halting...\n");
 		// TODO: Halt
 		while (1);
 	}
@@ -61,6 +61,6 @@ void axboot_init()
 
 	ui_init();
 
-	log("axboot_init(): Returned from main menu, something went wrong. Halting!");
+	error("axboot_init(): Returned from main menu, something went wrong. Halting!");
 	UNREACHABLE();
 }

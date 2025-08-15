@@ -36,19 +36,19 @@ int vfs_init(char *root_mountpoint)
 {
 	boot_drive = mount_boot_volume(root_mountpoint);
 	if (boot_drive == NULL) {
-		log("vfs_init(): Failed to allocate memory for VFS!\n");
+		error("vfs_init(): Failed to allocate memory for VFS!\n");
 		// fuck off and boot out early.
 		return 0;
 	}
 
-	log("vfs_init(): Mounted boot drive to \"\\\"\n");
+	debug("vfs_init(): Mounted boot drive to \"\\\"\n");
 	return 1;
 }
 
 size_t vfs_read(char *filename, char **buf)
 {
 	if (boot_drive->fs->read == NULL) {
-		log("vfs_read(): Filesystem didn't set up a read function!\n");
+		error("vfs_read(): Filesystem didn't set up a read function!\n");
 		return 0;
 	}
 
@@ -58,7 +58,7 @@ size_t vfs_read(char *filename, char **buf)
 int vfs_write(char *filename, char *buf, size_t len)
 {
 	if (boot_drive->fs->write == NULL) {
-		log("vfs_read(): Filesystem didn't setup a write function!\n");
+		error("vfs_read(): Filesystem didn't setup a write function!\n");
 		return 0;
 	}
 

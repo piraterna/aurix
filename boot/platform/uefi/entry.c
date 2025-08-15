@@ -107,7 +107,7 @@ void uefi_exit_bs(void)
 	
 	int tries = 0;
 
-	log("uefi_exit_bs(): Calling ExitBootServices(), this will be the last log you'll see before handoff!\n");
+	debug("uefi_exit_bs(): Calling ExitBootServices(), this will be the last log you'll see before handoff!\n");
 
 	do {
 		map_key = 0;
@@ -121,13 +121,13 @@ void uefi_exit_bs(void)
 
 		status = gBootServices->GetMemoryMap(&map_size, map, &map_key, &desc_size, &desc_ver);
 		if (EFI_ERROR(status) && status != EFI_BUFFER_TOO_SMALL) {
-			log("uefi_exit_bs(): Failed to acquire memory map key: %s (%llx)\n", efi_status_to_str(status), status);
+			debug("uefi_exit_bs(): Failed to acquire memory map key: %s (%llx)\n", efi_status_to_str(status), status);
 			continue;
 		}
 
 		status = gBootServices->ExitBootServices(gImageHandle, map_key);
 		if (EFI_ERROR(status)) {
-			log("uefi_exit_bs(): Failed to exit boot services: %s (%llx)\n", efi_status_to_str(status), status);
+			debug("uefi_exit_bs(): Failed to exit boot services: %s (%llx)\n", efi_status_to_str(status), status);
 			continue;
 		}
 
@@ -135,7 +135,7 @@ void uefi_exit_bs(void)
 	} while (tries <= EXIT_BS_MAX_TRIES);
 
 	if (EFI_ERROR(status)) {
-		log("uefi_exit_bs(): Failed to exit Boot Services, rebooting!");
+		debug("uefi_exit_bs(): Failed to exit Boot Services, rebooting!");
 		platform_reboot();
 		UNREACHABLE();
 	}

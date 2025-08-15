@@ -41,7 +41,7 @@ int proto_str_to_int(char *proto)
 
 void loader_load(struct axboot_entry *entry)
 {
-	log("loader_load(): Booting \"%s\"...\n", entry->name);
+	debug("loader_load(): Booting \"%s\"...\n", entry->name);
 
 	switch (entry->protocol) {
 		case PROTO_AURIX: {
@@ -49,7 +49,7 @@ void loader_load(struct axboot_entry *entry)
 			break;
 		}
 		default: {
-			log("loader_load(): Entry doesn't have a supported protocol!\n");
+			error("loader_load(): Entry doesn't have a supported protocol!\n");
 			break;
 		}
 	}

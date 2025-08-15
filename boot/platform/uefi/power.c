@@ -35,11 +35,11 @@ bool platform_is_reboot_to_fw_possible()
 	Status = gSystemTable->RuntimeServices->GetVariable(L"OsIndicationsSupported", &GlobalVarGuid, NULL, &OsIndicationsSize, &OsIndications);
 	if (!EFI_ERROR(Status)) {
 		if (OsIndications & EFI_OS_INDICATIONS_BOOT_TO_FW_UI) {
-			log("platform_is_reboot_to_fw_possible(): Boot to firmware UI is possible!\n");
+			debug("platform_is_reboot_to_fw_possible(): Boot to firmware UI is possible!\n");
 			return true;
 		}
 	} else {
-		log("platform_is_reboot_to_fw_possible(): Failed to get OsIndications variable: 0x%llx (%s) \n", Status, efi_status_to_str(Status));
+		debug("platform_is_reboot_to_fw_possible(): Failed to get OsIndications variable: 0x%llx (%s) \n", Status, efi_status_to_str(Status));
 	}
 
 	return false;
@@ -58,7 +58,7 @@ void platform_reboot_to_fw()
 
 	Status = gSystemTable->RuntimeServices->SetVariable(L"OsIndications", &GlobalVarGuid, EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS, OsIndicationsSize, &OsIndications);
 	if (EFI_ERROR(Status)) {
-		log("platform_reboot_to_fw(): Failed to set OsIndications variable: 0x%llx (%s) \n", Status, efi_status_to_str(Status));
+		debug("platform_reboot_to_fw(): Failed to set OsIndications variable: 0x%llx (%s) \n", Status, efi_status_to_str(Status));
 	}
 
 	gSystemTable->RuntimeServices->ResetSystem(EfiResetCold, EFI_SUCCESS, 0, NULL);

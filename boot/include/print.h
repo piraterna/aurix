@@ -25,7 +25,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-void log(const char *fmt, ...);
+void error(const char *fmt, ...);
 void debug(const char *fmt, ...);
 
 void printstr(const char *str);

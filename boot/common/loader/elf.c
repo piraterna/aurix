@@ -66,7 +66,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
     
         uint64_t phys = ((uint64_t)mem_alloc(ph[i].p_memsz + ph[i].p_vaddr - aligned_vaddr + 4096) + 4096) & ~0xFFF;
         if (!phys) {
-            log("elf64_load(): Out of memory\n");
+            error("elf64_load(): Out of memory\n");
             return 0;
         }
 
@@ -80,7 +80,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
         memcpy((void*)(phys + ph[i].p_vaddr - aligned_vaddr), data + ph[i].p_offset, ph[i].p_filesz);
     }
 
-    log("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);
+    debug("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);
     return (uintptr_t)header->e_entry;
 }
 
@@ -89,12 +89,12 @@ uintptr_t elf_load(char *data, uintptr_t *addr, pagetable *pagemap)
     struct elf_header *header = (struct elf_header *)data;
 
     if (header->e_magic != ELF_MAGIC) {
-        log("elf_load(): Invalid ELF magic: 0x%x", header->e_magic);
+        error("elf_load(): Invalid ELF magic: 0x%x", header->e_magic);
         return 0;
     }
 
     if (header->e_class != 2) {
-        log("elf_load(): Unsupported ELF class: %u", header->e_class);
+        error("elf_load(): Unsupported ELF class: %u", header->e_class);
         return 0;
     }
 
@@ -106,6 +106,6 @@ uintptr_t elf_load(char *data, uintptr_t *addr, pagetable *pagemap)
         return elf64_load(data, addr, pagemap);
     }
 
-    log("elf_load(): Unsupported ELF machine: %u", header->e_machine);
+    error("elf_load(): Unsupported ELF machine: %u", header->e_machine);
     return 0;
 }

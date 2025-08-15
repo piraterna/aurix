@@ -48,7 +48,7 @@ int32_t __ltdf2 = 0;
 
 //extern struct axboot_cfg cfg;
 
-void log(const char *fmt, ...)
+void error(const char *fmt, ...)
 {
 	va_list args;
 	char buf[1024];
@@ -59,19 +59,13 @@ void log(const char *fmt, ...)
 
 	uart_sendstr(buf);
 
-#ifdef AXBOOT_UEFI
-	char *bufp = &buf;
+#if defined(AXBOOT_UEFI) && defined(DEBUG)
+	char *bufp = &buf[0];
 	CHAR16 wstr[1024];
 	size_t n = mbstowcs((wchar_t *)&wstr, (const char **)&bufp, 1024);
 	wstr[n] = L'\r';
 	wstr[n+1] = L'\0';
 	gSystemTable->ConOut->OutputString(gSystemTable->ConOut, wstr);
-#endif
-
-#if 0
-	if (cfg.bootlog_filename != NULL) {
-		vfs_write(cfg.bootlog_filename, (char *)&buf, size);
-	}
 #endif
 }
 

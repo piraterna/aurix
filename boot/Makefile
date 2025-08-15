@@ -37,6 +37,7 @@ export BOOT_ROOT := $(ROOT_DIR)/boot
 
 ifeq ($(BUILD_TYPE),debug)
 CFLAGS += -O0 -g3
+CFLAGS += -DDEBUG
 else
 CFLAGS += -O2
 endif

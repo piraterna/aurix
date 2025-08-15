@@ -36,7 +36,7 @@ bool verify_secure_boot()
 	bool ret = 0;
 
 	if (!EFI_ERROR(gSystemTable->RuntimeServices->GetVariable(L"SecureBoot", &var_guid, NULL, &size, &val))) {
-		log("verify_secure_boot(): Secure Boot Status: %u\n", val);
+		debug("verify_secure_boot(): Secure Boot Status: %u\n", val);
 		ret = (bool)val;
 
 		if (!EFI_ERROR(gSystemTable->RuntimeServices->GetVariable(L"SetupMode", &var_guid, NULL, &size, &val)) && val != 0) {
@@ -51,7 +51,7 @@ void load_drivers()
 {
 	// EFI_STATUS status;
 	if (!verify_secure_boot()) {
-		log("load_drivers(): Secure boot is enabled! Won't load drivers...\n");
+		debug("load_drivers(): Secure boot is enabled! Won't load drivers...\n");
 		return;
 	}
 
