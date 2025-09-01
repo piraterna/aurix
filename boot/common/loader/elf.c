@@ -74,10 +74,14 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
             *addr = phys;
         }
         
-        debug("elf64_load(): phys=0x%llx, virt=0x%llx, size=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz);
+        debug("elf64_load(): phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n", phys, ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_memsz);
 
         map_page(pagemap, aligned_vaddr, phys, flags);
         memcpy((void*)(phys + ph[i].p_vaddr - aligned_vaddr), data + ph[i].p_offset, ph[i].p_filesz);
+
+        if (ph[i].p_filesz < ph[i].p_memsz) {
+            memset((void*)(phys + ph[i].p_vaddr - aligned_vaddr + ph[i].p_filesz), 0, ph[i].p_memsz - ph[i].p_filesz);
+        }
     }
 
     debug("elf64_load(): ELF loaded successfully, entry: 0x%llx\n", header->e_entry);

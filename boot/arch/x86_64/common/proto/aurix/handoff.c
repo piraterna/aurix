@@ -89,6 +89,6 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack, uint32_t
 
 					"callq *%%rsi\n"
 					:: [gdtr]"g"(gdtr), [idt]"g"(idtr),
-						[pml4]"r"(pm), [stack]"r"(stack + stack_size),
+						[pml4]"r"(pm), [stack]"r"((uint64_t)stack + stack_size),
 						[entry]"r"(kernel_entry), [params]"d"(parameters) : "rax", "memory");
 }

@@ -206,7 +206,6 @@ void aurix_load(char *kernel_path)
 			idx+=4;
 		}
 	}
-	//parameters.framebuffer->addr
 
 	debug("aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n", pm, stack, kernel_entry);
 #ifdef AXBOOT_UEFI
