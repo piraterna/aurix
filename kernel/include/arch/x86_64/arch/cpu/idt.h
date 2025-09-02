@@ -1,20 +1,23 @@
 /*********************************************************************************/
-/* Module Name:  idt.h                                                           */
-/* Project:      AurixOS                                                         */
+/* Module Name:  idt.h */
+/* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy                                            */
+/* Copyright (c) 2024-2025 Jozef Nagy */
 /*                                                                               */
-/* This source is subject to the MIT License.                                    */
-/* See License.txt in the root of this repository.                               */
-/* All other rights reserved.                                                    */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
-/* SOFTWARE.                                                                     */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ */
+/* SOFTWARE. */
 /*********************************************************************************/
 
 #ifndef _ARCH_CPU_IDT_H
@@ -37,6 +40,7 @@ struct idtr {
 };
 
 void idt_init(void);
-void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type, uint8_t dpl);
+void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
+				  uint8_t dpl);
 
 #endif /* _ARCH_CPU_IDT_H */

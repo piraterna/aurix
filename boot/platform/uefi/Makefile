@@ -33,9 +33,7 @@ endif
 
 UEFI_BOOTFILE := $(BUILD_DIR)/boot/uefi/BOOT$(UEFISUF).EFI
 
-INCLUDE_DIRS += $(BOOT_ROOT)/include \
-				$(BOOT_ROOT)/include/arch/$(ARCH) \
-				$(BOOT_ROOT)/include/arch/$(ARCH)/uefi \
+INCLUDE_DIRS += $(BOOT_ROOT)/include/arch/$(ARCH)/uefi \
 				$(BOOT_ROOT)/include/platform/$(PLATFORM) \
 				$(BOOT_ROOT)/platform/uefi/libefi \
 				$(BOOT_ROOT)/platform/uefi/drivers/intel-hda

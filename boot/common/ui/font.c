@@ -1,33 +1,35 @@
 /*********************************************************************************/
-/* Module Name:  font.c                                                          */
-/* Project:      AurixOS                                                         */
+/* Module Name:  font.c */
+/* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy                                            */
+/* Copyright (c) 2024-2025 Jozef Nagy */
 /*                                                                               */
-/* This source is subject to the MIT License.                                    */
-/* See License.txt in the root of this repository.                               */
-/* All other rights reserved.                                                    */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
-/* SOFTWARE.                                                                     */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ */
+/* SOFTWARE. */
 /*********************************************************************************/
 
-#include <mm/mman.h>
-#include <lib/string.h>
 #include <lib/assert.h>
+#include <lib/string.h>
+#include <mm/mman.h>
 #include <vfs/vfs.h>
 #define FONT_IMPLEMENTATION
-#include <ui/ui.h>
-#include <ui/font.h>
 #include <print.h>
-#include <stdint.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <ui/font.h>
+#include <ui/ui.h>
 
 bool font_init(struct ui_context *ctx, char *font_path, int size)
 {
@@ -40,13 +42,16 @@ bool font_init(struct ui_context *ctx, char *font_path, int size)
 
 	ssfn_status = ssfn_load(&(ctx->font), (void *)(ctx->font_file));
 	if (ssfn_status != SSFN_OK) {
-		debug("font_init(): SSFN failed to load font: %s!\n", ssfn_error(ssfn_status));
+		debug("font_init(): SSFN failed to load font: %s!\n",
+			  ssfn_error(ssfn_status));
 		goto error;
 	}
 
-	ssfn_status = ssfn_select(&(ctx->font), SSFN_FAMILY_ANY, NULL, SSFN_STYLE_REGULAR, size);
+	ssfn_status = ssfn_select(&(ctx->font), SSFN_FAMILY_ANY, NULL,
+							  SSFN_STYLE_REGULAR, size);
 	if (ssfn_status != SSFN_OK) {
-		debug("font_init(): SSFN failed to select font: %s!\n", ssfn_error(ssfn_status));
+		debug("font_init(): SSFN failed to select font: %s!\n",
+			  ssfn_error(ssfn_status));
 		goto error;
 	}
 
@@ -78,11 +83,11 @@ void font_free(struct ui_context *ctx)
 /*
 void font_ttf_init(char *font_path, int initial_size)
 {
-	vfs_read(font_path, (char **)&font_buf);
-	if (!font_buf) {
-		debug("Font not loaded, returning...\n");
-		return;
-	}
+        vfs_read(font_path, (char **)&font_buf);
+        if (!font_buf) {
+                debug("Font not loaded, returning...\n");
+                return;
+        }
 }
 
 void font_psf2_init()

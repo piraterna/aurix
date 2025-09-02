@@ -19,7 +19,11 @@
 
 .DEFAULT_GOAL := all
 
-export INCLUDE_DIRS := $(BOOT_ROOT)/include
+export BOOT_ROOT := $(ROOT_DIR)/boot
+
+export INCLUDE_DIRS := $(BOOT_ROOT)/include \
+					   $(BOOT_ROOT)/include/arch/$(ARCH) \
+					   $(BOOT_ROOT)/ext
 
 export DEFINES += __$(ARCH)__ \
 				_AXBOOT
@@ -32,8 +36,6 @@ export CFLAGS := $(foreach d, $(DEFINES), -D$d) -Wall -Wextra -Wno-unused-local-
 export LDFLAGS := -nostdlib
 
 include arch/$(ARCH)/config.mk
-
-export BOOT_ROOT := $(ROOT_DIR)/boot
 
 ifeq ($(BUILD_TYPE),debug)
 CFLAGS += -O0 -g3

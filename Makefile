@@ -138,17 +138,19 @@ livesd: install
 	@mkdir -p $(RELEASE_DIR)
 	@utils/arch/$(ARCH)/generate-sd.sh $(LIVESD)
 
-# TODO: Maybe don't run with -hda but -drive?
 .PHONY: run
 run: livecd
 	@printf ">>> Running QEMU...\n"
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
 
-# TODO: Maybe don't run with -hda but -drive?
 .PHONY: run-uefi
 run-uefi: livecd ovmf
 	@printf ">>> Running QEMU (UEFI)...\n"
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -bios ovmf/ovmf-$(ARCH).fd -cdrom $(LIVECD)
+
+.PHONY: format
+format:
+	@clang-format -i $(shell find . -name "*.c" -o -name "*.h")
 
 .PHONY: clean
 clean:

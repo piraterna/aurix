@@ -1,32 +1,35 @@
 /*********************************************************************************/
-/* Module Name:  mman.c                                                          */
-/* Project:      AurixOS                                                         */
+/* Module Name:  mman.c */
+/* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy                                            */
+/* Copyright (c) 2024-2025 Jozef Nagy */
 /*                                                                               */
-/* This source is subject to the MIT License.                                    */
-/* See License.txt in the root of this repository.                               */
-/* All other rights reserved.                                                    */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
-/* SOFTWARE.                                                                     */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ */
+/* SOFTWARE. */
 /*********************************************************************************/
 
 #include <arch/mm/paging.h>
-#include <mm/mman.h>
 #include <lib/string.h>
+#include <mm/mman.h>
 #include <print.h>
 #include <stddef.h>
 
 // NOTE: If any allocations fail, try increasing this number.
 #define MAX_ALLOCATIONS 64
 
-struct alloc_header allocation_list[MAX_ALLOCATIONS] = {0};
+struct alloc_header allocation_list[MAX_ALLOCATIONS] = { 0 };
 
 int find_alloc(void *addr)
 {
@@ -107,7 +110,8 @@ void *mem_alloc(size_t n)
 
 	status = gBootServices->AllocatePool(EfiLoaderData, (EFI_UINTN)n, &alloc);
 	if (EFI_ERROR(status)) {
-		error("mem_alloc(): Couldn't allocate %u bytes: %s (%lx)\n", n, efi_status_to_str(status), status);
+		error("mem_alloc(): Couldn't allocate %u bytes: %s (%lx)\n", n,
+			  efi_status_to_str(status), status);
 		return NULL;
 	}
 
@@ -119,9 +123,11 @@ int mem_allocat(void *addr, size_t npages)
 {
 	EFI_STATUS status;
 
-	status = gBootServices->AllocatePages(AllocateAddress, EfiLoaderData, (EFI_UINTN)npages, addr);
+	status = gBootServices->AllocatePages(AllocateAddress, EfiLoaderData,
+										  (EFI_UINTN)npages, addr);
 	if (EFI_ERROR(status)) {
-		error("mem_allocat(): Couldn't allocate %u pages at 0x%lx: %s (%lx)\n", npages, addr, efi_status_to_str(status), status);
+		error("mem_allocat(): Couldn't allocate %u pages at 0x%lx: %s (%lx)\n",
+			  npages, addr, efi_status_to_str(status), status);
 		return 0;
 	}
 
@@ -133,10 +139,11 @@ void *mem_realloc(void *addr, size_t n)
 {
 	size_t old_size;
 	void *new = NULL;
-	
+
 	int i = find_alloc(addr);
 	if (i == -1 || addr == NULL) {
-		debug("mem_realloc(): Couldn't find allocation for 0x%lx, allocating new memory.\n");
+		debug(
+			"mem_realloc(): Couldn't find allocation for 0x%lx, allocating new memory.\n");
 		return mem_alloc(n);
 	}
 
@@ -162,7 +169,8 @@ void mem_free(void *addr)
 
 	status = gBootServices->FreePool(addr);
 	if (EFI_ERROR(status)) {
-		error("mem_free(): Couldn't free 0x%llx: %s (%lx)\n", addr, efi_status_to_str(status), status);
+		error("mem_free(): Couldn't free 0x%llx: %s (%lx)\n", addr,
+			  efi_status_to_str(status), status);
 		return;
 	}
 

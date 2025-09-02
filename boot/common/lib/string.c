@@ -1,27 +1,30 @@
 /*********************************************************************************/
-/* Module Name:  string.c                                                        */
-/* Project:      AurixOS                                                         */
+/* Module Name:  string.c */
+/* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy                                            */
+/* Copyright (c) 2024-2025 Jozef Nagy */
 /*                                                                               */
-/* This source is subject to the MIT License.                                    */
-/* See License.txt in the root of this repository.                               */
-/* All other rights reserved.                                                    */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
-/* SOFTWARE.                                                                     */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ */
+/* SOFTWARE. */
 /*********************************************************************************/
 
 #include <lib/string.h>
 #include <mm/mman.h>
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 size_t mbstowcs(wchar_t *dest, const char **src, size_t len)
 {
@@ -52,42 +55,42 @@ size_t mbstowcs(wchar_t *dest, const char **src, size_t len)
 
 size_t strspn(const char *s, const char *accept)
 {
-    const char *p;
-    size_t count = 0;
+	const char *p;
+	size_t count = 0;
 
-    while (s != NULL) {
-        for (p = accept; *p; p++) {
-            if (*s == *p) {
-                count++;
-                break;
-            }
-        }
+	while (s != NULL) {
+		for (p = accept; *p; p++) {
+			if (*s == *p) {
+				count++;
+				break;
+			}
+		}
 
-        if (!*p) {
-            break;
-        }
-        s++;
-    }
+		if (!*p) {
+			break;
+		}
+		s++;
+	}
 
-    return count;
+	return count;
 }
 
 size_t strcspn(const char *s, const char *reject)
 {
-    const char *p;
-    size_t count = 0;
+	const char *p;
+	size_t count = 0;
 
-    while (*s) {
-        for (p = reject; *p; p++) {
-            if (*s == *p) {
-                return count;
-            }
-        }
-        s++;
-        count++;
-    }
+	while (*s) {
+		for (p = reject; *p; p++) {
+			if (*s == *p) {
+				return count;
+			}
+		}
+		s++;
+		count++;
+	}
 
-    return count;
+	return count;
 }
 
 size_t strlen(const char *str)
@@ -107,7 +110,7 @@ size_t strlen(const char *str)
 
 int strcmp(const char *s1, const char *s2)
 {
-    while (*s1 && (*s1 == *s2)) {
+	while (*s1 && (*s1 == *s2)) {
 		s1++;
 		s2++;
 	}
@@ -167,7 +170,7 @@ char *strncat(char *dest, const char *src, size_t n)
 
 	size_t i = strlen(dest);
 	size_t a = 0;
-	
+
 	while (a < n && src[a] != '\0') {
 		dest[i++] = src[a++];
 	}
@@ -190,32 +193,28 @@ char *strdup(const char *s)
 
 char *strtok(char *str, const char *delim)
 {
-    static char *last;
-    char *end;
+	static char *last;
+	char *end;
 
-    if (str == NULL)
-    {
-        str = last;
-    }
-    if (str == NULL)
-    {
-        return NULL;
-    }
+	if (str == NULL) {
+		str = last;
+	}
+	if (str == NULL) {
+		return NULL;
+	}
 
-    str += strspn(str, delim);
-    if (*str == '\0')
-    {
-        return NULL;
-    }
+	str += strspn(str, delim);
+	if (*str == '\0') {
+		return NULL;
+	}
 
-    end = str + strcspn(str, delim);
-    if (*end)
-    {
-        *end++ = '\0';
-    }
+	end = str + strcspn(str, delim);
+	if (*end) {
+		*end++ = '\0';
+	}
 
-    last = end;
-    return str;
+	last = end;
+	return str;
 }
 
 char *strchr(char *s, int c)
@@ -273,23 +272,23 @@ void *memcpy(void *dest, const void *src, size_t len)
 int memcmp(const void *a, const void *b, size_t len)
 {
 	unsigned char *ap = (unsigned char *)a;
-    unsigned char *bp = (unsigned char *)b;
-    int ret = 0;
+	unsigned char *bp = (unsigned char *)b;
+	int ret = 0;
 
-    if (a == b) {
-        return 0;
-    }
+	if (a == b) {
+		return 0;
+	}
 
-    while (len > 0) {
-        if (*ap != *bp) {
-            ret = (*ap > *bp) ? 1 : -1;
-            break;
-        }
+	while (len > 0) {
+		if (*ap != *bp) {
+			ret = (*ap > *bp) ? 1 : -1;
+			break;
+		}
 
-        len--;
-        ap++;
-        bp++;
-    }
+		len--;
+		ap++;
+		bp++;
+	}
 
-    return ret;
+	return ret;
 }

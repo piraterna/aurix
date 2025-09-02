@@ -1,20 +1,23 @@
 /*********************************************************************************/
-/* Module Name:  idt.c                                                           */
-/* Project:      AurixOS                                                         */
+/* Module Name:  idt.c */
+/* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy                                            */
+/* Copyright (c) 2024-2025 Jozef Nagy */
 /*                                                                               */
-/* This source is subject to the MIT License.                                    */
-/* See License.txt in the root of this repository.                               */
-/* All other rights reserved.                                                    */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
-/* SOFTWARE.                                                                     */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ */
+/* SOFTWARE. */
 /*********************************************************************************/
 
 #include <arch/cpu/idt.h>
@@ -26,16 +29,12 @@
 
 void isr_common_handler();
 
-__attribute__((aligned(16)))
-struct idt_descriptor idt[256];
+__attribute__((aligned(16))) struct idt_descriptor idt[256];
 
-struct idtr idtr = {
-	.limit = sizeof(idt) - 1,
-	.base = (uint64_t)&idt
-};
+struct idtr idtr = { .limit = sizeof(idt) - 1, .base = (uint64_t)&idt };
 
 extern void *isr_stubs[256];
-void *irq_handlers[16] = {0};
+void *irq_handlers[16] = { 0 };
 
 void idt_init()
 {
@@ -46,10 +45,11 @@ void idt_init()
 		idt_set_desc(&idt[v], (uint64_t)isr_stubs[v], IDT_INTERRUPT, 0);
 	}
 
-	__asm__ volatile("lidt %0; sti" :: "m"(idtr));
+	__asm__ volatile("lidt %0; sti" ::"m"(idtr));
 }
 
-void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type, uint8_t dpl)
+void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
+				  uint8_t dpl)
 {
 	desc->base_low = offset & 0xFFFF;
 	desc->codeseg = 0x08;
