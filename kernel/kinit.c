@@ -24,7 +24,7 @@
 void _start(struct aurix_parameters *params)
 {
 	serial_init();
-
+	
 	if (params->revision != AURIX_PROTOCOL_REVISION) {
 		serial_sendstr("Aurix Protocol revision is not compatible!\n");
 	}
@@ -34,6 +34,8 @@ void _start(struct aurix_parameters *params)
 	// initialize basic processor features and interrupts
 	cpu_early_init();
 
+	//__asm__ volatile("int $0x21");
+
 	for (;;) {
 #ifdef __x86_64__
 		__asm__ volatile("cli;hlt");
@@ -41,6 +43,4 @@ void _start(struct aurix_parameters *params)
 		__asm__ volatile("wfe");
 #endif
 	}
-
-	__builtin_unreachable();
 }

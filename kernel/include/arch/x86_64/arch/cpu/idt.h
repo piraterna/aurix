@@ -27,8 +27,8 @@ struct idt_descriptor {
 	uint16_t codeseg;
 	uint16_t flags;
 	uint16_t base_mid;
-	uint64_t base_high;
-	uint64_t reserved;
+	uint32_t base_high;
+	uint32_t reserved;
 };
 
 struct idtr {
@@ -37,5 +37,6 @@ struct idtr {
 };
 
 void idt_init(void);
+void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type, uint8_t dpl);
 
 #endif /* _ARCH_CPU_IDT_H */
