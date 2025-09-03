@@ -57,10 +57,20 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 	}
 
 	for (uint16_t i = 0; i < header->e_phnum; i++) {
+		debug("elf64_load(): Segment %u:\n", i);
+		debug("elf64_load(): - Type: %u\n", ph[i].p_type);
+		debug("elf64_load(): - Flags: 0x%lx\n", ph[i].p_flags);
+		debug("elf64_load(): - Offset: %llu\n", ph[i].p_offset);
+		debug("elf64_load(): - Physical address: 0x%llx\n", ph[i].p_paddr);
+		debug("elf64_load(): - Virtual address: 0x%llx\n", ph[i].p_vaddr);
+		debug("elf64_load(): - File Size: %llu bytes\n", ph[i].p_filesz);
+		debug("elf64_load(): - Memory Size: %llu bytes\n", ph[i].p_memsz);
+		debug("elf64_load(): - Alignment: 0x%llx\n", ph[i].p_align);
+	
 		if (ph[i].p_type != PT_LOAD)
 			continue;
 
-		uint64_t aligned_vaddr = ph[i].p_vaddr & ~(max_align - 1);
+		uint64_t aligned_vaddr = ph[i].p_vaddr & ~(ph[i].p_align - 1);
 
 		uint64_t flags = VMM_PRESENT;
 		if (ph[i].p_flags & PF_W)
@@ -68,10 +78,11 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		if (!(ph[i].p_flags & PF_X))
 			flags |= VMM_NX;
 
-		uint64_t phys = ((uint64_t)mem_alloc(ph[i].p_memsz + ph[i].p_vaddr -
-											 aligned_vaddr + 4096) +
-						 4096) &
-						~0xFFF;
+		uint64_t phys = (uint64_t)mem_alloc(ph[i].p_memsz + ph[i].p_vaddr -
+											 aligned_vaddr + 4096) + 4096;
+		phys &= ~0xFFF;
+		uint64_t virt = (uint64_t)(phys + ph[i].p_vaddr - aligned_vaddr);
+
 		if (!phys) {
 			error("elf64_load(): Out of memory\n");
 			return 0;
@@ -84,13 +95,14 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		debug("elf64_load(): phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n",
 			  phys, ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_memsz);
 
-		map_page(pagemap, aligned_vaddr, phys, flags);
-		memcpy((void *)(phys + ph[i].p_vaddr - aligned_vaddr),
+		map_pages(pagemap, aligned_vaddr, phys, ph[i].p_memsz, flags);
+		memset((void *)virt, 0, ph[i].p_memsz);
+		memcpy((void *)virt,
 			   data + ph[i].p_offset, ph[i].p_filesz);
 
 		if (ph[i].p_filesz < ph[i].p_memsz) {
 			memset(
-				(void *)(phys + ph[i].p_vaddr - aligned_vaddr + ph[i].p_filesz),
+				(void *)(virt + ph[i].p_filesz),
 				0, ph[i].p_memsz - ph[i].p_filesz);
 		}
 	}
