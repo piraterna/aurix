@@ -22,6 +22,7 @@
 
 #include <arch/cpu/gdt.h>
 #include <arch/cpu/idt.h>
+#include <debug/uart.h>
 
 int cpu_early_init(void)
 {

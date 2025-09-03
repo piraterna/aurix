@@ -37,8 +37,6 @@ void _start(struct aurix_parameters *params)
 	// initialize basic processor features and interrupts
 	cpu_early_init();
 
-	__asm__ volatile("int $0x20");
-
 	for (;;) {
 #ifdef __x86_64__
 		__asm__ volatile("cli;hlt");

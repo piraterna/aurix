@@ -23,17 +23,17 @@
 #include <arch/cpu/gdt.h>
 #include <stdint.h>
 
+struct gdt_descriptor gdt[5];
+
 void gdt_init()
 {
-	struct gdt_descriptor gdt[5];
-
 	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
-	gdt_set_entry(&gdt[1], 0, 0, 0x9a, 0xa0);
-	gdt_set_entry(&gdt[2], 0, 0, 0x92, 0xc0);
-	gdt_set_entry(&gdt[3], 0, 0, 0xfa, 0xa0);
-	gdt_set_entry(&gdt[4], 0, 0, 0xf2, 0xc0);
+	gdt_set_entry(&gdt[1], 0, 0xfffff, 0x9a, 0xa);
+	gdt_set_entry(&gdt[2], 0, 0xfffff, 0x92, 0xc);
+	gdt_set_entry(&gdt[3], 0, 0xfffff, 0xfa, 0xa);
+	gdt_set_entry(&gdt[4], 0, 0xfffff, 0xf2, 0xc);
 
-	struct gdtr gdtr = { .base = (uintptr_t)&gdt, .limit = sizeof(gdt) - 1 };
+	struct gdtr gdtr = { .base = (uintptr_t)&gdt[0], .limit = sizeof(gdt) - 1 };
 
 	__asm__ volatile("lgdt %[gdtr]\n"
 					 "pushq $0x08\n"
@@ -53,11 +53,10 @@ void gdt_init()
 void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit,
 				   uint8_t access, uint8_t flags)
 {
-	entry->limit_low = (limit >> 8) & 0xffff;
-	entry->base_low = (base >> 8) & 0xffff;
+	entry->limit_low = limit & 0xffff;
+	entry->base_low = base & 0xffff;
 	entry->base_mid = (base >> 16) & 0xff;
 	entry->access = access;
-	entry->limit_high = (limit >> 16) & 0xf;
-	entry->flags = flags;
+	entry->limit_flags = ((limit >> 16) & 0xf) | (flags << 4);
 	entry->base_high = (base >> 24) & 0xff;
 }

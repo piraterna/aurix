@@ -30,8 +30,7 @@ struct gdt_descriptor {
 	uint16_t base_low;
 	uint8_t base_mid;
 	uint8_t access;
-	uint8_t limit_high : 4;
-	uint8_t flags : 4;
+	uint8_t limit_flags;
 	uint8_t base_high;
 } __attribute__((packed));
 

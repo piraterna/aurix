@@ -25,11 +25,9 @@
 
 #include <stdint.h>
 
-struct idt_descriptor {};
-
 struct idtr {
 	uint16_t limit;
 	uint64_t base;
-};
+} __attribute__((packed));
 
 #endif /* _ARCH_CPU_IDT_H */

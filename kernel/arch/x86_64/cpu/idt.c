@@ -29,10 +29,9 @@
 
 __attribute__((aligned(16))) struct idt_descriptor idt[256];
 
-struct idtr idtr = {
-	.limit = (uint16_t)((sizeof(struct idt_descriptor) * 256) - 1),
-	.base = (uint64_t)&idt[0]
-};
+struct idtr idtr = { .limit =
+						 (uint16_t)((sizeof(struct idt_descriptor) * 256) - 1),
+					 .base = (uint64_t)&idt[0] };
 
 extern void *isr_stubs[256];
 void *irq_handlers[16] = { 0 };
@@ -46,7 +45,7 @@ void idt_init()
 		idt_set_desc(&idt[v], (uint64_t)isr_stubs[v], IDT_INTERRUPT, 0);
 	}
 
-	__asm__ volatile("lidt %0" :: "m"(idtr));
+	__asm__ volatile("lidt %0" ::"m"(idtr));
 	__asm__ volatile("sti");
 }
 
@@ -64,6 +63,6 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 
 void isr_common_handler()
 {
-	serial_sendstr("Received interrupt"); // <-- doesn't show up :(
+	serial_sendstr("Received interrupt");
 	__asm__ volatile("cli;hlt");
 }
