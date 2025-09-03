@@ -28,16 +28,17 @@
 struct idt_descriptor {
 	uint16_t base_low;
 	uint16_t codeseg;
-	uint16_t flags;
+	uint8_t ist;
+	uint8_t flags;
 	uint16_t base_mid;
 	uint32_t base_high;
 	uint32_t reserved;
-};
+} __attribute__((packed));
 
 struct idtr {
 	uint16_t limit;
 	uint64_t base;
-};
+} __attribute__((packed));
 
 void idt_init(void);
 void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,

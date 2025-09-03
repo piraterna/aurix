@@ -31,6 +31,7 @@ INCLUDE_DIRS := include \
 				include/platform/$(PLATFORM)
 DEFINES := __$(ARCH)__
 
+KERNEL_NASM := nasm
 KERNEL_AS := $(ARCH)-elf-gcc
 KERNEL_CC := $(ARCH)-elf-gcc
 KERNEL_LD := $(ARCH)-elf-ld
@@ -38,6 +39,10 @@ KERNEL_OBJCOPY := $(ARCH)-elf-objcopy
 
 KERNEL_ASFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d)
+
+KERNEL_NASMFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
+					$(foreach d, $(DEFINES), -D$d) \
+					-felf64
 
 KERNEL_CFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d) \
@@ -63,14 +68,17 @@ endif
 KERNEL_CFILES := $(shell find . -type d \( -name arch -o -name platform \) -prune -o -name '*.c' -print)
 KERNEL_ARCH_CFILES := $(shell find arch/$(ARCH) -name '*.c')
 KERNEL_ARCH_ASFILES := $(shell find arch/$(ARCH) -name '*.S')
+KERNEL_ARCH_NASMFILES := $(shell find arch/$(ARCH) -name '*.asm')
 KERNEL_PLATFORM_CFILES := $(shell find platform/$(PLATFORM) -name '*.c')
 KERNEL_PLATFORM_ASFILES := $(shell find platform/$(PLATFORM) -name '*.S')
+KERNEL_PLATFORM_NASMFILES := $(shell find platform/$(PLATFORM) -name '*.asm')
 
 KERNEL_OBJ := $(KERNEL_CFILES:%.c=$(BUILD_DIR)/kernel/%.c.o) \
 			$(KERNEL_ARCH_CFILES:arch/$(ARCH)/%.c=$(BUILD_DIR)/kernel/arch/%.c.o) \
 			$(KERNEL_ARCH_ASFILES:arch/$(ARCH)/%.S=$(BUILD_DIR)/kernel/arch/%.S.o) \
+			$(KERNEL_ARCH_NASMFILES:arch/$(ARCH)/%.asm=$(BUILD_DIR)/kernel/arch/%.asm.o) \
 			$(KERNEL_PLATFORM_CFILES:platform/$(PLATFORM)/%.c=$(BUILD_DIR)/kernel/platform/%.c.o) \
-			$(KERNEL_PLATFORM_ASFILES:platform/$(PLATFORM)/%.S=$(BUILD_DIR)/kernel/platform/%.S.o)
+			$(KERNEL_PLATFORM_NASMFILES:platform/$(PLATFORM)/%.asm=$(BUILD_DIR)/kernel/platform/%.asm.o)
 
 -include arch/$(ARCH)/config.mk
 
@@ -80,7 +88,7 @@ $(KERNEL_FILE): $(KERNEL_OBJ)
 	@mkdir -p $(@D)
 	@printf "  LD\t$(notdir $@)\n"
 	@$(KERNEL_LD) $(KERNEL_LDFLAGS) $^ -o $@
-ifeq ($(BUILD_TYPE),debug)
+ifneq ($(BUILD_TYPE),debug)
 	@printf "  OBJCOPY axkrnl.sym\n"
 	@$(KERNEL_OBJCOPY) --only-keep-debug $@ $(BUILD_DIR)/axkrnl.sym
 	@$(KERNEL_OBJCOPY) --strip-debug --strip-unneeded $@
@@ -101,6 +109,11 @@ $(BUILD_DIR)/kernel/arch/%.S.o: arch/$(ARCH)/%.S
 	@printf "  AS\t$<\n"
 	@$(KERNEL_AS) $(KERNEL_ASFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/kernel/arch/%.asm.o: arch/$(ARCH)/%.asm
+	@mkdir -p $(@D)
+	@printf "  NASM\t$<\n"
+	@$(KERNEL_NASM) $(KERNEL_NASMFLAGS) $< -o $@
+
 $(BUILD_DIR)/kernel/platform/%.c.o: platform/$(PLATFORM)/%.c
 	@mkdir -p $(@D)
 	@printf "  CC\t$<\n"
@@ -110,6 +123,11 @@ $(BUILD_DIR)/kernel/platform/%.S.o: platform/$(PLATFORM)/%.S
 	@mkdir -p $(@D)
 	@printf "  AS\t$<\n"
 	@$(KERNEL_AS) $(KERNEL_ASFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/kernel/platform/%.asm.o: platform/$(PLATFORM)/%.asm
+	@mkdir -p $(@D)
+	@printf "  NASM\t$<\n"
+	@$(KERNEL_NASM) $(KERNEL_NASMFLAGS) $< -o $@
 
 .PHONY: all
 all: kernel

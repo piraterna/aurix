@@ -28,10 +28,10 @@ void gdt_init()
 	struct gdt_descriptor gdt[5];
 
 	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
-	gdt_set_entry(&gdt[1], 0, 0, 0x9a, 0xaf);
-	gdt_set_entry(&gdt[2], 0, 0, 0x92, 0xcf);
-	gdt_set_entry(&gdt[3], 0, 0, 0xfa, 0xaf);
-	gdt_set_entry(&gdt[4], 0, 0, 0xf2, 0xcf);
+	gdt_set_entry(&gdt[1], 0, 0, 0x9a, 0xa0);
+	gdt_set_entry(&gdt[2], 0, 0, 0x92, 0xc0);
+	gdt_set_entry(&gdt[3], 0, 0, 0xfa, 0xa0);
+	gdt_set_entry(&gdt[4], 0, 0, 0xf2, 0xc0);
 
 	struct gdtr gdtr = { .base = (uintptr_t)&gdt, .limit = sizeof(gdt) - 1 };
 

@@ -66,7 +66,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		debug("elf64_load(): - File Size: %llu bytes\n", ph[i].p_filesz);
 		debug("elf64_load(): - Memory Size: %llu bytes\n", ph[i].p_memsz);
 		debug("elf64_load(): - Alignment: 0x%llx\n", ph[i].p_align);
-	
+
 		if (ph[i].p_type != PT_LOAD)
 			continue;
 
@@ -79,7 +79,8 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 			flags |= VMM_NX;
 
 		uint64_t phys = (uint64_t)mem_alloc(ph[i].p_memsz + ph[i].p_vaddr -
-											 aligned_vaddr + 4096) + 4096;
+											aligned_vaddr + 4096) +
+						4096;
 		phys &= ~0xFFF;
 		uint64_t virt = (uint64_t)(phys + ph[i].p_vaddr - aligned_vaddr);
 
@@ -97,13 +98,11 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 
 		map_pages(pagemap, aligned_vaddr, phys, ph[i].p_memsz, flags);
 		memset((void *)virt, 0, ph[i].p_memsz);
-		memcpy((void *)virt,
-			   data + ph[i].p_offset, ph[i].p_filesz);
+		memcpy((void *)virt, data + ph[i].p_offset, ph[i].p_filesz);
 
 		if (ph[i].p_filesz < ph[i].p_memsz) {
-			memset(
-				(void *)(virt + ph[i].p_filesz),
-				0, ph[i].p_memsz - ph[i].p_filesz);
+			memset((void *)(virt + ph[i].p_filesz), 0,
+				   ph[i].p_memsz - ph[i].p_filesz);
 		}
 	}
 
