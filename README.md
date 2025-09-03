@@ -1,5 +1,5 @@
 <h1 align="center">
-  <a href="https://github.com/aurixos/os">
+  <a href="https://git.piraterna.org/piraterna/aurix">
     <img src="docs/images/logo.png" alt="Logo" width="100" height="100">
   </a>
 </h1>
@@ -8,17 +8,17 @@
   AurixOS
   <br />
   <br />
-  <a href="https://github.com/aurixos/os/issues/new?assignees=&labels=bug&template=01_BUG_REPORT.md&title=bug%3A+">Report a Bug</a>
+  <a href="https://git.piraterna.org/piraterna/aurix/issues/new?assignees=&labels=bug&template=01_BUG_REPORT.md&title=bug%3A+">Report a Bug</a>
   ·
-  <a href="https://github.com/aurixos/os/issues/new?assignees=&labels=enhancement&template=02_FEATURE_REQUEST.md&title=feat%3A+">Request a Feature</a>
+  <a href="https://git.piraterna.org/piraterna/aurix/issues/new?assignees=&labels=enhancement&template=02_FEATURE_REQUEST.md&title=feat%3A+">Request a Feature</a>
   .
-  <a href="https://github.com/aurixos/os/issues/new?assignees=&labels=question&template=04_SUPPORT_QUESTION.md&title=support%3A+">Ask a Question</a>
+  <a href="https://git.piraterna.org/piraterna/aurix/issues/new?assignees=&labels=question&template=04_SUPPORT_QUESTION.md&title=support%3A+">Ask a Question</a>
 </div>
 <br />
 <div align="center">
 
-[![Project license](https://img.shields.io/github/license/aurixos/os.svg?style=flat-square)](LICENSE)
-[![Discord Chat](https://img.shields.io/discord/1234051470182055988)](https://discord.com/invite/hgbZ6wFP4n)
+[![Project license](https://img.shields.io/github/license/piraterna/aurix.svg?style=flat-square)](LICENSE)
+[![Discord Chat](https://img.shields.io/discord/1339349593510510603)](https://discord.com/invite/wBycCxwT9p)
 </div>
 
 <details open="open">
@@ -57,7 +57,7 @@ AurixOS is a general-purpose operating system, meant to take security, performan
 
 ## Getting Started
 
-Latest official releases of AurixOS are available for download [here](https://github.com/aurixos/os/releases).
+Latest official releases of AurixOS are available for download [here](https://git.piraterna.org/piraterna/aurix/releases).
 
 ### Prerequisites
 
@@ -106,9 +106,9 @@ Alternatively, you can boot AurixOS on a physical machine by running `dd if=rele
 
 ## Support
 
-If you have any questions, feel free to open a [GitHub issue](https://github.com/aurixos/os/issues/new?assignees=&labels=question&template=04_SUPPORT_QUESTION.md&title=support%3A+).
+If you have any questions, feel free to open an [issue on our Git instance](https://git.piraterna.org/piraterna/aurix/issues/new?assignees=&labels=question&template=04_SUPPORT_QUESTION.md&title=support%3A+).
 Alternatively, you can visit us:
-- on our [Discord server](https://discord.com/invite/hgbZ6wFP4n)
+- on our [Discord server](https://discord.com/invite/wBycCxwT9p)
 - on #aurixos at [irc.libera.chat](https://libera.chat/) ([Kiwi IRC](https://kiwiirc.com/client/irc.libera.chat/?&theme=cli#aurixos))
 
 ## Contributing
@@ -119,7 +119,7 @@ Please read [our contribution guidelines](docs/CONTRIBUTING.md), and thank you f
 
 ## Authors & contributors
 
-For a full list of all authors and contributors, see [the contributors page](https://github.com/aurixos/os/contributors).
+For a full list of all authors and contributors, see [the contributors page](https://git.piraterna.org/piraterna/aurix/contributors).
 
 ## Security
 
