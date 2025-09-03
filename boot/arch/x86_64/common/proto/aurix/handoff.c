@@ -39,12 +39,9 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 	gdt_set_entry(&gdt[4], 0, 0, 0xf2, 0x0c);
 
 	struct gdtr gdtr = { .base = (uint64_t)&gdt, .limit = sizeof(gdt) - 1 };
-	struct idt_descriptor idt[1] = { { 0 } };
-	struct idtr idtr = { .base = (uint64_t)&idt, .limit = sizeof(idt) - 1 };
+	struct idtr idtr = { .base = 0, .limit = 0 };
 
 	__asm__ volatile(
-		//< lol
-
 		"cli\n"
 		"cld\n"
 
@@ -61,7 +58,7 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 		"movq %%rax, %%fs\n"
 		"movq %%rax, %%gs\n"
 
-		"lidt %[idt]\n"
+		"lidt %[idtr]\n"
 
 		"movq %[pml4], %%cr3\n"
 		"movq %[parameters], %%rdi\n"
