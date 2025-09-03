@@ -32,7 +32,6 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 						struct aurix_parameters *parameters)
 {
 	struct gdt_descriptor gdt[5];
-
 	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
 	gdt_set_entry(&gdt[1], 0, 0, 0x9a, 0xaf);
 	gdt_set_entry(&gdt[2], 0, 0, 0x92, 0xcf);
@@ -40,43 +39,32 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 	gdt_set_entry(&gdt[4], 0, 0, 0xf2, 0xcf);
 
 	struct gdtr gdtr = { .base = (uint64_t)&gdt, .limit = sizeof(gdt) - 1 };
-
-	struct idtr idtr = { .base = (uint64_t)0, .limit = 0 };
+	struct idt_descriptor idt[1] = { { 0 } };
+	struct idtr idtr = { .base = (uint64_t)&idt, .limit = sizeof(idt) - 1 };
 
 	__asm__ volatile(
-		//< lol
-
-		//"cli\n"
-		//"cld\n"
-
-		//"lgdt %[gdtr]\n"
-		//"pushq $0x08\n"
-		//"lea 1f(%%rip), %%rax\n"
-		//"pushq %%rax\n"
-		//"lretq\n"
-		//"1:\n"
-		//"movq $0x10, %%rax\n"
-		//"movq %%rax, %%ds\n"
-		//"movq %%rax, %%es\n"
-		//"movq %%rax, %%ss\n"
-		//"movq %%rax, %%fs\n"
-		//"movq %%rax, %%gs\n"
-
-		//"lidt %[idt]\n"
-
+		"cli\n"
+		"lgdt %[gdtr]\n"
+		"lidt %[idtr]\n"
+		"pushq $0x08\n"
+		"lea 1f(%%rip), %%rax\n"
+		"pushq %%rax\n"
+		"lretq\n"
+		"1:\n"
+		"movq $0x10, %%rax\n"
+		"mov %%rax, %%ds\n"
+		"mov %%rax, %%es\n"
+		"mov %%rax, %%ss\n"
+		"mov %%rax, %%fs\n"
+		"mov %%rax, %%gs\n"
+		"movq %[stack_top], %%rsp\n"
 		"movq %[pml4], %%cr3\n"
-		"movq %[stack], %%rsp\n"
-		"movq %[params], %%rdi\n"
+		"movq %[parameters], %%rdi\n"
 		"movq %[entry], %%rsi\n"
-
-		// rsi = kernel entry point
-		// rdi = kernel parameters
 		"xor %%rax, %%rax\n"
 		"xor %%rbx, %%rbx\n"
 		"xor %%rcx, %%rcx\n"
 		"xor %%rdx, %%rdx\n"
-		//"xor %%rdi, %%rdi\n"
-		//"xor %%rsi, %%rsi\n"
 		"xor %%r8, %%r8\n"
 		"xor %%r9, %%r9\n"
 		"xor %%r10, %%r10\n"
@@ -85,10 +73,10 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 		"xor %%r13, %%r13\n"
 		"xor %%r14, %%r14\n"
 		"xor %%r15, %%r15\n"
-
-		"callq *%%rsi\n" ::[gdtr] "g"(gdtr),
-		[idt] "g"(idtr), [pml4] "r"(pm),
-		[stack] "r"((uint64_t)stack + stack_size), [entry] "r"(kernel_entry),
-		[params] "d"(parameters)
+		"call *%%rsi\n"
+		:
+		: [gdtr] "m"(gdtr), [idtr] "m"(idtr),
+		  [stack_top] "r"((uint64_t)stack + stack_size), [pml4] "r"(pm),
+		  [parameters] "r"(parameters), [entry] "r"(kernel_entry)
 		: "rax", "memory");
 }
