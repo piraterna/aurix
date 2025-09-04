@@ -34,10 +34,19 @@ INCLUDE_DIRS := include \
 DEFINES := __$(ARCH)__
 
 KERNEL_NASM := nasm
-KERNEL_AS := $(ARCH)-elf-gcc
-KERNEL_CC := $(ARCH)-elf-gcc
-KERNEL_LD := $(ARCH)-elf-ld
+KERNEL_HOSTTOOLCHAIN ?= 0
+
+ifeq ($(KERNEL_HOSTTOOLCHAIN),0)
+KERNEL_AS      := $(ARCH)-elf-gcc
+KERNEL_CC      := $(ARCH)-elf-gcc
+KERNEL_LD      := $(ARCH)-elf-ld
 KERNEL_OBJCOPY := $(ARCH)-elf-objcopy
+else
+KERNEL_AS      := gcc
+KERNEL_CC      := gcc
+KERNEL_LD      := ld
+KERNEL_OBJCOPY := objcopy
+endif
 
 KERNEL_ASFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d)
@@ -55,6 +64,8 @@ KERNEL_CFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				-fno-omit-frame-pointer \
 				-fno-stack-protector \
 				-fno-stack-check \
+				-fno-pic \
+				-fno-pie \
 				-MMD \
 				-MP
 

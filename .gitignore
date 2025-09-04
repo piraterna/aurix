@@ -12,3 +12,6 @@ Brewfile.lock.json
 *.iso
 *.img
 *.log
+
+.cache/
+compile_commands.json

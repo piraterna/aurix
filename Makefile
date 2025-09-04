@@ -50,8 +50,8 @@ QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio -no-reboot
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
-# QEMU Audio support
-QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
+# QEMU Audio support (macos only)
+#QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
 
 # QEMU Mouse support
 #QEMU_FLAGS += -usb -device usb-mouse
