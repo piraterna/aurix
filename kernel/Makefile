@@ -28,7 +28,8 @@ KERNEL_FILE := $(BUILD_DIR)/axkrnl
 
 INCLUDE_DIRS := include \
 				include/arch/$(ARCH) \
-				include/platform/$(PLATFORM)
+				include/platform/$(PLATFORM) \
+				include/ext
 DEFINES := __$(ARCH)__
 
 KERNEL_NASM := nasm

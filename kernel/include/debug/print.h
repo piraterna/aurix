@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c */
+/* Module Name:  print.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,29 +20,9 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
-#include <debug/print.h>
+#ifndef _PRINT_H
+#define _PRINT_H
 
-void _start(struct aurix_parameters *params)
-{
-	serial_init();
+void klog(const char *fmt, ...);
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		klog("Aurix Protocol revision is not compatible: expected %u, but got %u!\n", AURIX_PROTOCOL_REVISION, params->revision);
-	}
-
-	klog("Hello from AurixOS!\n");
-
-	// initialize basic processor features and interrupts
-	cpu_early_init();
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
-}
+#endif /* _PRINT_H */

@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c */
+/* Module Name:  print.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,29 +20,34 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
+#define NANOPRINTF_IMPLEMENTATION
+#define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS 1
+#define NANOPRINTF_USE_PRECISION_FORMAT_SPECIFIERS 1
+#define NANOPRINTF_USE_FLOAT_FORMAT_SPECIFIERS 0
+#define NANOPRINTF_USE_LARGE_FORMAT_SPECIFIERS 1
+#define NANOPRINTF_USE_BINARY_FORMAT_SPECIFIERS 0
+#define NANOPRINTF_USE_WRITEBACK_FORMAT_SPECIFIERS 0
+#define NANOPRINTF_USE_SMALL_FORMAT_SPECIFIERS 1
+#include <nanoprintf.h>
+
 #include <debug/print.h>
+#include <debug/uart.h>
 
-void _start(struct aurix_parameters *params)
+#include <stdarg.h>
+#include <stdint.h>
+
+int32_t _fltused = 0;
+int32_t __eqdf2 = 0;
+int32_t __ltdf2 = 0;
+
+void klog(const char *fmt, ...)
 {
-	serial_init();
+	va_list args;
+	char buf[1024];
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		klog("Aurix Protocol revision is not compatible: expected %u, but got %u!\n", AURIX_PROTOCOL_REVISION, params->revision);
-	}
+	va_start(args, fmt);
+	npf_vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
 
-	klog("Hello from AurixOS!\n");
-
-	// initialize basic processor features and interrupts
-	cpu_early_init();
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
+	serial_sendstr(buf);
 }
