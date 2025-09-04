@@ -6,13 +6,13 @@
 isr_handler_stub:
 	pushaq
 
-	mov rax, cr0
-	push rax
-	mov rax, cr2
+	mov rax, cr4
 	push rax
 	mov rax, cr3
 	push rax
-	mov rax, cr4
+	mov rax, cr2
+	push rax
+	mov rax, cr0
 	push rax
 
 	mov rax, ds

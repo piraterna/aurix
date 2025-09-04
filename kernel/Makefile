@@ -27,9 +27,10 @@ SYSROOT_DIR ?= sysroot
 KERNEL_FILE := $(BUILD_DIR)/axkrnl
 
 INCLUDE_DIRS := include \
+				include/lib \
+				include/ext \
 				include/arch/$(ARCH) \
-				include/platform/$(PLATFORM) \
-				include/ext
+				include/platform/$(PLATFORM)
 DEFINES := __$(ARCH)__
 
 KERNEL_NASM := nasm
@@ -43,7 +44,8 @@ KERNEL_ASFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 
 KERNEL_NASMFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 					$(foreach d, $(DEFINES), -D$d) \
-					-felf64
+					-felf64 \
+					-gdwarf
 
 KERNEL_CFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d) \
@@ -61,7 +63,7 @@ KERNEL_LDFLAGS := -Tarch/$(ARCH)/linker.ld \
 				-static
 
 ifeq ($(BUILD_TYPE),debug)
-KERNEL_CFLAGS += -O0 -g3
+KERNEL_CFLAGS += -O0 -g3 -D_DEBUG
 else
 KERNEL_CFLAGS += -O2
 endif

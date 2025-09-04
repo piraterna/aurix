@@ -75,7 +75,9 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 		"xor %%r13, %%r13\n"
 		"xor %%r14, %%r14\n"
 		"xor %%r15, %%r15\n"
-		"call *%%rsi\n"
+
+		"xor %%rbp, %%rbp\n"
+		"callq *%%rsi\n"
 		:
 		: [gdtr] "m"(gdtr), [idtr] "m"(idtr),
 		  [stack_top] "r"((uint64_t)stack + stack_size), [pml4] "r"(pm),

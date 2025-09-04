@@ -20,12 +20,49 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
+#include <arch/cpu/cpu.h>
 #include <arch/cpu/idt.h>
-#include <debug/uart.h>
+#include <cpu/trace.h>
+#include <debug/print.h>
 #include <stdint.h>
 
 #define IDT_TRAP 0xF
 #define IDT_INTERRUPT 0xE
+
+const char *exception_str[32] = {
+	"division by zero",
+	"debug",
+	"nmi",
+	"breakpoint",
+	"overflow",
+	"bound range exceeded",
+	"invalid opcode",
+	"device not available",
+	"double fault",
+	"reserved", // coprocessor segment overrun
+	"invalid tss",
+	"segment not present",
+	"stack-segment fault",
+	"general protection fault",
+	"page fault",
+	"reserved",
+	"x87 exception",
+	"alignment check",
+	"machine check",
+	"simd exception",
+	"virtualization exception",
+	"control protection",
+	"reserved",
+	"reserved",
+	"reserved",
+	"reserved",
+	"reserved",
+	"reserved",
+	"hypervisor injection",
+	"vmm communication",
+	"security",
+	"reserved",
+};
 
 __attribute__((aligned(16))) struct idt_descriptor idt[256];
 
@@ -61,8 +98,22 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 	desc->reserved = 0;
 }
 
-void isr_common_handler()
+void isr_common_handler(struct interrupt_frame frame)
 {
-	serial_sendstr("Received interrupt");
+	if (frame.vector < 0x20) {
+		// TODO: get cpu which triggered the exception
+		klog("panic(cpu %u): Kernel trap at 0x%.16llx, type %u=%s, registers:\n", 1, frame.rip, frame.vector, exception_str[frame.vector]);
+		klog("rax: 0x%.16llx, rbx: 0x%.16llx, rcx: 0x%.16llx, rdx: 0x%.16llx\n", frame.rax, frame.rbx, frame.rcx, frame.rdx);
+		klog("rbp: 0x%.16llx, rdi: 0x%.16llx, rsi: 0x%.16llx, rsp: 0x%.16llx\n", frame.rbp, frame.rdi, frame.rsi, frame.rsp);
+		klog("r8:  0x%.16llx, r9:  0x%.16llx, r10: 0x%.16llx, r11: 0x%.16llx\n", frame.r8, frame.r9, frame.r10, frame.r11);
+		klog("r12: 0x%.16llx, r13: 0x%.16llx, r14: 0x%.16llx, r15: 0x%.16llx\n", frame.r12, frame.r13, frame.r14, frame.r15);
+		klog("cr0: 0x%.16llx, cr2: 0x%.16llx, cr3: 0x%.16llx, cr4: 0x%.16llx\n", frame.r12, frame.r13, frame.r14, frame.r15);
+		klog("rfl: 0x%.16llx, rip: 0x%.16llx, cs:  0x%.16llx, ds:  0x%.16llx\n", frame.rflags, frame.rip, frame.cs, frame.ds);
+	
+		klog("\nBacktrace (cpu %u):\n", 1);
+		stack_trace(16);
+	} else {
+		klog("Unhandled interrupt %u\n", frame.vector);
+	}
 	__asm__ volatile("cli;hlt");
 }

@@ -32,7 +32,7 @@ export BUILD_DIR ?= build
 export SYSROOT_DIR ?= sysroot
 
 export ASFLAGS := $(foreach d, $(DEFINES), -D$d)
-export CFLAGS := $(foreach d, $(DEFINES), -D$d) -Wall -Wextra -Wno-unused-local-typedef -ffreestanding -fno-stack-protector -fno-stack-check -MMD -MP
+export CFLAGS := $(foreach d, $(DEFINES), -D$d) -Wall -Wextra -Wno-unused-local-typedef -ffreestanding -fno-stack-protector -fno-omit-frame-pointer -fno-stack-check -MMD -MP
 export LDFLAGS := -nostdlib
 
 include arch/$(ARCH)/config.mk
