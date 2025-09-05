@@ -112,6 +112,12 @@ bool aurix_get_memmap(struct aurix_parameters *params, axboot_memmap *mmap,
 		}
 	}
 
+	for (int i = 0; i < params->mmap_entries; i++) {
+		struct aurix_memmap *m = &params->mmap[i];
+		debug("mmap[%d]: type=%d, start=%p, end=%p, size=%llu\n", i, params->mmap[i].type,
+			 params->mmap[i].base, params->mmap[i].base + params->mmap[i].size, params->mmap[i].size);
+	}
+
 	return true;
 }
 

@@ -68,6 +68,7 @@ static int efi_type_to_axboot(uint32_t efi_type)
 	case EfiReservedMemoryType:
 		return MemMapReserved;
 	default:
+		debug("Unknown memory type %u, setting to reserved.\n");
 		return MemMapReserved;
 	}
 }
@@ -90,7 +91,12 @@ uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 	}
 
 	efi_map = (EFI_MEMORY_DESCRIPTOR *)mem_alloc(size);
+	if (!efi_map) {
+		debug("get_memmap(): Failed to allocate memory for EFI memory map!\n");
+		return 0;
+	}
 
+	int tries = 0;
 	do {
 		status = gBootServices->GetMemoryMap(&size, efi_map, &efi_map_key,
 											 &desc_size, &desc_ver);
@@ -105,7 +111,12 @@ uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 				efi_status_to_str(status), status);
 			return 0;
 		}
-	} while (status != EFI_SUCCESS);
+
+		// double check all is good
+		status = gBootServices->GetMemoryMap(&size, efi_map, &efi_map_key,
+											 &desc_size, &desc_ver);
+		tries++;
+	} while (status != EFI_SUCCESS && tries < 10);
 
 	EFI_MEMORY_DESCRIPTOR *cur_entry = efi_map;
 	uint32_t entry_count = size / desc_size;
@@ -149,10 +160,11 @@ uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 	memset(*map, 0, sizeof(axboot_memmap) * entry_count);
 
 	// translate efi memmap to axboot memmap
+	cur_entry = efi_map;
 	for (uint32_t i = 0; i < entry_count; i++) {
 		(*map)[i].base = cur_entry->PhysicalStart;
 		(*map)[i].size = cur_entry->NumberOfPages * PAGE_SIZE;
-		(*map)[i].type = efi_type_to_axboot(efi_map[i].Type);
+		(*map)[i].type = efi_type_to_axboot(cur_entry->Type);
 
 		cur_entry = (EFI_MEMORY_DESCRIPTOR *)((uint8_t *)cur_entry + desc_size);
 	}
