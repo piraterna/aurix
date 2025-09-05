@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  aurix.h */
+/* Module Name:  pmm.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -19,63 +19,17 @@
  */
 /* SOFTWARE. */
 /*********************************************************************************/
+#ifndef _MM_PMM_H
+#define _MM_PMM_H
 
-#ifndef _AURIX_H
-#define _AURIX_H
+#include <stdbool.h>
+#include <stddef.h>
+#include <boot/aurix.h>
 
-#include <stdint.h>
+#define PAGE_SIZE 0x1000
 
-/* Aurix Boot Protocol (revision 1-dev) */
-#define AURIX_PROTOCOL_REVISION 1
+void pmm_init();
+void *palloc(size_t pages, bool higher_half);
+void pfree(void *ptr, size_t pages);
 
-enum aurix_memmap_entry {
-	AURIX_MMAP_RESERVED = 0,
-
-	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
-	AURIX_MMAP_ACPI_MAPPED_IO = 2,
-	AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE = 3,
-	AURIX_MMAP_ACPI_NVS = 4,
-
-	AURIX_MMAP_BOOTLOADER_RECLAIMABLE = 6,
-	AURIX_MMAP_USABLE = 7
-};
-
-enum aurix_framebuffer_format { AURIX_FB_RGBA = 0, AURIX_FB_BGRA = 1 };
-
-struct aurix_memmap {
-	uintptr_t base;
-	uint32_t size;
-	uint8_t type;
-};
-
-struct aurix_framebuffer {
-	uintptr_t addr;
-	uint32_t width;
-	uint32_t height;
-	uint8_t bpp; // bits!
-	uint32_t pitch;
-	int format;
-};
-
-struct aurix_parameters {
-	// PROTOCOL INFO
-	uint8_t revision;
-
-	// MEMORY
-	struct aurix_memmap *mmap;
-	uint32_t mmap_entries;
-
-	uintptr_t kernel_addr; // physical address
-
-	// RSDP and SMBIOS
-	uintptr_t rsdp_addr;
-	uintptr_t smbios_addr;
-
-	// FRAMEBUFFER
-	struct aurix_framebuffer *framebuffer;
-};
-
-/* Kernel related stuff */
-extern struct aurix_parameters *boot_params;
-
-#endif /* _PROTO_AURIX_H */
+#endif /* _MM_PMM_H */

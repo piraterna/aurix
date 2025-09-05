@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  aurix.h */
+/* Module Name:  spinlock.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -19,63 +19,54 @@
  */
 /* SOFTWARE. */
 /*********************************************************************************/
+#ifndef _SYS_SPINLOCK_H
+#define _SYS_SPINLOCK_H
 
-#ifndef _AURIX_H
-#define _AURIX_H
-
+#include <stdbool.h>
 #include <stdint.h>
 
-/* Aurix Boot Protocol (revision 1-dev) */
-#define AURIX_PROTOCOL_REVISION 1
+/* TODO: maybe move into arch specific folders */
+#ifndef cpu_relax
+#if defined(__i386__) || defined(__x86_64__)
+#define cpu_relax() __asm__ volatile("pause" ::: "memory")
+#elif defined(__aarch64__) || defined(__arm__)
+#define cpu_relax() __asm__ volatile("yield" ::: "memory")
+#else
+#define cpu_relax() \
+	do {            \
+	} while (0) /* no-op fallback */
+#endif
+#endif
 
-enum aurix_memmap_entry {
-	AURIX_MMAP_RESERVED = 0,
+typedef struct {
+	uint8_t lock;
+} spinlock_t;
 
-	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
-	AURIX_MMAP_ACPI_MAPPED_IO = 2,
-	AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE = 3,
-	AURIX_MMAP_ACPI_NVS = 4,
+static inline void spinlock_init(spinlock_t *lock)
+{
+	__atomic_clear(&lock->lock, __ATOMIC_RELAXED);
+}
 
-	AURIX_MMAP_BOOTLOADER_RECLAIMABLE = 6,
-	AURIX_MMAP_USABLE = 7
-};
+static inline void spinlock_acquire(spinlock_t *lock)
+{
+	while (__atomic_test_and_set(&lock->lock, __ATOMIC_ACQUIRE)) {
+		cpu_relax();
+	}
+}
 
-enum aurix_framebuffer_format { AURIX_FB_RGBA = 0, AURIX_FB_BGRA = 1 };
+static inline void spinlock_release(spinlock_t *lock)
+{
+	__atomic_clear(&lock->lock, __ATOMIC_RELEASE);
+}
 
-struct aurix_memmap {
-	uintptr_t base;
-	uint32_t size;
-	uint8_t type;
-};
+static inline bool spinlock_try_acquire(spinlock_t *lock)
+{
+	return !__atomic_test_and_set(&lock->lock, __ATOMIC_ACQUIRE);
+}
 
-struct aurix_framebuffer {
-	uintptr_t addr;
-	uint32_t width;
-	uint32_t height;
-	uint8_t bpp; // bits!
-	uint32_t pitch;
-	int format;
-};
+static inline bool spinlock_held(spinlock_t *lock)
+{
+	return __atomic_load_n(&lock->lock, __ATOMIC_RELAXED) != 0;
+}
 
-struct aurix_parameters {
-	// PROTOCOL INFO
-	uint8_t revision;
-
-	// MEMORY
-	struct aurix_memmap *mmap;
-	uint32_t mmap_entries;
-
-	uintptr_t kernel_addr; // physical address
-
-	// RSDP and SMBIOS
-	uintptr_t rsdp_addr;
-	uintptr_t smbios_addr;
-
-	// FRAMEBUFFER
-	struct aurix_framebuffer *framebuffer;
-};
-
-/* Kernel related stuff */
-extern struct aurix_parameters *boot_params;
-
-#endif /* _PROTO_AURIX_H */
+#endif /* _SYS_SPINLOCK_H */

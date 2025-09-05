@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  aurix.h */
+/* Module Name:  bitmap.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -19,63 +19,17 @@
  */
 /* SOFTWARE. */
 /*********************************************************************************/
-
-#ifndef _AURIX_H
-#define _AURIX_H
+#ifndef _LIB_ALIGN_H
+#define _LIB_ALIGN_H
 
 #include <stdint.h>
+#include <mm/pmm.h>
 
-/* Aurix Boot Protocol (revision 1-dev) */
-#define AURIX_PROTOCOL_REVISION 1
+#define DIV_ROUND_UP(x, y) \
+	(((uint64_t)(x) + ((uint64_t)(y) - 1)) / (uint64_t)(y))
+#define ALIGN_UP(x, y) (DIV_ROUND_UP(x, y) * (uint64_t)(y))
+#define ALIGN_DOWN(x, y) (((uint64_t)(x) / (uint64_t)(y)) * (uint64_t)(y))
 
-enum aurix_memmap_entry {
-	AURIX_MMAP_RESERVED = 0,
+#define IS_PAGE_ALIGNED(x) (((uintptr_t)(x) & (PAGE_SIZE - 1)) == 0)
 
-	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
-	AURIX_MMAP_ACPI_MAPPED_IO = 2,
-	AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE = 3,
-	AURIX_MMAP_ACPI_NVS = 4,
-
-	AURIX_MMAP_BOOTLOADER_RECLAIMABLE = 6,
-	AURIX_MMAP_USABLE = 7
-};
-
-enum aurix_framebuffer_format { AURIX_FB_RGBA = 0, AURIX_FB_BGRA = 1 };
-
-struct aurix_memmap {
-	uintptr_t base;
-	uint32_t size;
-	uint8_t type;
-};
-
-struct aurix_framebuffer {
-	uintptr_t addr;
-	uint32_t width;
-	uint32_t height;
-	uint8_t bpp; // bits!
-	uint32_t pitch;
-	int format;
-};
-
-struct aurix_parameters {
-	// PROTOCOL INFO
-	uint8_t revision;
-
-	// MEMORY
-	struct aurix_memmap *mmap;
-	uint32_t mmap_entries;
-
-	uintptr_t kernel_addr; // physical address
-
-	// RSDP and SMBIOS
-	uintptr_t rsdp_addr;
-	uintptr_t smbios_addr;
-
-	// FRAMEBUFFER
-	struct aurix_framebuffer *framebuffer;
-};
-
-/* Kernel related stuff */
-extern struct aurix_parameters *boot_params;
-
-#endif /* _PROTO_AURIX_H */
+#endif /* _LIB_ALIGN_H */

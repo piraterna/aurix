@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  aurix.h */
+/* Module Name:  string.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -19,63 +19,18 @@
  */
 /* SOFTWARE. */
 /*********************************************************************************/
+#ifndef _LIB_STRING_H
+#define _LIB_STRING_H
 
-#ifndef _AURIX_H
-#define _AURIX_H
-
+#include <stddef.h>
 #include <stdint.h>
 
-/* Aurix Boot Protocol (revision 1-dev) */
-#define AURIX_PROTOCOL_REVISION 1
+void *memcpy(void *restrict dest, const void *restrict src, size_t n);
+void *memset(void *s, int c, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
 
-enum aurix_memmap_entry {
-	AURIX_MMAP_RESERVED = 0,
+int strncmp(const char *s1, const char *s2, size_t n);
+size_t strlen(const char *str);
 
-	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
-	AURIX_MMAP_ACPI_MAPPED_IO = 2,
-	AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE = 3,
-	AURIX_MMAP_ACPI_NVS = 4,
-
-	AURIX_MMAP_BOOTLOADER_RECLAIMABLE = 6,
-	AURIX_MMAP_USABLE = 7
-};
-
-enum aurix_framebuffer_format { AURIX_FB_RGBA = 0, AURIX_FB_BGRA = 1 };
-
-struct aurix_memmap {
-	uintptr_t base;
-	uint32_t size;
-	uint8_t type;
-};
-
-struct aurix_framebuffer {
-	uintptr_t addr;
-	uint32_t width;
-	uint32_t height;
-	uint8_t bpp; // bits!
-	uint32_t pitch;
-	int format;
-};
-
-struct aurix_parameters {
-	// PROTOCOL INFO
-	uint8_t revision;
-
-	// MEMORY
-	struct aurix_memmap *mmap;
-	uint32_t mmap_entries;
-
-	uintptr_t kernel_addr; // physical address
-
-	// RSDP and SMBIOS
-	uintptr_t rsdp_addr;
-	uintptr_t smbios_addr;
-
-	// FRAMEBUFFER
-	struct aurix_framebuffer *framebuffer;
-};
-
-/* Kernel related stuff */
-extern struct aurix_parameters *boot_params;
-
-#endif /* _PROTO_AURIX_H */
+#endif /* _LIB_STRING_H */
