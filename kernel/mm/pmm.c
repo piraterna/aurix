@@ -49,6 +49,28 @@ static inline bool is_aligned(void *addr, size_t align)
 	return ((uintptr_t)addr % align) == 0;
 }
 
+static char *type_to_str(int type)
+{
+	switch (type) {
+		case AURIX_MMAP_RESERVED:
+			return "reserved";
+		case AURIX_MMAP_ACPI_RECLAIMABLE:
+			return "acpi reclaimable";
+		case AURIX_MMAP_ACPI_MAPPED_IO:
+			return "acpi mapped io";
+		case AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE:
+			return "acpi mapped io portspace";
+		case AURIX_MMAP_ACPI_NVS:
+			return "acpi nvs";
+		case AURIX_MMAP_BOOTLOADER_RECLAIMABLE:
+			return "bootloader reclaimable";
+		case AURIX_MMAP_USABLE:
+			return "usable";
+		default:
+			return "unknown";
+	}
+}
+
 void pmm_init(void)
 {
 	spinlock_init(&pmm_lock);
@@ -56,6 +78,7 @@ void pmm_init(void)
 	uint64_t high = 0;
 	free_pages = 0;
 
+	klog("Dumping memory map:\n");
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE) {
@@ -63,9 +86,9 @@ void pmm_init(void)
 			if (top > high)
 				high = top;
 			free_pages += e->size / PAGE_SIZE;
-			klog("Usable memory region: 0x%.16llx -> 0x%.16llx\n", e->base,
-				 e->base + e->size);
 		}
+
+		klog("Entry %u: 0x%llx, size=%u bytes, type=%s\n", i, e->base, e->size, type_to_str(e->type));
 	}
 
 	bitmap_pages = high / PAGE_SIZE;
@@ -90,6 +113,20 @@ void pmm_init(void)
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE) {
+			for (uint64_t j = e->base; j < e->base + e->size; j += PAGE_SIZE) {
+				if ((j / PAGE_SIZE) < bitmap_pages) {
+					bitmap_clear(bitmap, j / PAGE_SIZE);
+				}
+			}
+		}
+	}
+}
+
+void pmm_reclaim_bootparms()
+{
+	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
+		struct aurix_memmap *e = &boot_params->mmap[i];
+		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE || e->type = AURIX_MMAP_ACPI_RECLAIMABLE) {
 			for (uint64_t j = e->base; j < e->base + e->size; j += PAGE_SIZE) {
 				if ((j / PAGE_SIZE) < bitmap_pages) {
 					bitmap_clear(bitmap, j / PAGE_SIZE);

@@ -28,7 +28,9 @@
 
 #define PAGE_SIZE 0x1000
 
-void pmm_init();
+void pmm_init(void);
+void pmm_reclaim_bootparms(void);
+
 void *palloc(size_t pages, bool higher_half);
 void pfree(void *ptr, size_t pages);
 

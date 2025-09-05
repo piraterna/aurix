@@ -46,16 +46,10 @@ void _start(struct aurix_parameters *params)
 	cpu_early_init();
 
 	// initialize memory stuff
-	klog("%d memmap entries\n", boot_params->mmap_entries);
-	for (int i = 0; i < boot_params->mmap_entries; i++) {
-		struct aurix_memmap *m = &boot_params->mmap[i];
-		klog("mmap[%d]: type=%d, start=%p, end=%p, size=%llu\n", i, m->type,
-			 m->base, m->base + m->size, m->size);
-	}
 	pmm_init();
-	char *a = palloc(1, false);
-	*a = 69;
-	klog("Allocated 1 page @ 0x%p\n", a);
+
+	// this should be called when we don't need boot parameters anymore
+	pmm_reclaim_bootparms();
 
 	for (;;) {
 #ifdef __x86_64__
