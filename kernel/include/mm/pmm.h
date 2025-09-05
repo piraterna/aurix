@@ -22,7 +22,6 @@
 #ifndef _MM_PMM_H
 #define _MM_PMM_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <boot/aurix.h>
 
@@ -31,7 +30,7 @@
 void pmm_init(void);
 void pmm_reclaim_bootparms(void);
 
-void *palloc(size_t pages, bool higher_half);
+void *palloc(size_t pages);
 void pfree(void *ptr, size_t pages);
 
 #endif /* _MM_PMM_H */

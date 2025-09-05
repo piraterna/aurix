@@ -25,9 +25,10 @@
 
 #include <stdint.h>
 
+/* Aurix Boot Protocol (revision 1-dev) */
 #define AURIX_PROTOCOL_REVISION 1
 
-enum aurix_memmap_entry_type {
+enum aurix_memmap_entry {
 	AURIX_MMAP_RESERVED = 0,
 
 	AURIX_MMAP_ACPI_RECLAIMABLE = 1,
@@ -65,6 +66,7 @@ struct aurix_parameters {
 	uint32_t mmap_entries;
 
 	uintptr_t kernel_addr; // physical address
+	uintptr_t hhdm_offset;
 
 	// RSDP and SMBIOS
 	uintptr_t rsdp_addr;
@@ -74,13 +76,16 @@ struct aurix_parameters {
 	struct aurix_framebuffer *framebuffer;
 };
 
+/* Kernel related stuff */
+extern struct aurix_parameters *boot_params;
+
 #ifdef _AXBOOT
 #include <mm/vmm.h>
-void aurix_load(char *kernel);
-
+void aurix_load(char *kernel_path);
 void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 						uint32_t stack_size,
 						struct aurix_parameters *parameters);
+
 #endif
 
 #endif /* _PROTO_AURIX_H */

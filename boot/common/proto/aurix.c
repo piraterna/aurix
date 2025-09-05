@@ -38,6 +38,12 @@
 
 #define AURIX_STACK_SIZE 16 * 1024
 
+void aurix_load(char *kernel_path);
+
+void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
+						uint32_t stack_size,
+						struct aurix_parameters *parameters);
+
 bool aurix_get_memmap(struct aurix_parameters *params, axboot_memmap *mmap,
 					  uint32_t mmap_entries, pagetable *pm)
 {
@@ -199,6 +205,16 @@ void aurix_load(char *kernel_path)
 	}
 
 	parameters.kernel_addr = kernel_addr;
+	parameters.hhdm_offset = 0xffff800000000000;
+
+	// map usable mmap entries to hhdm too
+	for (uint32_t i = 0; i < parameters.mmap_entries; i++) {
+		struct aurix_memmap *e = &parameters.mmap[i];
+		if (e->type == AURIX_MMAP_RESERVED)
+			continue;
+		
+		map_pages(pm, e->base + parameters.hhdm_offset, e->base, e->size, VMM_PRESENT | VMM_WRITABLE);
+	}
 
 	// get RSDP and SMBIOS
 #ifdef ARCH_ACPI_AVAILABLE
@@ -218,6 +234,11 @@ void aurix_load(char *kernel_path)
 	map_pages(pm, parameters.framebuffer->addr, parameters.framebuffer->addr,
 			  parameters.framebuffer->height * parameters.framebuffer->pitch,
 			  VMM_PRESENT | VMM_WRITABLE);
+	map_pages(pm, parameters.framebuffer->addr, parameters.framebuffer->addr + parameters.hhdm_offset,
+			  parameters.framebuffer->height * parameters.framebuffer->pitch,
+			  VMM_PRESENT | VMM_WRITABLE);
+	
+	parameters.framebuffer->addr += parameters.hhdm_offset;
 
 	// paint the AurixOS logo on screen, very important!
 	uint32_t lx = (parameters.framebuffer->width / 2) - (aurix_logo.width / 2);
@@ -228,7 +249,7 @@ void aurix_load(char *kernel_path)
 		 idx < (aurix_logo.width * aurix_logo.height * 4);
 		 y++) {
 		for (uint32_t x = lx; x < lx + aurix_logo.width; x++) {
-			*((uint32_t *)(parameters.framebuffer->addr +
+			*((uint32_t *)(parameters.framebuffer->addr - parameters.hhdm_offset +
 						   parameters.framebuffer->pitch * y + 4 * x)) =
 				0xFF000000 | (aurix_logo.pixel_data[idx] << 16) |
 				(aurix_logo.pixel_data[idx + 1] << 8) |

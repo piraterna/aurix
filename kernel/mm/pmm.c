@@ -41,9 +41,6 @@ static uint64_t page_cache[PAGE_CACHE_SIZE];
 static size_t cache_size;
 static size_t cache_index;
 
-static uint64_t hhdm_offset = 0; // FIXME: actually put the legit hhdm offset
-#define HIGHER_HALF(x) (x + hhdm_offset)
-
 static inline bool is_aligned(void *addr, size_t align)
 {
 	return ((uintptr_t)addr % align) == 0;
@@ -97,7 +94,7 @@ void pmm_init(void)
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE && e->size >= bitmap_size) {
-			bitmap = (uint8_t *)(HIGHER_HALF(e->base));
+			bitmap = (uint8_t *)(e->base + boot_params->hhdm_offset);
 			memset(bitmap, 0xFF, bitmap_size);
 			e->base += bitmap_size;
 			e->size -= bitmap_size;
@@ -126,7 +123,7 @@ void pmm_reclaim_bootparms()
 {
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
-		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE || e->type = AURIX_MMAP_ACPI_RECLAIMABLE) {
+		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE || e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
 			for (uint64_t j = e->base; j < e->base + e->size; j += PAGE_SIZE) {
 				if ((j / PAGE_SIZE) < bitmap_pages) {
 					bitmap_clear(bitmap, j / PAGE_SIZE);
@@ -136,7 +133,7 @@ void pmm_reclaim_bootparms()
 	}
 }
 
-void *palloc(size_t pages, bool higher_half)
+void *palloc(size_t pages)
 {
 	if (pages == 0 || pages > free_pages)
 		return NULL;
@@ -147,9 +144,9 @@ void *palloc(size_t pages, bool higher_half)
 		void *addr = (void *)(page_cache[--cache_index] * PAGE_SIZE);
 		bitmap_set(bitmap, (uint64_t)addr / PAGE_SIZE);
 		free_pages--;
-		memset(HIGHER_HALF(addr), 0, pages * PAGE_SIZE);
+		memset(addr, 0, pages * PAGE_SIZE);
 		spinlock_release(&pmm_lock);
-		return higher_half ? (void *)((uint64_t)addr + hhdm_offset) : addr;
+		return addr;
 	}
 
 	uint64_t word_count =
@@ -172,11 +169,9 @@ void *palloc(size_t pages, bool higher_half)
 
 						void *addr =
 							(void *)((start_bit + j - pages + 1) * PAGE_SIZE);
-						memset(HIGHER_HALF(addr), 0, pages * PAGE_SIZE);
+						memset(addr, 0, pages * PAGE_SIZE);
 						spinlock_release(&pmm_lock);
-						return higher_half ?
-								   (void *)((uint64_t)addr + hhdm_offset) :
-								   addr;
+						return addr;
 					}
 				} else {
 					consecutive = 0;
@@ -196,9 +191,7 @@ void pfree(void *ptr, size_t pages)
 
 	spinlock_acquire(&pmm_lock);
 
-	uint64_t start =
-		((uint64_t)ptr - (hhdm_offset * ((uint64_t)ptr >= hhdm_offset))) /
-		PAGE_SIZE;
+	uint64_t start = (uint64_t)ptr / PAGE_SIZE;
 
 	if (start + pages > bitmap_pages) {
 		spinlock_release(&pmm_lock);
