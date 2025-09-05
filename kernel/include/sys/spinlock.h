@@ -22,21 +22,9 @@
 #ifndef _SYS_SPINLOCK_H
 #define _SYS_SPINLOCK_H
 
+#include <arch/cpu/cpu.h>
 #include <stdbool.h>
 #include <stdint.h>
-
-/* TODO: maybe move into arch specific folders */
-#ifndef cpu_relax
-#if defined(__i386__) || defined(__x86_64__)
-#define cpu_relax() __asm__ volatile("pause" ::: "memory")
-#elif defined(__aarch64__) || defined(__arm__)
-#define cpu_relax() __asm__ volatile("yield" ::: "memory")
-#else
-#define cpu_relax() \
-	do {            \
-	} while (0) /* no-op fallback */
-#endif
-#endif
 
 typedef struct {
 	uint8_t lock;
@@ -50,7 +38,7 @@ static inline void spinlock_init(spinlock_t *lock)
 static inline void spinlock_acquire(spinlock_t *lock)
 {
 	while (__atomic_test_and_set(&lock->lock, __ATOMIC_ACQUIRE)) {
-		cpu_relax();
+		cpu_spinwait();
 	}
 }
 

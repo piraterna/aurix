@@ -147,4 +147,12 @@ static inline void outb(uint16_t port, uint8_t val)
 	__asm__ volatile("outb %b0, %w1" ::"a"(val), "Nd"(port) : "memory");
 }
 
+////
+// Spinlock util
+////
+static inline void cpu_spinwait(void)
+{
+	__asm__ volatile("pause" ::: "memory");
+}
+
 #endif /* _ARCH_CPU_CPU_H */
