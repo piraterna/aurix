@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c */
+/* Module Name:  paging.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,44 +20,20 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
-#include <debug/print.h>
-#include <stddef.h>
-#include <mm/pmm.h>
-#include <mm/vmm.h>
+#ifndef _MM_PAGING_H
+#define _MM_PAGING_H
 
-struct aurix_parameters *boot_params = NULL;
+#include <stdint.h>
 
-void _start(struct aurix_parameters *params)
-{
-	boot_params = params;
-	serial_init();
+#define PAGE_SIZE 0x1000
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		klog(
-			"Aurix Protocol revision is not compatible: expected %u, but got %u!\n",
-			AURIX_PROTOCOL_REVISION, params->revision);
-	}
+#define VMM_PRESENT 1
+#define VMM_WRITABLE 2
+#define VMM_NX (1ull << 63)
+#define VMM_USER 4
 
-	klog("Hello from AurixOS!\n");
+typedef struct {
+	uint64_t entries[512];
+} pagetable;
 
-	// initialize basic processor features and interrupts
-	cpu_early_init();
-
-	// initialize memory stuff
-	pmm_init();
-	paging_init();
-
-	// this should be called when we don't need boot parameters anymore
-	pmm_reclaim_bootparms();
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
-}
+#endif /* _MM_PAGING_H */

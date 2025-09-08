@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c */
+/* Module Name:  vmm.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,44 +20,22 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
-#include <debug/print.h>
-#include <stddef.h>
-#include <mm/pmm.h>
-#include <mm/vmm.h>
+#ifndef _MM_VMM_H
+#define _MM_VMM_H
 
-struct aurix_parameters *boot_params = NULL;
+#include <arch/mm/paging.h>
+#include <stdbool.h>
+#include <stdint.h>
 
-void _start(struct aurix_parameters *params)
-{
-	boot_params = params;
-	serial_init();
+pagetable *create_pagemap(void);
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		klog(
-			"Aurix Protocol revision is not compatible: expected %u, but got %u!\n",
-			AURIX_PROTOCOL_REVISION, params->revision);
-	}
+bool paging_init(void);
 
-	klog("Hello from AurixOS!\n");
+void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags);
+void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
+			   uint64_t flags);
 
-	// initialize basic processor features and interrupts
-	cpu_early_init();
+void unmap_page(pagetable *pm, uintptr_t virt);
+void unmap_pages(pagetable *pm, uintptr_t virt, size_t size);
 
-	// initialize memory stuff
-	pmm_init();
-	paging_init();
-
-	// this should be called when we don't need boot parameters anymore
-	pmm_reclaim_bootparms();
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
-}
+#endif /* _MM_VMM_H */

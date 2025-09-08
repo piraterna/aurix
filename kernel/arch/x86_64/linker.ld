@@ -32,6 +32,7 @@ PHDRS
 SECTIONS
 {
 	. = 0xffffffff80000000;
+	_kernel_start = .;
 
 	_linker_start_text = .;
 
@@ -69,6 +70,7 @@ SECTIONS
 	} :data
 
 	_linker_end_data = .;
+	_kernel_end = .;
 
 	/DISCARD/ : {
 		*(.eh_frame)
