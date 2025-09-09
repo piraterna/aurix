@@ -196,6 +196,7 @@ void aurix_load(char *kernel_path)
 
 	// set current revision
 	parameters.revision = AURIX_PROTOCOL_REVISION;
+	parameters.stack_addr = (uintptr_t)stack;
 
 	// translate memory map
 	if (!aurix_get_memmap(&parameters, mmap, mmap_entries, pm)) {

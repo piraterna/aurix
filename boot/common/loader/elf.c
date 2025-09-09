@@ -96,7 +96,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		debug("elf64_load(): phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n",
 			  phys, ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_memsz);
 
-		map_pages(pagemap, aligned_vaddr, phys, ph[i].p_memsz, flags);
+		map_pages(pagemap, aligned_vaddr, phys, (uint64_t)ph[i].p_memsz, flags);
 		memset((void *)virt, 0, ph[i].p_memsz);
 		memcpy((void *)virt, data + ph[i].p_offset, ph[i].p_filesz);
 

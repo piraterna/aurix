@@ -67,6 +67,7 @@ struct aurix_parameters {
 
 	uintptr_t kernel_addr; // physical address
 	uintptr_t hhdm_offset;
+	uintptr_t stack_addr;
 
 	// RSDP and SMBIOS
 	uintptr_t rsdp_addr;

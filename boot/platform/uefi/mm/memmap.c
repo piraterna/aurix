@@ -162,6 +162,9 @@ uint32_t get_memmap(axboot_memmap **map, pagetable *pm)
 	// translate efi memmap to axboot memmap
 	cur_entry = efi_map;
 	for (uint32_t i = 0; i < entry_count; i++) {
+		if (cur_entry->NumberOfPages == 0)
+			continue;
+
 		(*map)[i].base = cur_entry->PhysicalStart;
 		(*map)[i].size = cur_entry->NumberOfPages * PAGE_SIZE;
 		(*map)[i].type = efi_type_to_axboot(cur_entry->Type);

@@ -93,7 +93,7 @@ void pmm_init(void)
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
-		if (e->type == AURIX_MMAP_USABLE && e->size >= bitmap_size) {
+		if (e->type == AURIX_MMAP_USABLE && e->base != 0 && e->size >= bitmap_size) {
 			bitmap = (uint8_t *)(e->base + boot_params->hhdm_offset);
 			memset(bitmap, 0xFF, bitmap_size);
 			e->base += bitmap_size;
@@ -117,6 +117,9 @@ void pmm_init(void)
 			}
 		}
 	}
+
+	// NULL should be reserved
+	bitmap_set(bitmap, 0);
 }
 
 void pmm_reclaim_bootparms()
@@ -124,6 +127,8 @@ void pmm_reclaim_bootparms()
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE || e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
+			e->type = AURIX_MMAP_USABLE;
+			free_pages += e->size / PAGE_SIZE;
 			for (uint64_t j = e->base; j < e->base + e->size; j += PAGE_SIZE) {
 				if ((j / PAGE_SIZE) < bitmap_pages) {
 					bitmap_clear(bitmap, j / PAGE_SIZE);

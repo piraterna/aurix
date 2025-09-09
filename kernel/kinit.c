@@ -22,6 +22,7 @@
 
 #include <boot/aurix.h>
 #include <cpu/cpu.h>
+#include <arch/cpu/cpu.h>
 #include <debug/uart.h>
 #include <debug/print.h>
 #include <stddef.h>

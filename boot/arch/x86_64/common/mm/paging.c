@@ -77,7 +77,7 @@ void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
 	}
 
 	debug("map_pages(): Mapped 0x%llx-0x%llx -> 0x%llx-0x%llx\n", phys,
-		  phys + (size * PAGE_SIZE), virt, virt + (size * PAGE_SIZE));
+		  phys + size, virt, virt + size);
 }
 
 void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
