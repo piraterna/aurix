@@ -60,6 +60,7 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 
 		"lidt %[idtr]\n"
 
+		"movq %[stack_top], %%rsp\n"
 		"movq %[pml4], %%cr3\n"
 		"movq %[parameters], %%rdi\n"
 		"movq %[entry], %%rsi\n"
