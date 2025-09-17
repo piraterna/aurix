@@ -1,3 +1,3 @@
 [submodule "boot/platform/uefi/libefi"]
 	path = boot/platform/uefi/libefi
-	url = https://git.piraterna.org.com/piraterna/libsefi
+	url = https://git.piraterna.org/piraterna/libsefi
