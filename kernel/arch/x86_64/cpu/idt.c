@@ -107,8 +107,9 @@ void isr_common_handler(struct interrupt_frame frame)
 		klog("rbp: 0x%.16llx, rdi: 0x%.16llx, rsi: 0x%.16llx, rsp: 0x%.16llx\n", frame.rbp, frame.rdi, frame.rsi, frame.rsp);
 		klog("r8:  0x%.16llx, r9:  0x%.16llx, r10: 0x%.16llx, r11: 0x%.16llx\n", frame.r8, frame.r9, frame.r10, frame.r11);
 		klog("r12: 0x%.16llx, r13: 0x%.16llx, r14: 0x%.16llx, r15: 0x%.16llx\n", frame.r12, frame.r13, frame.r14, frame.r15);
-		klog("cr0: 0x%.16llx, cr2: 0x%.16llx, cr3: 0x%.16llx, cr4: 0x%.16llx\n", frame.r12, frame.r13, frame.r14, frame.r15);
+		klog("cr0: 0x%.16llx, cr2: 0x%.16llx, cr3: 0x%.16llx, cr4: 0x%.16llx\n", frame.cr0, frame.cr2, frame.cr3, frame.cr4);
 		klog("rfl: 0x%.16llx, rip: 0x%.16llx, cs:  0x%.16llx, ds:  0x%.16llx\n", frame.rflags, frame.rip, frame.cs, frame.ds);
+		klog("err: 0x%.16llx\n", frame.err);
 	
 		klog("\nBacktrace (cpu %u):\n", 1);
 		stack_trace(16);

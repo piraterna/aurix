@@ -86,30 +86,26 @@ bool paging_init(void)
 		map_pages(NULL, e->base + boot_params->hhdm_offset, e->base, e->size, flags);
 	}
 
-	//stack
-	map_pages(NULL, boot_params->stack_addr, boot_params->stack_addr, 16*1024, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	// stack
+	uint64_t stack = ALIGN_DOWN(boot_params->stack_addr, PAGE_SIZE);
+	map_pages(NULL, stack, stack, 16*1024, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	// kernel
-	uint64_t text_start = ALIGN_DOWN((uint64_t)_start_text, PAGE_SIZE);
     uint64_t text_end = ALIGN_UP((uint64_t)_end_text, PAGE_SIZE);
-	map_pages(NULL, text_start, text_start - 0xffffffff80000000 + boot_params->kernel_addr, text_end - text_start, VMM_PRESENT);
+	map_pages(NULL, (uintptr_t)_start_text, (uintptr_t)_start_text - 0xffffffff80000000 + boot_params->kernel_addr, text_end - (uintptr_t)_start_text, VMM_PRESENT);
 
-    uint64_t rodata_start = ALIGN_DOWN((uint64_t)_start_rodata, PAGE_SIZE);
     uint64_t rodata_end = ALIGN_UP((uint64_t)_end_rodata, PAGE_SIZE);
-	map_pages(NULL, rodata_start, rodata_start - 0xffffffff80000000 + boot_params->kernel_addr, rodata_end - rodata_start, VMM_PRESENT | VMM_NX);
+	map_pages(NULL, (uintptr_t)_start_rodata, (uintptr_t)_start_rodata - 0xffffffff80000000 + boot_params->kernel_addr, rodata_end - (uintptr_t)_start_rodata, VMM_PRESENT | VMM_NX);
 
-    uint64_t data_start = ALIGN_DOWN((uint64_t)_start_data, PAGE_SIZE);
     uint64_t data_end = ALIGN_UP((uint64_t)_end_data, PAGE_SIZE);
-	map_pages(NULL, data_start, data_start - 0xffffffff80000000 + boot_params->kernel_addr, data_end - data_start, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	map_pages(NULL, (uintptr_t)_start_data, (uintptr_t)_start_data - 0xffffffff80000000 + boot_params->kernel_addr, data_end - (uintptr_t)_start_data, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	// framebuffer
-	map_pages(NULL, boot_params->framebuffer->addr - boot_params->hhdm_offset, boot_params->framebuffer->addr, boot_params->framebuffer->pitch * boot_params->framebuffer->height, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
-
-	boot_params += boot_params->hhdm_offset;
+	map_pages(NULL, boot_params->framebuffer->addr, boot_params->framebuffer->addr - boot_params->hhdm_offset, boot_params->framebuffer->pitch * boot_params->framebuffer->height, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 	
+	boot_params = (struct aurix_parameters *)((uintptr_t)boot_params + boot_params->hhdm_offset);
 	klog("Writing cr3 to 0x%llx...\n", kernel_pm);
 	write_cr3((uint64_t)kernel_pm);
-	klog("Write done!\n");
 
 	return true;
 }
@@ -127,9 +123,6 @@ static void inline _map(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t 
 
 	if (!(pm->entries[pml4_idx] & 1)) {
 		void *pml4 = palloc(1);
-		if (!pml4) {
-			klog("ERROR 1\n");
-		}
 		memset(pml4, 0, sizeof(pagetable));
 		pm->entries[pml4_idx] = (uint64_t)pml4 | VMM_PRESENT | VMM_WRITABLE;
 	}
@@ -138,9 +131,6 @@ static void inline _map(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t 
 		(pagetable *)(pm->entries[pml4_idx] & 0x000FFFFFFFFFF000);
 	if (!(pml3_table->entries[pml3_idx] & 1)) {
 		void *pml3 = palloc(1);
-		if (!pml3) {
-			klog("ERROR 2\n");
-		}
 		memset(pml3, 0, sizeof(pagetable));
 		pml3_table->entries[pml3_idx] =
 			(uint64_t)pml3 | VMM_PRESENT | VMM_WRITABLE;
@@ -150,9 +140,6 @@ static void inline _map(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t 
 		(pagetable *)(pml3_table->entries[pml3_idx] & 0x000FFFFFFFFFF000);
 	if (!(pml2_table->entries[pml2_idx] & 1)) {
 		void *pml2 = palloc(1);
-		if (!pml2) {
-			klog("ERROR 3\n");
-		}
 		memset(pml2, 0, sizeof(pagetable));
 		pml2_table->entries[pml2_idx] =
 			(uint64_t)pml2 | VMM_PRESENT | VMM_WRITABLE;
@@ -174,22 +161,19 @@ static void inline _unmap(pagetable *pm, uintptr_t virt)
 	uint64_t pml4_idx = (virt >> 39) & 0x1ff;
 
 	if (!(pm->entries[pml4_idx] & 1)) {
-		klog("_unmap(): Page at address 0x%llx not mapped.\n", virt);
-		return;
+		goto not_mapped;
 	}
 
 	pagetable *pml3_table =
 		(pagetable *)(pm->entries[pml4_idx] & 0x000FFFFFFFFFF000);
 	if (!(pml3_table->entries[pml3_idx] & 1)) {
-		klog("_unmap(): Page at address 0x%llx not mapped.\n", virt);
-		return;
+		goto not_mapped;
 	}
 
 	pagetable *pml2_table =
 		(pagetable *)(pml3_table->entries[pml3_idx] & 0x000FFFFFFFFFF000);
 	if (!(pml2_table->entries[pml2_idx] & 1)) {
-		klog("_unmap(): Page at address 0x%llx not mapped.\n", virt);
-		return;
+		goto not_mapped;
 	}
 
 	pagetable *pml1_table =
@@ -198,6 +182,11 @@ static void inline _unmap(pagetable *pm, uintptr_t virt)
 
 	if (read_cr3() == (uint64_t)pm)
 		invlpg((void *)virt);
+
+	return;
+
+not_mapped:
+	klog("_unmap(): Page at address 0x%llx not mapped.\n", virt);
 }
 
 void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
@@ -205,9 +194,11 @@ void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
 {
 	if (!pm)
 		pm = kernel_pm;
+	
+	virt = ALIGN_DOWN(virt, PAGE_SIZE);
+	phys = ALIGN_DOWN(phys, PAGE_SIZE);
 
-	// klog("pages to be mapped: %llu\n", ALIGN_UP(size, PAGE_SIZE));
-	for (size_t i = 0; i <= ALIGN_UP(size, PAGE_SIZE); i += PAGE_SIZE) {
+	for (size_t i = 0; i < ALIGN_UP(size, PAGE_SIZE); i += PAGE_SIZE) {
 		_map(pm, virt + i, phys + i, flags);
 	}
 
@@ -219,6 +210,9 @@ void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
 {
 	if (!pm)
 		pm = kernel_pm;
+
+	virt = ALIGN_DOWN(virt, PAGE_SIZE);
+	phys = ALIGN_DOWN(phys, PAGE_SIZE);
 
 	_map(pm, virt, phys, flags);
 	klog("map_page(): Mapped 0x%llx -> 0x%llx\n", phys, virt);

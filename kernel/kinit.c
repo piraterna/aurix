@@ -54,6 +54,9 @@ void _start(struct aurix_parameters *params)
 	// this should be called when we don't need boot parameters anymore
 	pmm_reclaim_bootparms();
 
+	// TODO: Track kernel boot time
+	klog("Kernel boot complete in 0 seconds\n");
+
 	for (;;) {
 #ifdef __x86_64__
 		__asm__ volatile("cli;hlt");

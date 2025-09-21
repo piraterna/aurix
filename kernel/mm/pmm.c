@@ -21,6 +21,7 @@
 /*********************************************************************************/
 
 #include <mm/pmm.h>
+#include <mm/vmm.h>
 #include <boot/aurix.h>
 #include <lib/bitmap.h>
 #include <lib/align.h>
@@ -124,16 +125,13 @@ void pmm_init(void)
 
 void pmm_reclaim_bootparms()
 {
+	map_pages(NULL, (uintptr_t)bitmap, (uintptr_t)bitmap - boot_params->hhdm_offset, bitmap_pages, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE || e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
 			e->type = AURIX_MMAP_USABLE;
-			free_pages += e->size / PAGE_SIZE;
-			for (uint64_t j = e->base; j < e->base + e->size; j += PAGE_SIZE) {
-				if ((j / PAGE_SIZE) < bitmap_pages) {
-					bitmap_clear(bitmap, j / PAGE_SIZE);
-				}
-			}
+			pfree((void *)e->base, ALIGN_UP(e->size, PAGE_SIZE) / PAGE_SIZE);
 		}
 	}
 }

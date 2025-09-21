@@ -46,6 +46,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		(struct elf_program_header *)((uint8_t *)data + header->e_phoff);
 
 	uint64_t max_align = 0;
+	uint64_t kernel_size = 0;
 
 	for (uint16_t i = 0; i < header->e_phnum; i++) {
 		if (ph[i].p_type != PT_LOAD)
@@ -54,7 +55,17 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		if (ph[i].p_align > max_align) {
 			max_align = ph[i].p_align;
 		}
+
+		kernel_size += ph[i].p_memsz;
 	}
+
+	uint64_t phys = (uint64_t)mem_alloc(ALIGN_UP(kernel_size, PAGE_SIZE)) & ~0xFFF;
+	if (!phys) {
+		error("elf64_load(): Failed to allocate memory for kernel!\n");
+		return 0;
+	}
+
+	*addr = phys;
 
 	for (uint16_t i = 0; i < header->e_phnum; i++) {
 		debug("elf64_load(): Segment %u:\n", i);
@@ -78,20 +89,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		if (!(ph[i].p_flags & PF_X))
 			flags |= VMM_NX;
 
-		uint64_t phys = (uint64_t)mem_alloc(ph[i].p_memsz + ph[i].p_vaddr -
-											aligned_vaddr + 4096) +
-						4096;
-		phys &= ~0xFFF;
 		uint64_t virt = (uint64_t)(phys + ph[i].p_vaddr - aligned_vaddr);
-
-		if (!phys) {
-			error("elf64_load(): Out of memory\n");
-			return 0;
-		}
-
-		if (addr != NULL && *addr == 0) {
-			*addr = phys;
-		}
 
 		debug("elf64_load(): phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n",
 			  phys, ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_memsz);
@@ -104,6 +102,9 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 			memset((void *)(virt + ph[i].p_filesz), 0,
 				   ph[i].p_memsz - ph[i].p_filesz);
 		}
+
+		phys += ph[i].p_memsz;
+		phys = ALIGN_UP(phys, PAGE_SIZE);
 	}
 
 	debug("elf64_load(): ELF loaded successfully, entry: 0x%llx\n",
