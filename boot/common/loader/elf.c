@@ -78,7 +78,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		debug("elf64_load(): - Memory Size: %llu bytes\n", ph[i].p_memsz);
 		debug("elf64_load(): - Alignment: 0x%llx\n", ph[i].p_align);
 
-		if (ph[i].p_type != PT_LOAD)
+		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
 			continue;
 
 		uint64_t aligned_vaddr = ph[i].p_vaddr & ~(ph[i].p_align - 1);
