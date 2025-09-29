@@ -28,7 +28,7 @@
 void stack_trace(uint16_t max_depth)
 {
 	struct stack_frame *frame;
-	__asm__ volatile("movq %%rbp, %0" : "=r"(frame) :: "memory");
+	__asm__ volatile("movq %%rbp, %0" : "=r"(frame)::"memory");
 
 	for (uint64_t f = 0; frame && f < max_depth; f++) {
 		if (frame->rip <= 0xffffffff80000000)

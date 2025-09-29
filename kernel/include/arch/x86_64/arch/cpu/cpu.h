@@ -149,7 +149,7 @@ static inline void outb(uint16_t port, uint8_t val)
 
 static inline void invlpg(void *addr)
 {
-	__asm__ volatile("invlpg (%0)" :: "b"(addr) : "memory");
+	__asm__ volatile("invlpg (%0)" ::"b"(addr) : "memory");
 }
 
 ////

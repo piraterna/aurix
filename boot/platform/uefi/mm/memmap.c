@@ -33,11 +33,6 @@
 static int efi_type_to_axboot(uint32_t efi_type)
 {
 	switch (efi_type) {
-	case EfiLoaderData:
-	case EfiBootServicesCode:
-	case EfiBootServicesData:
-		return MemMapFreeOnLoad;
-
 	case EfiRuntimeServicesCode:
 	case EfiRuntimeServicesData:
 	case EfiLoaderCode:
@@ -61,7 +56,9 @@ static int efi_type_to_axboot(uint32_t efi_type)
 	case EfiPalCode:
 	case EfiPersistentMemory:
 	case EfiConventionalMemory:
-		return MemMapUsable;
+	case EfiLoaderData:
+	case EfiBootServicesCode:
+	case EfiBootServicesData:
 		return MemMapUsable;
 
 	case EfiUnacceptedMemoryType:

@@ -31,15 +31,18 @@
 /* https://github.com/KevinAlavik/nekonix/blob/main/kernel/src/proc/elf.c */
 /* Thanks, Kevin <3 */
 
-uintptr_t elf32_load(char *data, uintptr_t *addr, pagetable *pagemap)
+uintptr_t elf32_load(char *data, uintptr_t *addr, size_t *size,
+					 pagetable *pagemap)
 {
 	(void)data;
 	(void)addr;
+	(void)size;
 	(void)pagemap;
 	return 0;
 }
 
-uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
+uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
+					 pagetable *pagemap)
 {
 	struct elf_header *header = (struct elf_header *)data;
 	struct elf_program_header *ph =
@@ -59,7 +62,11 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 		kernel_size += ph[i].p_memsz;
 	}
 
-	uint64_t phys = (uint64_t)mem_alloc(ALIGN_UP(kernel_size, PAGE_SIZE)) & ~0xFFF;
+	if (size != NULL)
+		*size = kernel_size;
+
+	uint64_t phys =
+		(uint64_t)mem_alloc(ALIGN_UP(kernel_size, PAGE_SIZE)) & ~0xFFF;
 	if (!phys) {
 		error("elf64_load(): Failed to allocate memory for kernel!\n");
 		return 0;
@@ -112,7 +119,8 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, pagetable *pagemap)
 	return (uintptr_t)header->e_entry;
 }
 
-uintptr_t elf_load(char *data, uintptr_t *addr, pagetable *pagemap)
+uintptr_t elf_load(char *data, uintptr_t *addr, size_t *size,
+				   pagetable *pagemap)
 {
 	struct elf_header *header = (struct elf_header *)data;
 
@@ -128,9 +136,9 @@ uintptr_t elf_load(char *data, uintptr_t *addr, pagetable *pagemap)
 
 	if (header->e_machine == 20 || header->e_machine == 3 ||
 		header->e_machine == 40) {
-		return elf32_load(data, addr, pagemap);
+		return elf32_load(data, addr, size, pagemap);
 	} else if (header->e_machine == 62) {
-		return elf64_load(data, addr, pagemap);
+		return elf64_load(data, addr, size, pagemap);
 	}
 
 	error("elf_load(): Unsupported ELF machine: %u", header->e_machine);

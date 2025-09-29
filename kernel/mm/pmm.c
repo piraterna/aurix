@@ -50,22 +50,26 @@ static inline bool is_aligned(void *addr, size_t align)
 static char *type_to_str(int type)
 {
 	switch (type) {
-		case AURIX_MMAP_RESERVED:
-			return "reserved";
-		case AURIX_MMAP_ACPI_RECLAIMABLE:
-			return "acpi reclaimable";
-		case AURIX_MMAP_ACPI_MAPPED_IO:
-			return "acpi mapped io";
-		case AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE:
-			return "acpi mapped io portspace";
-		case AURIX_MMAP_ACPI_NVS:
-			return "acpi nvs";
-		case AURIX_MMAP_BOOTLOADER_RECLAIMABLE:
-			return "bootloader reclaimable";
-		case AURIX_MMAP_USABLE:
-			return "usable";
-		default:
-			return "unknown";
+	case AURIX_MMAP_RESERVED:
+		return "reserved";
+	case AURIX_MMAP_ACPI_RECLAIMABLE:
+		return "acpi reclaimable";
+	case AURIX_MMAP_ACPI_MAPPED_IO:
+		return "acpi mapped io";
+	case AURIX_MMAP_ACPI_MAPPED_IO_PORTSPACE:
+		return "acpi mapped io portspace";
+	case AURIX_MMAP_ACPI_NVS:
+		return "acpi nvs";
+	case AURIX_MMAP_KERNEL:
+		return "kernel";
+	case AURIX_MMAP_BOOTLOADER_RECLAIMABLE:
+		return "bootloader reclaimable";
+	case AURIX_MMAP_FRAMEBUFFER:
+		return "framebuffer";
+	case AURIX_MMAP_USABLE:
+		return "usable";
+	default:
+		return "unknown";
 	}
 }
 
@@ -86,7 +90,8 @@ void pmm_init(void)
 			free_pages += e->size / PAGE_SIZE;
 		}
 
-		klog("Entry %u: 0x%llx, size=%u bytes, type=%s\n", i, e->base, e->size, type_to_str(e->type));
+		klog("Entry %u: 0x%llx, size=%llu bytes, type=%s\n", i, e->base,
+			 e->size, type_to_str(e->type));
 	}
 
 	bitmap_pages = high / PAGE_SIZE;
@@ -94,7 +99,8 @@ void pmm_init(void)
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
-		if (e->type == AURIX_MMAP_USABLE && e->base != 0 && e->size >= bitmap_size) {
+		if (e->type == AURIX_MMAP_USABLE && e->base != 0 &&
+			e->size >= bitmap_size) {
 			bitmap = (uint8_t *)(e->base + boot_params->hhdm_offset);
 			memset(bitmap, 0xFF, bitmap_size);
 			e->base += bitmap_size;
@@ -125,11 +131,14 @@ void pmm_init(void)
 
 void pmm_reclaim_bootparms()
 {
-	map_pages(NULL, (uintptr_t)bitmap, (uintptr_t)bitmap - boot_params->hhdm_offset, bitmap_pages, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	map_pages(NULL, (uintptr_t)bitmap,
+			  (uintptr_t)bitmap - boot_params->hhdm_offset, bitmap_pages,
+			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
-		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE || e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
+		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE ||
+			e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
 			e->type = AURIX_MMAP_USABLE;
 			pfree((void *)e->base, ALIGN_UP(e->size, PAGE_SIZE) / PAGE_SIZE);
 		}
