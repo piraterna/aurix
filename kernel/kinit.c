@@ -29,6 +29,7 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <mm/heap.h>
+#include <lib/string.h>
 
 struct aurix_parameters *boot_params = NULL;
 
@@ -58,14 +59,11 @@ void _start(struct aurix_parameters *params)
 	// TODO: Track kernel boot time
 	klog("Kernel boot complete in 0 seconds\n");
 
-	// test virtual memory and heap stuff.
-	vctx_t *vctx = vinit(kernel_pm, VPM_MIN_ADDR);
-	char *a = valloc(vctx, 1, VALLOC_RW);
-	klog("Allocated 1 virtual page @ %p\n", a);
-
-	heap_init(vctx);
+	// test heap stuff.
+	heap_init(vinit(kernel_pm, VPM_MIN_ADDR));
 	char *b = kmalloc(69);
-	klog("Allocated 69 bytes @ %p\n", b);
+	memcpy(b, "Hello, World!\0", 14);
+	klog("Allocated 69 bytes @ %p: %s\n", b, b);
 
 	for (;;) {
 #ifdef __x86_64__
