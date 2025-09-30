@@ -36,4 +36,6 @@ typedef struct {
 	uint64_t entries[512];
 } pagetable;
 
+extern pagetable *kernel_pm;
+
 #endif /* _MM_PAGING_H */

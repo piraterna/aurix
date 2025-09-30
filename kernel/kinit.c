@@ -57,6 +57,10 @@ void _start(struct aurix_parameters *params)
 	// TODO: Track kernel boot time
 	klog("Kernel boot complete in 0 seconds\n");
 
+	vctx_t *vctx = vinit(kernel_pm, VPM_MIN_ADDR);
+	char *a = valloc(vctx, 1, VALLOC_RW);
+	klog("Allocated 1 virtual page @ %p\n", a);
+
 	for (;;) {
 #ifdef __x86_64__
 		__asm__ volatile("cli;hlt");

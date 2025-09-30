@@ -266,3 +266,45 @@ pagetable *create_pagemap()
 	klog("create_pagemap(): Created new pm at 0x%llx\n", (uint64_t)pm);
 	return pm;
 }
+
+uintptr_t virt_to_phys(pagetable *pm, uintptr_t virt)
+{
+	if (!pm)
+		pm = kernel_pm;
+
+	uint64_t pml4_idx = (virt >> 39) & 0x1ff;
+	uint64_t pml3_idx = (virt >> 30) & 0x1ff;
+	uint64_t pml2_idx = (virt >> 21) & 0x1ff;
+	uint64_t pml1_idx = (virt >> 12) & 0x1ff;
+
+	if (!(pm->entries[pml4_idx] & VMM_PRESENT)) {
+		klog("virt_to_phys(): No mapping at PML4 for virt 0x%llx\n", virt);
+		return 0;
+	}
+
+	pagetable *pml3_table =
+		(pagetable *)(pm->entries[pml4_idx] & 0x000FFFFFFFFFF000);
+	if (!(pml3_table->entries[pml3_idx] & VMM_PRESENT)) {
+		klog("virt_to_phys(): No mapping at PML3 for virt 0x%llx\n", virt);
+		return 0;
+	}
+
+	pagetable *pml2_table =
+		(pagetable *)(pml3_table->entries[pml3_idx] & 0x000FFFFFFFFFF000);
+	if (!(pml2_table->entries[pml2_idx] & VMM_PRESENT)) {
+		klog("virt_to_phys(): No mapping at PML2 for virt 0x%llx\n", virt);
+		return 0;
+	}
+
+	pagetable *pml1_table =
+		(pagetable *)(pml2_table->entries[pml2_idx] & 0x000FFFFFFFFFF000);
+	if (!(pml1_table->entries[pml1_idx] & VMM_PRESENT)) {
+		klog("virt_to_phys(): No mapping at PML1 for virt 0x%llx\n", virt);
+		return 0;
+	}
+
+	uintptr_t phys =
+		(pml1_table->entries[pml1_idx] & 0x000FFFFFFFFFF000) | (virt & 0xFFF);
+	klog("virt_to_phys(): Translated 0x%llx -> 0x%llx\n", virt, phys);
+	return phys;
+}
