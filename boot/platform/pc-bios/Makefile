@@ -32,8 +32,8 @@ BOOT_CFLAGS := $(CFLAGS) \
 
 BOOT_LDFLAGS := $(LDFLAGS)
 
-BOOT_ASFILES := $(shell find $(BOOT_ROOT)/arch/$(ARCH) -type d -name arch/$(ARCH)/uefi -prune -name '*.S')
-BOOT_CFILES := $(shell find $(BOOT_ROOT)/arch/$(ARCH) -type d -name arch/$(ARCH)/uefi -prune -name '*.c')
+BOOT_ASFILES := $(shell find $(BOOT_ROOT)/arch/$(ARCH) -type d -wholename arch/$(ARCH)/uefi -prune -name '*.S')
+BOOT_CFILES := $(shell find $(BOOT_ROOT)/arch/$(ARCH) -type d -wholename arch/$(ARCH)/uefi -prune -name '*.c')
 
 BOOT_OBJ := $(BOOT_CFILES:%.c=$(BUILD_DIR)/boot/boot/%.c.o) \
 			$(BOOT_ASFILES:%.S=$(BUILD_DIR)/boot/boot/%.S.o) \
