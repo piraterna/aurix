@@ -23,18 +23,24 @@
 #include <arch/cpu/gdt.h>
 #include <stdint.h>
 
-struct gdt_descriptor gdt[5];
+struct gdt_descriptor gdt[7];
+
+struct tss tss; //TODO: Use tss for double fault and privileged stack
 
 void gdt_init()
 {
 	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
 	gdt_set_entry(&gdt[1], 0, 0xfffff, 0x9a,
-				  0x0a); //KCS //TODO: SET ACCESSED BIT?
+				  0x0a); //KCS //TODO: Set accessed bit?
 	gdt_set_entry(&gdt[2], 0, 0xfffff, 0x92, 0x0c); //KDS
-	gdt_set_entry(&gdt[4], 0, 0xfffff, 0xf2,
+	gdt_set_entry(&gdt[3], 0, 0xfffff, 0xf2,
 				  0x0c); //UDS //REORDERED BECAUSE OF SYSRET
-	gdt_set_entry(&gdt[3], 0, 0xfffff, 0xfa, 0x0a); //UCS
-	//TODO: TSS
+	gdt_set_entry(&gdt[4], 0, 0xfffff, 0xfa, 0x0a); //UCS
+	gdt_set_entry(&gdt[5], ((uint64_t)&tss) & 0xffffffff, sizeof(tss) - 1, 0x89,
+				  0); // TSS low
+	*(uint64_t *)&gdt[6] = (uint64_t)&tss >> 32; // TSS high
+
+	tss.iopb_offset = sizeof(tss);
 
 	struct gdtr gdtr = { .base = (uintptr_t)&gdt[0], .limit = sizeof(gdt) - 1 };
 
@@ -51,6 +57,8 @@ void gdt_init()
 					 "movq %%rax, %%fs\n"
 					 "movq %%rax, %%gs\n" ::[gdtr] "g"(gdtr)
 					 : "memory");
+
+	__asm__ volatile("ltr $0x28");
 }
 
 void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit,

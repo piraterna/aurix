@@ -39,6 +39,15 @@ struct gdtr {
 	uint64_t base;
 } __attribute__((packed));
 
+struct tss {
+	uint8_t reserved1[4];
+	uint64_t rsp_ring[3];
+	uint8_t reserved2[8];
+	uint64_t ist[7];
+	uint8_t reserved3[10];
+	uint16_t iopb_offset;
+} __attribute__((packed));
+
 void gdt_init(void);
 void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit,
 				   uint8_t access, uint8_t flags);
