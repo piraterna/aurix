@@ -23,6 +23,6 @@
 #ifndef _UTIL_PRINT_H
 #define _UTIL_PRINT_H
 
-void kprintf(const char *fmt, ...);
+int kprintf(const char *fmt, ...);
 
 #endif /* _UTIL_PRINT_H */

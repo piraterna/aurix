@@ -24,6 +24,7 @@
 #define _AURIX_H
 
 #include <stdint.h>
+#include <flanterm/flanterm.h>
 
 /* Aurix Boot Protocol (revision 1-dev) */
 #define AURIX_PROTOCOL_REVISION 1
@@ -77,10 +78,11 @@ struct aurix_parameters {
 	uintptr_t smbios_addr;
 
 	// FRAMEBUFFER
-	struct aurix_framebuffer *framebuffer;
+	struct aurix_framebuffer framebuffer;
 };
 
 /* Kernel related stuff */
 extern struct aurix_parameters *boot_params;
+extern struct flanterm_context *ft_ctx;
 
 #endif /* _PROTO_AURIX_H */

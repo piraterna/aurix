@@ -36,18 +36,25 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#include <boot/aurix.h>
+
 int32_t _fltused = 0;
 int32_t __eqdf2 = 0;
 int32_t __ltdf2 = 0;
 
-void kprintf(const char *fmt, ...)
+int kprintf(const char *fmt, ...)
 {
 	va_list args;
-	char buf[1024];
-
 	va_start(args, fmt);
-	npf_vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
+	char buffer[1024];
+	int length = npf_vsnprintf(buffer, sizeof(buffer), fmt, args);
 
-	serial_sendstr(buf);
+	if (length >= 0 && length < (int)sizeof(buffer)) {
+		serial_sendstr(buffer);
+		if (ft_ctx)
+			flanterm_write(ft_ctx, (char *)buffer, length);
+	}
+
+	va_end(args);
+	return length;
 }

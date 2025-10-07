@@ -30,8 +30,11 @@
 #include <mm/vmm.h>
 #include <mm/heap.h>
 #include <lib/string.h>
+#include <flanterm/flanterm.h>
+#include <flanterm/backends/fb.h>
 
 struct aurix_parameters *boot_params = NULL;
+struct flanterm_context *ft_ctx = NULL;
 
 void _start(struct aurix_parameters *params)
 {
@@ -45,6 +48,17 @@ void _start(struct aurix_parameters *params)
 		for (;;)
 			;
 	}
+
+	ft_ctx = flanterm_fb_init(
+		NULL, NULL, (uint32_t *)boot_params->framebuffer.addr,
+		boot_params->framebuffer.width, boot_params->framebuffer.height,
+		boot_params->framebuffer.pitch, 8, 16, // red_mask_size, red_mask_shift
+		8, 8, // green_mask_size, green_mask_shift
+		8, 0, // blue_mask_size, blue_mask_shift
+		NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 1, 0, 0, 0);
+
+	if (!ft_ctx)
+		error("failed to init flanterm\n");
 
 	info("Hello from AurixOS!\n");
 
