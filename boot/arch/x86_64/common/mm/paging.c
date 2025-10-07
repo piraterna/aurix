@@ -75,15 +75,11 @@ void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
 	for (size_t i = 0; i < ROUND_UP(size, PAGE_SIZE); i += PAGE_SIZE) {
 		_map(pm, virt + i, phys + i, flags);
 	}
-
-	debug("map_pages(): Mapped 0x%llx-0x%llx -> 0x%llx-0x%llx\n", phys,
-		  phys + size, virt, virt + size);
 }
 
 void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
 {
 	_map(pm, virt, phys, flags);
-	debug("map_page(): Mapped 0x%llx -> 0x%llx\n", phys, virt);
 }
 
 pagetable *create_pagemap()
@@ -95,7 +91,5 @@ pagetable *create_pagemap()
 	}
 	pm = (pagetable *)ROUND_UP((uint64_t)pm, PAGE_SIZE);
 	memset(pm, 0, sizeof(pagetable));
-
-	debug("create_pagemap(): Created new pm at 0x%llx\n", (uint64_t)pm);
 	return pm;
 }

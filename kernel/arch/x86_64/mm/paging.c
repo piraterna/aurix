@@ -112,13 +112,12 @@ bool paging_init(void)
 		NULL, (uintptr_t)_start_data,
 		(uintptr_t)_start_data - 0xffffffff80000000 + boot_params->kernel_addr,
 		data_end - (uintptr_t)_start_data, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
-	
+
 	// make NULL cause a page fault
 	unmap_page(NULL, (uintptr_t)NULL);
 
 	boot_params = (struct aurix_parameters *)((uintptr_t)boot_params +
 											  boot_params->hhdm_offset);
-	klog("Writing cr3 to 0x%llx...\n", kernel_pm);
 	write_cr3((uint64_t)kernel_pm);
 
 	return true;
@@ -216,10 +215,6 @@ void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
 	for (size_t i = 0; i < ALIGN_UP(size, PAGE_SIZE); i += PAGE_SIZE) {
 		_map(pm, virt + i, phys + i, flags);
 	}
-
-	klog("map_pages(): Mapped 0x%llx-0x%llx -> 0x%llx-0x%llx\n", phys,
-		 phys + ALIGN_UP(size, PAGE_SIZE), virt,
-		 virt + ALIGN_UP(size, PAGE_SIZE));
 }
 
 void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
@@ -231,7 +226,6 @@ void map_page(pagetable *pm, uintptr_t virt, uintptr_t phys, uint64_t flags)
 	phys = ALIGN_DOWN(phys, PAGE_SIZE);
 
 	_map(pm, virt, phys, flags);
-	klog("map_page(): Mapped 0x%llx -> 0x%llx\n", phys, virt);
 }
 
 void unmap_pages(pagetable *pm, uintptr_t virt, size_t size)
@@ -242,9 +236,6 @@ void unmap_pages(pagetable *pm, uintptr_t virt, size_t size)
 	for (size_t i = 0; i < ALIGN_UP(size, PAGE_SIZE); i += PAGE_SIZE) {
 		_unmap(pm, virt + i);
 	}
-
-	klog("map_pages(): Unmapped 0x%llx-0x%llx\n", virt,
-		 virt + (size * PAGE_SIZE));
 }
 
 void unmap_page(pagetable *pm, uintptr_t virt)
@@ -253,7 +244,6 @@ void unmap_page(pagetable *pm, uintptr_t virt)
 		pm = kernel_pm;
 
 	_unmap(pm, virt);
-	klog("map_page(): Unmapped 0x%llx\n", virt);
 }
 
 pagetable *create_pagemap()
