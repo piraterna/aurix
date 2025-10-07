@@ -83,7 +83,7 @@ void _start(struct aurix_parameters *params)
 	pmm_reclaim_bootparms();
 
 	// TODO: Track kernel boot time
-	info("Kernel boot complete in 0 seconds\n");
+	info("Kernel boot complete in ? seconds\n");
 
 	for (;;) {
 #ifdef __x86_64__
