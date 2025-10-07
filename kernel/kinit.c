@@ -32,6 +32,7 @@
 #include <lib/string.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
+#include <drivers/rtc.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -81,6 +82,27 @@ void _start(struct aurix_parameters *params)
 
 	// this should be called when we don't need boot parameters anymore
 	pmm_reclaim_bootparms();
+
+	// test rtc driver
+	rtc_time_t time;
+	rtc_error_t err;
+	err = rtc_init();
+	if (err != RTC_OK) {
+		error("RTC init failed: %d\n", err);
+		for (;;)
+			;
+	}
+	debug("RTC initialized with status: %d\n", err);
+
+	err = rtc_get_time(&time);
+	if (err != RTC_OK) {
+		error("RTC get time failed: %d\n", err);
+		for (;;)
+			;
+	}
+
+	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
+		 time.day, time.hours, time.minutes, time.seconds);
 
 	// TODO: Track kernel boot time
 	info("Kernel boot complete in ? seconds\n");
