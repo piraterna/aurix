@@ -21,7 +21,7 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <lib/align.h>
-#include <debug/print.h>
+#include <debug/log.h>
 
 #define ALIGNMENT 16
 #define CANARY_SIZE sizeof(uint64_t)
@@ -45,7 +45,7 @@ static void set_check(block_t *b)
 static int validate(block_t *b)
 {
 	if (b->check != compute_check(b)) {
-		klog("Heap corruption detected in block %p!\n", (void *)b);
+		error("Heap corruption detected in block %p!\n", (void *)b);
 		return 0;
 	}
 	return 1;
@@ -54,8 +54,11 @@ static int validate(block_t *b)
 void heap_init(vctx_t *ctx)
 {
 	pool = valloc(ctx, FF_POOL_SIZE, VALLOC_RW);
-	if (!pool)
-		klog("fatal: Failed to allocate memory for heap pool!\n");
+	if (!pool) /* TODO: call something like kpanic */ {
+		error("Failed to allocate memory for heap pool!\n");
+		for (;;)
+			;
+	}
 	freelist = (block_t *)pool;
 	freelist->prev = NULL;
 	freelist->next = NULL;
@@ -136,7 +139,7 @@ void kfree(void *ptr)
 
 	uint64_t *canary_ptr = (uint64_t *)((uint8_t *)ptr + block->user_size);
 	if (*canary_ptr != CANARY_VALUE) {
-		klog("Heap canary corruption at %p!\n", ptr);
+		error("Heap canary corruption at %p!\n", ptr);
 		return;
 	}
 

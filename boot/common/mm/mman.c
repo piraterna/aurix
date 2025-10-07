@@ -175,7 +175,6 @@ void mem_free(void *addr)
 	}
 
 	remove_alloc(addr);
-	debug("mem_free(): Freed 0x%llx\n", addr);
 }
 
 #endif
