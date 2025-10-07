@@ -46,7 +46,7 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
-QEMU_FLAGS := -m 4G -smp 4 -rtc base=localtime -serial stdio
+QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
@@ -56,11 +56,7 @@ QEMU_FLAGS := -m 4G -smp 4 -rtc base=localtime -serial stdio
 # QEMU Mouse support
 #QEMU_FLAGS += -usb -device usb-mouse
 
-# x86_64
-# TODO: Move this elsewhere
-ifeq ($(ARCH),x86_64)
-QEMU_FLAGS += -machine q35
-endif
+-include machine/$(ARCH)/qemu.mk
 
 ##
 # General info

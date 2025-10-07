@@ -112,6 +112,9 @@ bool paging_init(void)
 		NULL, (uintptr_t)_start_data,
 		(uintptr_t)_start_data - 0xffffffff80000000 + boot_params->kernel_addr,
 		data_end - (uintptr_t)_start_data, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	
+	// make NULL cause a page fault
+	unmap_page(NULL, (uintptr_t)NULL);
 
 	boot_params = (struct aurix_parameters *)((uintptr_t)boot_params +
 											  boot_params->hhdm_offset);

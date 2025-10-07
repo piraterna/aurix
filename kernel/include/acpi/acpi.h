@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c */
+/* Module Name:  acpi.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,52 +20,52 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <acpi/acpi.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
-#include <debug/print.h>
+#ifndef _ACPI_ACPI_H
+#define _ACPI_ACPI_H
+
+#include <stdint.h>
 #include <stddef.h>
-#include <mm/pmm.h>
-#include <mm/vmm.h>
-#include <mm/heap.h>
-#include <lib/string.h>
+#include <stdbool.h>
 
-struct aurix_parameters *boot_params = NULL;
+struct sdt_header {
+	char sig[4];
+	uint32_t len;
+	uint8_t revision;
+	uint8_t csum;
+	char oem_id[6];
+	char oem_table_id[8];
+	uint32_t oem_revision;
+	uint32_t creator_id;
+	uint32_t creator_revision;
+} __attribute__((packed));
 
-void _start(struct aurix_parameters *params)
-{
-	boot_params = params;
-	serial_init();
+struct rsdp {
+	char sig[8];
+	uint8_t csum;
+	char oem_id[6];
+	uint8_t revision;
+	uint32_t rsdt_addr;
+} __attribute__((packed));
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		klog(
-			"Aurix Protocol revision is not compatible: expected %u, but got %u!\n",
-			AURIX_PROTOCOL_REVISION, params->revision);
-	}
+struct xsdp {
+	struct rsdp rsdp;
+	uint32_t len;
+	uint64_t xsdt_addr;
+	uint8_t ext_csum;
+	uint8_t reserved[3];
+} __attribute__((packed));
 
-	klog("Hello from AurixOS!\n");
+struct rsdt {
+	struct sdt_header hdr;
+	uint32_t sdt_ptr[];
+} __attribute__((packed));
 
-	// initialize basic processor features and interrupts
-	cpu_early_init();
+struct xsdt {
+	struct sdt_header hdr;
+	uint64_t sdt_ptr[];
+} __attribute__((packed));
 
-	// initialize memory stuff
-	pmm_init();
-	paging_init();
+bool acpi_init(void *rsdp_addr);
+void *find_sdt(char *sig, size_t len);
 
-	acpi_init((void *)boot_params->rsdp_addr);
-
-	// this should be called when we don't need boot parameters anymore
-	pmm_reclaim_bootparms();
-
-	// TODO: Track kernel boot time
-	klog("Kernel boot complete in 0 seconds\n");
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
-}
+#endif /* _ACPI_ACPI_H */

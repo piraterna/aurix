@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  kinit.c */
+/* Module Name:  madt.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,52 +20,11 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
-#include <acpi/acpi.h>
-#include <cpu/cpu.h>
-#include <debug/uart.h>
-#include <debug/print.h>
-#include <stddef.h>
-#include <mm/pmm.h>
-#include <mm/vmm.h>
-#include <mm/heap.h>
-#include <lib/string.h>
+#ifndef _ACPI_MADT_H
+#define _ACPI_MADT_H
 
-struct aurix_parameters *boot_params = NULL;
+struct madt {} __attribute__((packed));
 
-void _start(struct aurix_parameters *params)
-{
-	boot_params = params;
-	serial_init();
+void acpi_madt_init();
 
-	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		klog(
-			"Aurix Protocol revision is not compatible: expected %u, but got %u!\n",
-			AURIX_PROTOCOL_REVISION, params->revision);
-	}
-
-	klog("Hello from AurixOS!\n");
-
-	// initialize basic processor features and interrupts
-	cpu_early_init();
-
-	// initialize memory stuff
-	pmm_init();
-	paging_init();
-
-	acpi_init((void *)boot_params->rsdp_addr);
-
-	// this should be called when we don't need boot parameters anymore
-	pmm_reclaim_bootparms();
-
-	// TODO: Track kernel boot time
-	klog("Kernel boot complete in 0 seconds\n");
-
-	for (;;) {
-#ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
-#elif __aarch64__
-		__asm__ volatile("wfe");
-#endif
-	}
-}
+#endif /* _ACPI_MADT_H */
