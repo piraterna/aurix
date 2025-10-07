@@ -23,7 +23,7 @@
 #include <acpi/acpi.h>
 #include <acpi/madt.h>
 #include <boot/aurix.h>
-#include <debug/print.h>
+#include <debug/log.h>
 #include <lib/string.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -49,16 +49,18 @@ bool acpi_init(void *rsdp_addr)
 {
 	uint8_t checksum = 0;
 	void *rsdp_ptr = (void *)((uintptr_t)rsdp_addr + boot_params->hhdm_offset);
-	struct xsdp *rsdp = (struct xsdp *)((uintptr_t)rsdp_addr + boot_params->hhdm_offset);
+	struct xsdp *rsdp =
+		(struct xsdp *)((uintptr_t)rsdp_addr + boot_params->hhdm_offset);
 	is_xsdt = rsdp->rsdp.revision >= 2;
 
-	for (size_t i = 0; i < (is_xsdt ? sizeof(struct xsdp) : sizeof(struct rsdp)); i++) {
+	for (size_t i = 0;
+		 i < (is_xsdt ? sizeof(struct xsdp) : sizeof(struct rsdp)); i++) {
 		checksum += *((uint8_t *)rsdp_ptr);
 		rsdp_ptr++;
 	}
 
 	if (checksum != 0) {
-		klog("Invalid RSDP checksum!\n");
+		warn("Invalid RSDP checksum!\n");
 	}
 
 	if (is_xsdt) {
@@ -75,13 +77,16 @@ bool acpi_init(void *rsdp_addr)
 
 void *find_sdt(char *sig, size_t len)
 {
-	size_t sdt_len = is_xsdt ? (xsdt->hdr.len - sizeof(struct sdt_header) / 8) : (rsdt->hdr.len - sizeof(struct sdt_header) / 4);
+	size_t sdt_len = is_xsdt ? (xsdt->hdr.len - sizeof(struct sdt_header) / 8) :
+							   (rsdt->hdr.len - sizeof(struct sdt_header) / 4);
 	struct sdt_header *hdr;
 	for (size_t i = 0; i < sdt_len; i++) {
 		if (is_xsdt) {
-			hdr = (struct sdt_header *)(xsdt->sdt_ptr[i] + boot_params->hhdm_offset);
+			hdr = (struct sdt_header *)(xsdt->sdt_ptr[i] +
+										boot_params->hhdm_offset);
 		} else {
-			hdr = (struct sdt_header *)(rsdt->sdt_ptr[i] + boot_params->hhdm_offset);
+			hdr = (struct sdt_header *)(rsdt->sdt_ptr[i] +
+										boot_params->hhdm_offset);
 		}
 
 		if (strncmp(hdr->sig, sig, len) == 0) {

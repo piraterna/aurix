@@ -27,7 +27,7 @@
 #include <lib/align.h>
 #include <sys/spinlock.h>
 #include <lib/string.h>
-#include <debug/print.h>
+#include <debug/log.h>
 
 #define PAGE_CACHE_SIZE 1024
 #define MIN_ALIGN PAGE_SIZE
@@ -80,7 +80,7 @@ void pmm_init(void)
 	uint64_t high = 0;
 	free_pages = 0;
 
-	klog("Dumping memory map:\n");
+	debug("Dumping memory map:\n");
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE) {
@@ -90,8 +90,8 @@ void pmm_init(void)
 			free_pages += e->size / PAGE_SIZE;
 		}
 
-		klog("Entry %u: 0x%llx, size=%llu bytes, type=%s\n", i, e->base,
-			 e->size, type_to_str(e->type));
+		debug("Entry %u: 0x%llx, size=%llu bytes, type=%s\n", i, e->base,
+			  e->size, type_to_str(e->type));
 	}
 
 	bitmap_pages = high / PAGE_SIZE;

@@ -22,7 +22,7 @@
 
 #include <arch/cpu/cpu.h>
 #include <boot/aurix.h>
-#include <debug/print.h>
+#include <debug/log.h>
 #include <lib/align.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
@@ -42,13 +42,13 @@ extern char _end_data[];
 bool paging_init(void)
 {
 	if (kernel_pm) {
-		klog("Kernel pagemap is already initialized!\n");
+		warn("Kernel pagemap is already initialized!\n");
 		return false;
 	}
 
 	kernel_pm = palloc(1);
 	if (!kernel_pm) {
-		klog("Failed to allocate kernel pagemap!\n");
+		error("Failed to allocate kernel pagemap!\n");
 		return false;
 	}
 
@@ -62,7 +62,8 @@ bool paging_init(void)
 	for (uint32_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 
-		klog("%u: base=%p, size=%llu, type=%u\n", i, e->base, e->size, e->type);
+		debug("%u: base=%p, size=%llu, type=%u\n", i, e->base, e->size,
+			  e->type);
 
 		if (e->type == AURIX_MMAP_RESERVED || e->type == AURIX_MMAP_KERNEL)
 			continue;
@@ -123,7 +124,7 @@ bool paging_init(void)
 	return true;
 }
 
-static void inline _map(pagetable *pm, uintptr_t virt, uintptr_t phys,
+static inline void _map(pagetable *pm, uintptr_t virt, uintptr_t phys,
 						uint64_t flags)
 {
 	uint64_t pml1_idx = (virt >> 12) & 0x1ff;
@@ -167,7 +168,7 @@ static void inline _map(pagetable *pm, uintptr_t virt, uintptr_t phys,
 		invlpg((void *)virt);
 }
 
-static void inline _unmap(pagetable *pm, uintptr_t virt)
+static inline void _unmap(pagetable *pm, uintptr_t virt)
 {
 	uint64_t pml1_idx = (virt >> 12) & 0x1ff;
 	uint64_t pml2_idx = (virt >> 21) & 0x1ff;
@@ -200,7 +201,7 @@ static void inline _unmap(pagetable *pm, uintptr_t virt)
 	return;
 
 not_mapped:
-	klog("_unmap(): Page at address 0x%llx not mapped.\n", virt);
+	warn("_unmap(): Page at address 0x%llx not mapped.\n", virt);
 }
 
 void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
@@ -250,13 +251,11 @@ pagetable *create_pagemap()
 {
 	pagetable *pm = (pagetable *)palloc(1);
 	if (!pm) {
-		klog("create_pagemap(): Failed to allocate memory for a new pm.\n");
+		error("create_pagemap(): Failed to allocate memory for a new pm.\n");
 		return NULL;
 	}
 	pm = (pagetable *)ALIGN_UP((uint64_t)pm, PAGE_SIZE);
 	memset(pm, 0, sizeof(pagetable));
-
-	klog("create_pagemap(): Created new pm at 0x%llx\n", (uint64_t)pm);
 	return pm;
 }
 
@@ -271,33 +270,32 @@ uintptr_t virt_to_phys(pagetable *pm, uintptr_t virt)
 	uint64_t pml1_idx = (virt >> 12) & 0x1ff;
 
 	if (!(pm->entries[pml4_idx] & VMM_PRESENT)) {
-		klog("virt_to_phys(): No mapping at PML4 for virt 0x%llx\n", virt);
+		warn("virt_to_phys(): No mapping at PML4 for virt 0x%llx\n", virt);
 		return 0;
 	}
 
 	pagetable *pml3_table =
 		(pagetable *)(pm->entries[pml4_idx] & 0x000FFFFFFFFFF000);
 	if (!(pml3_table->entries[pml3_idx] & VMM_PRESENT)) {
-		klog("virt_to_phys(): No mapping at PML3 for virt 0x%llx\n", virt);
+		warn("virt_to_phys(): No mapping at PML3 for virt 0x%llx\n", virt);
 		return 0;
 	}
 
 	pagetable *pml2_table =
 		(pagetable *)(pml3_table->entries[pml3_idx] & 0x000FFFFFFFFFF000);
 	if (!(pml2_table->entries[pml2_idx] & VMM_PRESENT)) {
-		klog("virt_to_phys(): No mapping at PML2 for virt 0x%llx\n", virt);
+		warn("virt_to_phys(): No mapping at PML2 for virt 0x%llx\n", virt);
 		return 0;
 	}
 
 	pagetable *pml1_table =
 		(pagetable *)(pml2_table->entries[pml2_idx] & 0x000FFFFFFFFFF000);
 	if (!(pml1_table->entries[pml1_idx] & VMM_PRESENT)) {
-		klog("virt_to_phys(): No mapping at PML1 for virt 0x%llx\n", virt);
+		warn("virt_to_phys(): No mapping at PML1 for virt 0x%llx\n", virt);
 		return 0;
 	}
 
 	uintptr_t phys =
 		(pml1_table->entries[pml1_idx] & 0x000FFFFFFFFFF000) | (virt & 0xFFF);
-	klog("virt_to_phys(): Translated 0x%llx -> 0x%llx\n", virt, phys);
 	return phys;
 }

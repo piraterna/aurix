@@ -25,7 +25,7 @@
 #include <lib/string.h>
 #include <lib/align.h>
 #include <stdbool.h>
-#include <debug/print.h>
+#include <debug/log.h>
 
 vctx_t *vinit(pagetable *pm, uint64_t start)
 {
@@ -196,7 +196,7 @@ void *vadd(vctx_t *ctx, uint64_t vaddr, uint64_t paddr, size_t pages,
 		if ((vaddr >= rstart && vaddr < rend) ||
 			(vend > rstart && vend <= rend) ||
 			(vaddr <= rstart && vend >= rend)) {
-			klog("warning: vadd: overlapping region at 0x%lx\n", vaddr);
+			warn("vadd: overlapping region at 0x%lx\n", vaddr);
 			return NULL;
 		}
 		region = region->next;

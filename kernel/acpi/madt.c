@@ -22,11 +22,11 @@
 
 #include <acpi/acpi.h>
 #include <acpi/madt.h>
-#include <debug/print.h>
+#include <debug/log.h>
 #include <lib/string.h>
 
 void acpi_madt_init()
 {
 	void *madt_addr = find_sdt("APIC", 4);
-	klog("MADT Address: 0x%llx\n", madt_addr);
+	info("MADT Address: 0x%llx\n", madt_addr);
 }

@@ -60,6 +60,10 @@ KERNEL_CFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d) \
 				-D__$(ARCH) \
 				-std=c99 \
+				-Wall \
+				-Wextra \
+				-Werror \
+				-Wno-unused-function \
 				-ffreestanding \
 				-fno-omit-frame-pointer \
 				-fno-stack-protector \

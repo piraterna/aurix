@@ -22,7 +22,7 @@
 
 #include <arch/cpu/cpu.h>
 #include <cpu/trace.h>
-#include <debug/print.h>
+#include <debug/log.h>
 #include <stdint.h>
 
 void stack_trace(uint16_t max_depth)
@@ -34,7 +34,7 @@ void stack_trace(uint16_t max_depth)
 		if (frame->rip <= 0xffffffff80000000)
 			break;
 
-		klog("[%llx] 0x%.16llx\n", frame, frame->rip);
+		debug("[%llx] 0x%.16llx\n", frame, frame->rip);
 		frame = frame->rbp;
 	}
 }

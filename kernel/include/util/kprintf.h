@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  print.c */
+/* Module Name:  kprint.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,34 +20,9 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#define NANOPRINTF_IMPLEMENTATION
-#define NANOPRINTF_USE_FIELD_WIDTH_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_PRECISION_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_FLOAT_FORMAT_SPECIFIERS 0
-#define NANOPRINTF_USE_LARGE_FORMAT_SPECIFIERS 1
-#define NANOPRINTF_USE_BINARY_FORMAT_SPECIFIERS 0
-#define NANOPRINTF_USE_WRITEBACK_FORMAT_SPECIFIERS 0
-#define NANOPRINTF_USE_SMALL_FORMAT_SPECIFIERS 1
-#include <nanoprintf.h>
+#ifndef _UTIL_PRINT_H
+#define _UTIL_PRINT_H
 
-#include <debug/print.h>
-#include <debug/uart.h>
+void kprintf(const char *fmt, ...);
 
-#include <stdarg.h>
-#include <stdint.h>
-
-int32_t _fltused = 0;
-int32_t __eqdf2 = 0;
-int32_t __ltdf2 = 0;
-
-void klog(const char *fmt, ...)
-{
-	va_list args;
-	char buf[1024];
-
-	va_start(args, fmt);
-	npf_vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	serial_sendstr(buf);
-}
+#endif /* _UTIL_PRINT_H */

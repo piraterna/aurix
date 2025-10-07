@@ -24,7 +24,7 @@
 #include <acpi/acpi.h>
 #include <cpu/cpu.h>
 #include <debug/uart.h>
-#include <debug/print.h>
+#include <debug/log.h>
 #include <stddef.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
@@ -39,12 +39,14 @@ void _start(struct aurix_parameters *params)
 	serial_init();
 
 	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		klog(
+		error(
 			"Aurix Protocol revision is not compatible: expected %u, but got %u!\n",
 			AURIX_PROTOCOL_REVISION, params->revision);
+		for (;;)
+			;
 	}
 
-	klog("Hello from AurixOS!\n");
+	info("Hello from AurixOS!\n");
 
 	// initialize basic processor features and interrupts
 	cpu_early_init();
@@ -59,7 +61,7 @@ void _start(struct aurix_parameters *params)
 	pmm_reclaim_bootparms();
 
 	// TODO: Track kernel boot time
-	klog("Kernel boot complete in 0 seconds\n");
+	info("Kernel boot complete in 0 seconds\n");
 
 	for (;;) {
 #ifdef __x86_64__
