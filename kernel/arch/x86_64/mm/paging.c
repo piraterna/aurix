@@ -62,9 +62,6 @@ bool paging_init(void)
 	for (uint32_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 
-		debug("%u: base=%p, size=%llu, type=%u\n", i, e->base, e->size,
-			  e->type);
-
 		if (e->type == AURIX_MMAP_RESERVED || e->type == AURIX_MMAP_KERNEL)
 			continue;
 
