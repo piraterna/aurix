@@ -36,6 +36,13 @@
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
 
+const char *aurix_banner =
+	"    _              _       ___  ____\n"
+	"   / \\  _   _ _ __(_)_  __/ _ \\/ ___|\n"
+	"  / _ \\| | | | '__| \\ \\/ / | | \\___ \\\n"
+	" / ___ \\ |_| | |  | |>  <| |_| |___) |\n"
+	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2025 Jozef Nagy";
+
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
@@ -60,6 +67,7 @@ void _start(struct aurix_parameters *params)
 	if (!ft_ctx)
 		error("failed to init flanterm\n");
 
+	kprintf("%s\n", aurix_banner);
 	info("Hello from AurixOS!\n");
 
 	// initialize basic processor features and interrupts
