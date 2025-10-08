@@ -117,25 +117,29 @@ bool paging_init(void)
 	map_pages(NULL, stack, stack, 16 * 1024,
 			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
-	uint64_t text_end = ALIGN_UP((uint64_t)_end_text, PAGE_SIZE);
-	uint64_t text_size = text_end - (uintptr_t)_start_text;
-	uintptr_t text_phys = (uintptr_t)_start_text - 0xffffffff80000000ULL +
-						  boot_params->kernel_addr;
-	map_pages(NULL, (uintptr_t)_start_text, text_phys, text_size, VMM_PRESENT);
+	uintptr_t kvirt = 0xffffffff80000000ULL;
+	uintptr_t kphys = boot_params->kernel_addr;
 
-	uint64_t rodata_end = ALIGN_UP((uint64_t)_end_rodata, PAGE_SIZE);
-	uint64_t rodata_size = rodata_end - (uintptr_t)_start_rodata;
-	uintptr_t rodata_phys = (uintptr_t)_start_rodata - 0xffffffff80000000ULL +
-							boot_params->kernel_addr;
-	map_pages(NULL, (uintptr_t)_start_rodata, rodata_phys, rodata_size,
-			  VMM_PRESENT | VMM_NX);
+	uint64_t text_start = ALIGN_DOWN((uintptr_t)_start_text, PAGE_SIZE);
+	uint64_t text_end = ALIGN_UP((uintptr_t)_end_text, PAGE_SIZE);
+	for (uint64_t addr = text_start; addr < text_end; addr += PAGE_SIZE) {
+		uint64_t phys = addr - kvirt + kphys;
+		map_page(NULL, addr, phys, VMM_PRESENT);
+	}
 
-	uint64_t data_end = ALIGN_UP((uint64_t)_end_data, PAGE_SIZE);
-	uint64_t data_size = data_end - (uintptr_t)_start_data;
-	uintptr_t data_phys = (uintptr_t)_start_data - 0xffffffff80000000ULL +
-						  boot_params->kernel_addr;
-	map_pages(NULL, (uintptr_t)_start_data, data_phys, data_size,
-			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	uint64_t rodata_start = ALIGN_DOWN((uintptr_t)_start_rodata, PAGE_SIZE);
+	uint64_t rodata_end = ALIGN_UP((uintptr_t)_end_rodata, PAGE_SIZE);
+	for (uint64_t addr = rodata_start; addr < rodata_end; addr += PAGE_SIZE) {
+		uint64_t phys = addr - kvirt + kphys;
+		map_page(NULL, addr, phys, VMM_PRESENT | VMM_NX);
+	}
+
+	uint64_t data_start = ALIGN_DOWN((uintptr_t)_start_data, PAGE_SIZE);
+	uint64_t data_end = ALIGN_UP((uintptr_t)_end_data, PAGE_SIZE);
+	for (uint64_t addr = data_start; addr < data_end; addr += PAGE_SIZE) {
+		uint64_t phys = addr - kvirt + kphys;
+		map_page(NULL, addr, phys, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	}
 
 	unmap_page(NULL, (uintptr_t)NULL);
 
