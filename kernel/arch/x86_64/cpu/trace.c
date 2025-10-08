@@ -24,17 +24,31 @@
 #include <cpu/trace.h>
 #include <debug/log.h>
 #include <stdint.h>
+#include <mm/vmm.h>
 
 void stack_trace(uint16_t max_depth)
 {
-	struct stack_frame *frame;
-	__asm__ volatile("movq %%rbp, %0" : "=r"(frame)::"memory");
+	uintptr_t rbp;
+	__asm__ volatile("movq %%rbp, %0" : "=r"(rbp)::"memory");
 
-	for (uint64_t f = 0; frame && f < max_depth; f++) {
-		if (frame->rip <= 0xffffffff80000000)
+	uintptr_t prev_rbp = 0;
+	for (uint16_t depth = 0; depth < max_depth; depth++) {
+		if (rbp == 0)
 			break;
-
-		debug("[%llx] 0x%.16llx\n", frame, frame->rip);
-		frame = frame->rbp;
+		if (rbp & 0x7) /* must be 8-byte aligned */
+			break;
+		if (virt_to_phys(NULL, rbp) == 0 ||
+			virt_to_phys(NULL, rbp + sizeof(void *)) == 0)
+			break;
+		uintptr_t *rbp_ptr = (uintptr_t *)rbp;
+		uintptr_t saved_rip = rbp_ptr[1];
+		debug("[%p] 0x%.16llx\n", (void *)rbp, (unsigned long long)saved_rip);
+		if (saved_rip <= 0xffffffff80000000ULL)
+			break;
+		uintptr_t next_rbp = rbp_ptr[0];
+		if (next_rbp == rbp || next_rbp == prev_rbp)
+			break;
+		prev_rbp = rbp;
+		rbp = next_rbp;
 	}
 }

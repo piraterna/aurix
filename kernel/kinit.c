@@ -107,6 +107,12 @@ void _start(struct aurix_parameters *params)
 	// TODO: Track kernel boot time
 	info("Kernel boot complete in ? seconds\n");
 
+	heap_init(vinit(kernel_pm, 0x1000));
+	char *a = kmalloc(1024);
+	*a = 'a';
+	debug("Allocated 1024 bytes: %p\n", a);
+	kfree(a);
+
 	for (;;) {
 #ifdef __x86_64__
 		__asm__ volatile("cli;hlt");
