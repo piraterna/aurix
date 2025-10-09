@@ -46,7 +46,7 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
-QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio 
+QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
@@ -142,10 +142,7 @@ run: livecd
 .PHONY: run-uefi
 run-uefi: livecd ovmf
 	@printf ">>> Running QEMU (UEFI)...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) \
-		-drive if=pflash,format=raw,unit=0,file=ovmf/ovmf-$(ARCH).fd,readonly=on \
-		-drive if=pflash,format=raw,unit=1,file=ovmf/ovmf-$(ARCH)-vars.fd \
-		-cdrom $(LIVECD)
+	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -bios ovmf/ovmf-$(ARCH).fd -cdrom $(LIVECD)
 		
 .PHONY: format
 format:
