@@ -21,6 +21,7 @@
 #include <arch/util/io.h>
 #include <debug/log.h>
 #include <stdbool.h>
+#include <lib/string.h>
 
 #define CMOS_INDEX_PORT 0x70
 #define CMOS_DATA_PORT 0x71
@@ -119,6 +120,7 @@ rtc_error_t rtc_init(void)
 
 rtc_error_t rtc_get_time(rtc_time_t *time)
 {
+	memset(time, 0, sizeof(rtc_time_t));
 	if (!rtc_initialized) {
 		error("RTC: Not initialized");
 		return RTC_ERR_NOT_INIT;

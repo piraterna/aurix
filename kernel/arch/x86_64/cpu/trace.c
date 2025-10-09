@@ -42,7 +42,7 @@ void stack_trace(uint16_t max_depth)
 			break;
 		uintptr_t *rbp_ptr = (uintptr_t *)rbp;
 		uintptr_t saved_rip = rbp_ptr[1];
-		debug("[%p] 0x%.16llx\n", (void *)rbp, (unsigned long long)saved_rip);
+		trace("[%p] 0x%.16llx\n", (void *)rbp, (unsigned long long)saved_rip);
 		if (saved_rip <= 0xffffffff80000000ULL)
 			break;
 		uintptr_t next_rbp = rbp_ptr[0];
