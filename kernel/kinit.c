@@ -92,7 +92,6 @@ void _start(struct aurix_parameters *params)
 		for (;;)
 			;
 	}
-	debug("RTC initialized with status: %d\n", err);
 
 	err = rtc_get_time(&time);
 	if (err != RTC_OK) {

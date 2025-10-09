@@ -80,7 +80,6 @@ void pmm_init(void)
 	uint64_t high = 0;
 	free_pages = 0;
 
-	debug("Dumping memory map:\n");
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE) {
@@ -89,9 +88,6 @@ void pmm_init(void)
 				high = top;
 			free_pages += e->size / PAGE_SIZE;
 		}
-
-		debug("Entry %u: 0x%llx, size=%llu bytes, type=%s\n", i, e->base,
-			  e->size, type_to_str(e->type));
 	}
 
 	bitmap_pages = high / PAGE_SIZE;
