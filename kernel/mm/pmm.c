@@ -110,6 +110,11 @@ void pmm_init(void)
 		}
 	}
 
+	if (!bitmap) {
+		error("Failed to allocate bitmap!\n");
+		return;
+	}
+
 	cache_size = PAGE_CACHE_SIZE;
 	cache_index = 0;
 	memset(page_cache, 0, sizeof(page_cache));
@@ -132,13 +137,26 @@ void pmm_init(void)
 void pmm_reclaim_bootparms()
 {
 	map_pages(NULL, (uintptr_t)bitmap,
-			  (uintptr_t)bitmap - boot_params->hhdm_offset, bitmap_pages,
+			  (uintptr_t)(bitmap - boot_params->hhdm_offset), bitmap_size,
 			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+
+	if (boot_params->mmap_entries == 0 || boot_params->mmap_entries > 1000) {
+		error("Invalid mmap_entries: %llu\n", boot_params->mmap_entries);
+		return;
+	}
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE ||
 			e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
+			if (e->base >= (uintptr_t)(bitmap - boot_params->hhdm_offset) &&
+				e->base < (uintptr_t)(bitmap - boot_params->hhdm_offset) +
+							  bitmap_size) {
+				trace(
+					"Skipping reclaim of bitmap region: base=0x%llx, size=%llu\n",
+					e->base, e->size);
+				continue;
+			}
 			e->type = AURIX_MMAP_USABLE;
 			pfree((void *)e->base, ALIGN_UP(e->size, PAGE_SIZE) / PAGE_SIZE);
 		}

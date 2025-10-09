@@ -1,13 +1,11 @@
-<h1 align="center">
+<div align="center">
   <a href="https://git.piraterna.org/piraterna/aurix">
     <img src="docs/images/logo.png" alt="Logo" width="100" height="100">
   </a>
-</h1>
+  <h1>AurixOS</h1>
+</div>
 
 <div align="center">
-  AurixOS
-  <br />
-  <br />
   <a href="https://git.piraterna.org/piraterna/aurix/issues/new?assignees=&labels=bug&template=01_BUG_REPORT.md&title=bug%3A+">Report a Bug</a>
   ·
   <a href="https://git.piraterna.org/piraterna/aurix/issues/new?assignees=&labels=enhancement&template=02_FEATURE_REQUEST.md&title=feat%3A+">Request a Feature</a>

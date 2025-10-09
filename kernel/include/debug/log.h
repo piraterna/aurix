@@ -1,20 +1,20 @@
 /*********************************************************************************/
-/* Module Name:  log.h */
-/* Project:      AurixOS */
+/* Module Name: log.h                                                            */
+/* Project:     AurixOS                                                          */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy */
+/* Copyright (c) 2024-2025 Jozef Nagy                                            */
 /*                                                                               */
-/* This source is subject to the MIT License. */
-/* See License.txt in the root of this repository. */
-/* All other rights reserved. */
+/* This source is subject to the MIT License.                                    */
+/* See License.txt in the root of this repository.                               */
+/* All other rights reserved.                                                    */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
-/* SOFTWARE. */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR     */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,       */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE     */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER          */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,   */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE   */
+/* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
 #ifndef _LOG_H
@@ -23,31 +23,55 @@
 #include <util/kprintf.h>
 #include <stdarg.h>
 
-#define LOG_COLORS 1
-#if LOG_COLORS
-#define C_INFO "\033[92m"
-#define C_WARN "\033[93m"
-#define C_ERR "\033[91m"
-#define C_DBG "\033[94m"
-#define C_RESET "\033[0m"
-#else
-#define C_INFO ""
-#define C_WARN ""
-#define C_ERR ""
-#define C_DBG ""
-#define C_RESET ""
+#ifndef DEBUG
+#define DEBUG 1
 #endif
 
-#define info(fmt, ...) \
-	kprintf(C_INFO "info @ %s(): " C_RESET fmt, __func__, ##__VA_ARGS__)
-#define warn(fmt, ...) \
-	kprintf(C_WARN "warn @ %s(): " C_RESET fmt, __func__, ##__VA_ARGS__)
-#define error(fmt, ...) \
-	kprintf(C_ERR "error @ %s(): " C_RESET fmt, __func__, ##__VA_ARGS__)
-#define debug(fmt, ...) \
-	kprintf(C_DBG "debug @ %s(): " C_RESET fmt, __func__, ##__VA_ARGS__)
+#define LOG_COLOR_INFO "\033[92m" /* Green */
+#define LOG_COLOR_WARN "\033[93m" /* Yellow */
+#define LOG_COLOR_ERROR "\033[91m" /* Red */
+#define LOG_COLOR_DEBUG "\033[94m" /* Blue */
+#define LOG_COLOR_TEST "\033[96m" /* Light Cyan */
+#define LOG_COLOR_TRACE "\033[95m" /* Magenta */
+#define LOG_COLOR_CRITICAL "\033[31m" /* Bright Red */
+#define LOG_COLOR_SUCCESS "\033[32m" /* Bright Green */
+#define LOG_COLOR_RESET "\033[0m" /* Reset */
 
-static inline __attribute__((deprecated("klog is deprecated"))) void
+// TODO: Proper time since boot or whatever
+#define _log_callback(color, level, fmt, ...) \
+	kprintf("[0.000] " color "%s: " LOG_COLOR_RESET fmt, level, ##__VA_ARGS__)
+
+#define info(fmt, ...) _log_callback(LOG_COLOR_INFO, "info", fmt, ##__VA_ARGS__)
+
+#define warn(fmt, ...) _log_callback(LOG_COLOR_WARN, "warn", fmt, ##__VA_ARGS__)
+
+#define error(fmt, ...) \
+	_log_callback(LOG_COLOR_ERROR, "error", fmt, ##__VA_ARGS__)
+
+#define test(fmt, ...) _log_callback(LOG_COLOR_TEST, "test", fmt, ##__VA_ARGS__)
+
+#define critical(fmt, ...) \
+	_log_callback(LOG_COLOR_CRITICAL, "crit", fmt, ##__VA_ARGS__)
+
+#define success(fmt, ...) \
+	_log_callback(LOG_COLOR_SUCCESS, "ok", fmt, ##__VA_ARGS__)
+
+#if DEBUG
+#define debug(fmt, ...) \
+	_log_callback(LOG_COLOR_DEBUG, "debug", fmt, ##__VA_ARGS__)
+#else
+#define debug(fmt, ...) ((void)0)
+#endif
+
+#if DEBUG
+#define trace(fmt, ...) \
+	_log_callback(LOG_COLOR_TRACE, "trace", fmt, ##__VA_ARGS__)
+#else
+#define trace(fmt, ...) ((void)0)
+#endif
+
+static inline __attribute__((
+	deprecated("klog is deprecated, use specific log macros instead"))) void
 klog(const char *fmt, ...)
 {
 	va_list args;
