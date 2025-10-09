@@ -55,7 +55,7 @@ struct aurix_parameters {
 	uintptr_t smbios_addr;
 
 	// FRAMEBUFFER
-	struct aurix_framebuffer *framebuffer;
+	struct aurix_framebuffer framebuffer;
 };
 ```
 
