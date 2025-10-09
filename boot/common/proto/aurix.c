@@ -179,38 +179,41 @@ bool aurix_get_memmap(struct aurix_parameters *params, size_t kernel_size,
 		params->framebuffer.height * params->framebuffer.pitch, PAGE_SIZE);
 	uintptr_t framebuffer_addr =
 		ROUND_DOWN(params->framebuffer.addr - params->hhdm_offset, PAGE_SIZE);
-
-	bool kernel_added = false;
-	bool params_added = false;
-	bool mmap_added = false;
-	bool framebuffer_added = false;
+	
+	size_t cmdline_size = ROUND_UP(sizeof(params->cmdline), PAGE_SIZE);
+	uintptr_t cmdline_addr = (params->cmdline == NULL) ? 0 : ROUND_DOWN((uintptr_t)params->cmdline - params->hhdm_offset, PAGE_SIZE);
 
 	for (uint32_t i = 0; i < mmap_entries; i++) {
 		uintptr_t base = params->mmap[i].base;
 		size_t size = params->mmap[i].size;
 
 		// create a kernel entry!
-		if (!kernel_added && base <= kernel_addr &&
+		if (base <= kernel_addr &&
 			base + size >= kernel_addr) {
 			mmap_add_entry(&params->mmap, kernel_addr, kernel_size,
 						   AURIX_MMAP_KERNEL, &i, &params->mmap_entries, true);
 		}
 
 		// and the boot parameters!
-		if (!params_added && base <= params_addr &&
+		if (base <= params_addr &&
 			base + size >= params_addr) {
 			mmap_add_entry(&params->mmap, params_addr, params_size,
 						   AURIX_MMAP_BOOTLOADER_RECLAIMABLE, &i,
 						   &params->mmap_entries, true);
 		}
-		if (!mmap_added && base <= mmap_addr && base + size >= mmap_addr) {
+		if (base <= mmap_addr && base + size >= mmap_addr) {
 			mmap_add_entry(&params->mmap, mmap_addr, mmap_size,
+						   AURIX_MMAP_BOOTLOADER_RECLAIMABLE, &i,
+						   &params->mmap_entries, true);
+		}
+		if (cmdline_addr != 0 && base <= cmdline_addr && base + size >= cmdline_addr) {
+			mmap_add_entry(&params->mmap, cmdline_addr, cmdline_size,
 						   AURIX_MMAP_BOOTLOADER_RECLAIMABLE, &i,
 						   &params->mmap_entries, true);
 		}
 
 		// ...and the framebuffer
-		if (!framebuffer_added && base + size <= framebuffer_addr &&
+		if (base + size <= framebuffer_addr &&
 			(i == mmap_entries - 1 ||
 			 (i != mmap_entries - 1 &&
 			  params->mmap[i + 1].base >=
@@ -223,6 +226,40 @@ bool aurix_get_memmap(struct aurix_parameters *params, size_t kernel_size,
 
 	return true;
 }
+
+#ifdef AXBOOT_UEFI
+#include <efi.h>
+#include <efilib.h>
+
+EFI_GUID bootargs_guid = {0xd8637320, 0x2230, 0x4748, {0xb8, 0xe8, 0xa6, 0x9d, 0x8e, 0x97, 0x08, 0xf6}};
+
+char *aurix_get_cmdline()
+{
+	char *bootargs = NULL;
+	EFI_UINTN size = 0;
+	EFI_STATUS status;
+	status = gSystemTable->RuntimeServices->GetVariable(L"boot-args", &bootargs_guid, NULL, &size, NULL);
+	if (EFI_ERROR(status) && status != EFI_BUFFER_TOO_SMALL) {
+		debug("aurix_get_cmdline(): boot-args not present: %s (0x%llx)\n", efi_status_to_str(status), status);
+		return NULL;
+	}
+
+	bootargs = mem_alloc((size_t)size);
+	if (!bootargs) {
+		debug("aurix_get_cmdline(): Failed to allocate memory for boot arguments!\n");
+		return NULL;
+	}
+
+	status = gSystemTable->RuntimeServices->GetVariable(L"boot-args", &bootargs_guid, NULL, &size, NULL);
+	if (EFI_ERROR(status)) {
+		debug("aurix_get_cmdline(): Failed to fetch boot-args: %s (0x%llx)\n", efi_status_to_str(status), status);
+		mem_free(bootargs);
+		return NULL;
+	}
+
+	return bootargs;
+}
+#endif
 
 bool aurix_get_framebuffer(struct aurix_parameters *params)
 {
@@ -295,6 +332,14 @@ void aurix_load(char *kernel_path)
 
 	parameters.kernel_addr = kernel_addr;
 	parameters.hhdm_offset = 0xffff800000000000;
+
+	// get boot arguments
+#ifdef AXBOOT_UEFI
+	parameters.cmdline = aurix_get_cmdline();
+#else
+#warning Passing boot arguments is supported on UEFI only
+	parameters.cmdline = NULL;
+#endif
 
 	// get framebuffer information
 	if (!aurix_get_framebuffer(&parameters)) {

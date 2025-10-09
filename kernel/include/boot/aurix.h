@@ -64,6 +64,9 @@ struct aurix_parameters {
 	// PROTOCOL INFO
 	uint8_t revision;
 
+	// BOOT INFO
+	char *cmdline;
+
 	// MEMORY
 	struct aurix_memmap *mmap;
 	uint32_t mmap_entries;
