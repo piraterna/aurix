@@ -184,6 +184,8 @@ void _start(struct aurix_parameters *params)
 
 	info("Kernel boot complete in ? seconds\n");
 
+	debug("kernel cmdline: %s\n", boot_params->cmdline);
+
 	for (;;) {
 #ifdef __x86_64__
 		__asm__ volatile("cli;hlt");

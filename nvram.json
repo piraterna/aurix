@@ -1,0 +1,11 @@
+{
+    "version": 2,
+    "variables": [
+        {
+            "name": "boot-args",
+            "guid": "d8637320-2230-4748-b8e8-a69d8e9708f6",
+            "attr": 7,
+            "data": "7400650073007400"
+        }
+    ]
+}

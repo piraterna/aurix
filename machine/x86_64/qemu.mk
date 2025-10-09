@@ -1,1 +1,1 @@
-QEMU_MACHINE_FLAGS := -M q35
+QEMU_MACHINE_FLAGS := -M q35 -device uefi-vars-x64,jsonfile=nvram.json
