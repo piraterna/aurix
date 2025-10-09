@@ -17,6 +17,7 @@
 
 [![Project license](https://img.shields.io/github/license/piraterna/aurix.svg?style=flat-square)](LICENSE)
 [![Discord Chat](https://img.shields.io/discord/1339349593510510603)](https://discord.com/invite/wBycCxwT9p)
+[![OpenCollective](https://img.shields.io/badge/Support%20us%20on%20-OpenCollective-3b3b3b?style=plastic&logo=opencollective)](https://opencollective.com/piraterna)
 </div>
 
 <details open="open">
