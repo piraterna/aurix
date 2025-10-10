@@ -2,17 +2,10 @@
     "version": 2,
     "variables": [
         {
-            "name": "CustomMode",
-            "guid": "c076ec0c-7028-4399-a072-71ee5c448b9f",
-            "attr": 3,
-            "data": "00"
-        },
-        {
-            "name": "VendorKeysNv",
-            "guid": "8be4df61-93ca-11d2-aa0d-00e098032b8c",
-            "attr": 35,
-            "time": "00000000000000000000000000000000",
-            "data": "00"
+            "name": "boot-args",
+            "guid": "d8637320-2230-4748-b8e8-a69d8e9708f6",
+            "attr": 7,
+            "data": "68656c6c6f00"
         }
     ]
 }
