@@ -142,7 +142,7 @@ run: livecd
 .PHONY: run-uefi
 run-uefi: livecd ovmf
 	@printf ">>> Running QEMU (UEFI)...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -bios ovmf/ovmf-$(ARCH).fd -cdrom $(LIVECD)
+	@echo qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -drive if=pflash,format=raw,readonly=on,file=ovmf/ovmf-$(ARCH).fd -drive if=pflash,format=raw,file=ovmf/ovmf-$(ARCH)-vars.fd -cdrom $(LIVECD)
 		
 .PHONY: format
 format:
