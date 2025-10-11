@@ -58,19 +58,19 @@ typedef struct {
 static test_case_t test_suite[TEST_MAX];
 static uint32_t test_count = 0;
 
-#define TEST_ADD(n, fn)                                                    \
-	do {                                                                   \
-		if (test_count < TEST_MAX) {                                       \
-			test_suite[test_count].name = #n;                              \
-			test_suite[test_count].func = fn;                              \
-			test_suite[test_count].pass_count = 0;                         \
-			test_suite[test_count].fail_count = 0;                         \
-			test_suite[test_count].current = 0;                            \
-			test_count++;                                                  \
-		} else {                                                           \
-			warn("Test suite overflow: cannot add %s, max %d tests\n", #n, \
-				 TEST_MAX);                                                \
-		}                                                                  \
+#define TEST_ADD(fn)                                                        \
+	do {                                                                    \
+		if (test_count < TEST_MAX) {                                        \
+			test_suite[test_count].name = #fn;                              \
+			test_suite[test_count].func = fn;                               \
+			test_suite[test_count].pass_count = 0;                          \
+			test_suite[test_count].fail_count = 0;                          \
+			test_suite[test_count].current = 0;                             \
+			test_count++;                                                   \
+		} else {                                                            \
+			warn("Test suite overflow: cannot add %s, max %d tests\n", #fn, \
+				 TEST_MAX);                                                 \
+		}                                                                   \
 	} while (0)
 
 #define TEST_EXPECT(condition)                      \
@@ -158,7 +158,7 @@ void _start(struct aurix_parameters *params)
 	cpu_early_init();
 
 	pmm_init();
-	TEST_ADD(pmm_test, pmm_test);
+	TEST_ADD(pmm_test);
 	test_run(10);
 
 	paging_init();
@@ -169,7 +169,7 @@ void _start(struct aurix_parameters *params)
 	pmm_reclaim_bootparms();
 
 	heap_init(vinit(kernel_pm, 0x1000));
-	TEST_ADD(heap_test, heap_test);
+	TEST_ADD(heap_test);
 	test_run(10);
 
 	rtc_time_t time;
