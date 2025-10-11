@@ -115,11 +115,10 @@ ovmf:
 	@printf ">>> Downloading OVMF images...\n"
 	@utils/download-ovmf.sh
 
-# TODO: Make it work for mutliple entries (only works for single now, prob issue with ovmf.py or nvram.sh)
 nvram:
 	@printf ">>> Generating NVRAM image...\n"
 	@if [ ! -f nvram.json ]; then \
-		echo "Error: nvram.json not found"; \
+		echo "Error: nvram.json not found in $(ROOT_DIR)"; \
 		exit 1; \
 	fi
 	@if ! command -v jq >/dev/null 2>&1; then \
@@ -133,22 +132,42 @@ nvram:
 		echo "Error: Input file $$INPUT_FD does not exist"; \
 		exit 1; \
 	fi; \
-	cp $$INPUT_FD $$TEMP_FD; \
+	if ! jq -e '.variables' nvram.json >/dev/null; then \
+		echo "Error: nvram.json is missing 'variables' array or is invalid JSON"; \
+		rm -f $$TEMP_FD; \
+		exit 1; \
+	fi; \
 	VARS=$$(jq -c '.variables[]' nvram.json); \
 	INDEX=0; \
+	cp $$INPUT_FD $$OUTPUT_FD; \
 	for VAR in $$VARS; do \
+		if ! echo "$$VAR" | jq -e '.vendor_uuid and .name and .data' >/dev/null; then \
+			echo "Error: Variable at index $$INDEX is missing required fields (vendor_uuid, name, data)"; \
+			rm -f $$TEMP_FD $$OUTPUT_FD; \
+			exit 1; \
+		fi; \
 		VENDOR_UUID=$$(echo "$$VAR" | jq -r '.vendor_uuid'); \
 		NAME=$$(echo "$$VAR" | jq -r '.name'); \
 		DATA=$$(echo "$$VAR" | jq -r '.data'); \
 		if [ $$INDEX -eq 0 ]; then \
 			./utils/nvram.sh $$INPUT_FD $$OUTPUT_FD "$$VENDOR_UUID" "$$NAME" "$$DATA"; \
 		else \
+			cp $$OUTPUT_FD $$TEMP_FD; \
 			./utils/nvram.sh $$TEMP_FD $$OUTPUT_FD "$$VENDOR_UUID" "$$NAME" "$$DATA"; \
 		fi; \
-		cp $$OUTPUT_FD $$TEMP_FD; \
+		if [ $$? -ne 0 ]; then \
+			echo "Error: Failed to process variable at index $$INDEX"; \
+			rm -f $$TEMP_FD $$OUTPUT_FD; \
+			exit 1; \
+		fi; \
 		INDEX=$$((INDEX + 1)); \
 	done; \
-	rm -f $$TEMP_FD
+	rm -f $$TEMP_FD; \
+	if [ $$INDEX -eq 0 ]; then \
+		echo "Warning: No variables defined in nvram.json; copied $$INPUT_FD to $$OUTPUT_FD"; \
+	else \
+		echo "Successfully generated $$OUTPUT_FD with $$INDEX variables"; \
+	fi
 
 .PHONY: livecd
 livecd: install
