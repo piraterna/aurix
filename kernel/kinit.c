@@ -42,6 +42,7 @@ const char *aurix_banner =
 	" / ___ \\ |_| | |  | |>  <| |_| |___) |\n"
 	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2025 Jozef Nagy";
 
+/* ======== TESTS ======== */
 typedef void (*test_func_t)(void);
 typedef unsigned int uint32_t;
 
@@ -127,6 +128,7 @@ static void heap_test(void)
 		kfree(test);
 	}
 }
+/* ====================== */
 
 void _start(struct aurix_parameters *params)
 {

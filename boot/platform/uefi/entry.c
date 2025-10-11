@@ -29,6 +29,8 @@
 #include <power.h>
 #include <print.h>
 
+#include <aurix_logo.h>
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -44,19 +46,44 @@ EFI_STATUS uefi_entry(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 {
 	EFI_STATUS Status;
 	EFI_GUID spp_guid = EFI_SIMPLE_POINTER_PROTOCOL_GUID;
+	EFI_GUID gop_guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 	EFI_SIMPLE_POINTER_PROTOCOL *spp[5];
+	EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
 
 	gImageHandle = ImageHandle;
 	gSystemTable = SystemTable;
 	gBootServices = SystemTable->BootServices;
 
-	// reset input
+	// Reset input
 	gSystemTable->ConIn->Reset(gSystemTable->ConIn, EFI_FALSE);
 
-	// clear the screen
+	// Clear the screen
 	gSystemTable->ConOut->ClearScreen(gSystemTable->ConOut);
 
-	// disable UEFI watchdog
+	// Draw logo in the center of the screen
+	Status = gBootServices->LocateProtocol(&gop_guid, NULL, (void **)&gop);
+	if (EFI_ERROR(Status)) {
+		debug(
+			"uefi_entry(): Failed to locate Graphics Output Protocol: %s (%x)\n",
+			efi_status_to_str(Status), Status);
+	} else {
+		uint32_t screen_width = gop->Mode->Info->HorizontalResolution;
+		uint32_t screen_height = gop->Mode->Info->VerticalResolution;
+		uint32_t dest_x = (screen_width - aurix_logo.width) / 2;
+		uint32_t dest_y = (screen_height - aurix_logo.height) / 2;
+		EFI_GRAPHICS_OUTPUT_BLT_PIXEL *image_buffer =
+			(EFI_GRAPHICS_OUTPUT_BLT_PIXEL *)aurix_logo.pixel_data;
+		Status =
+			gop->Blt(gop, image_buffer, EfiBltBufferToVideo, 0, 0, dest_x,
+					 dest_y, aurix_logo.width, aurix_logo.height,
+					 aurix_logo.width * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL));
+		if (EFI_ERROR(Status)) {
+			debug("uefi_entry(): Failed to draw image: %s (%x)\n",
+				  efi_status_to_str(Status), Status);
+		}
+	}
+
+	// Disable UEFI watchdog
 	Status = gSystemTable->BootServices->SetWatchdogTimer(0, 0, 0, NULL);
 	if (EFI_ERROR(Status)) {
 		debug("uefi_entry(): Couldn't disable UEFI watchdog: %s (%x)\n",
