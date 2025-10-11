@@ -1,9 +1,7 @@
 build/
 release/
 sysroot/
-ovmf/
 .vscode/
-.ccls-cache/
 
 .DS_Store
 Brewfile.lock.json
@@ -13,8 +11,4 @@ Brewfile.lock.json
 *.img
 *.log
 
-.cache/
-compile_commands.json
-
-nvram.fd
-temp*
+nvram.json

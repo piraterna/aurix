@@ -245,17 +245,6 @@ char *aurix_get_cmdline()
 	EFI_UINTN size = 0;
 	EFI_STATUS status;
 
-// HACK: Remove this
-#ifdef _DEBUG
-	char *data = "-v";
-	status = gSystemTable->RuntimeServices->SetVariable(
-		L"boot-args", &bootargs_guid, 7, 3, data);
-	if (EFI_ERROR(status)) {
-		debug("aurix_get_cmdline(): Failed to write boot-args: %s (0x%llx)\n",
-			  efi_status_to_str(status), status);
-	}
-#endif
-
 	status = gSystemTable->RuntimeServices->GetVariable(
 		L"boot-args", &bootargs_guid, NULL, &size, NULL);
 	if (EFI_ERROR(status) && status != EFI_BUFFER_TOO_SMALL) {

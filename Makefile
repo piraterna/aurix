@@ -111,64 +111,6 @@ endif
 endif
 	@$(MAKE) -C kernel install
 
-ovmf:
-	@printf ">>> Downloading OVMF images...\n"
-	@utils/download-ovmf.sh
-
-nvram:
-	@printf ">>> Generating NVRAM image...\n"
-	@if [ ! -f nvram.json ]; then \
-		echo "Error: nvram.json not found in $(ROOT_DIR)"; \
-		exit 1; \
-	fi
-	@if ! command -v jq >/dev/null 2>&1; then \
-		echo "Error: 'jq' is required but not installed"; \
-		exit 1; \
-	fi
-	@INPUT_FD=$(ROOT_DIR)/ovmf/ovmf-$(ARCH)-vars.fd; \
-	OUTPUT_FD=$(ROOT_DIR)/nvram.fd; \
-	TEMP_FD=$(ROOT_DIR)/nvram_temp.fd; \
-	if [ ! -f "$$INPUT_FD" ]; then \
-		echo "Error: Input file $$INPUT_FD does not exist"; \
-		exit 1; \
-	fi; \
-	if ! jq -e '.variables' nvram.json >/dev/null; then \
-		echo "Error: nvram.json is missing 'variables' array or is invalid JSON"; \
-		rm -f $$TEMP_FD; \
-		exit 1; \
-	fi; \
-	VARS=$$(jq -c '.variables[]' nvram.json); \
-	INDEX=0; \
-	cp $$INPUT_FD $$OUTPUT_FD; \
-	for VAR in $$VARS; do \
-		if ! echo "$$VAR" | jq -e '.vendor_uuid and .name and .data' >/dev/null; then \
-			echo "Error: Variable at index $$INDEX is missing required fields (vendor_uuid, name, data)"; \
-			rm -f $$TEMP_FD $$OUTPUT_FD; \
-			exit 1; \
-		fi; \
-		VENDOR_UUID=$$(echo "$$VAR" | jq -r '.vendor_uuid'); \
-		NAME=$$(echo "$$VAR" | jq -r '.name'); \
-		DATA=$$(echo "$$VAR" | jq -r '.data'); \
-		if [ $$INDEX -eq 0 ]; then \
-			./utils/nvram.sh $$INPUT_FD $$OUTPUT_FD "$$VENDOR_UUID" "$$NAME" "$$DATA"; \
-		else \
-			cp $$OUTPUT_FD $$TEMP_FD; \
-			./utils/nvram.sh $$TEMP_FD $$OUTPUT_FD "$$VENDOR_UUID" "$$NAME" "$$DATA"; \
-		fi; \
-		if [ $$? -ne 0 ]; then \
-			echo "Error: Failed to process variable at index $$INDEX"; \
-			rm -f $$TEMP_FD $$OUTPUT_FD; \
-			exit 1; \
-		fi; \
-		INDEX=$$((INDEX + 1)); \
-	done; \
-	rm -f $$TEMP_FD; \
-	if [ $$INDEX -eq 0 ]; then \
-		echo "Warning: No variables defined in nvram.json; copied $$INPUT_FD to $$OUTPUT_FD"; \
-	else \
-		echo "Successfully generated $$OUTPUT_FD with $$INDEX variables"; \
-	fi
-
 .PHONY: livecd
 livecd: install
 	@printf ">>> Generating Live CD..."
@@ -194,11 +136,12 @@ run: livecd
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
 
 .PHONY: run-uefi
-run-uefi: livecd ovmf nvram
+run-uefi: livecd
 	@printf ">>> Running QEMU (UEFI)...\n"
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) \
-	-drive if=pflash,format=raw,unit=0,file=ovmf/ovmf-$(ARCH).fd,readonly=on \
-	-drive if=pflash,format=raw,unit=1,file=nvram.fd \
+	-drive if=pflash,format=raw,unit=0,file=ovmf/ovmf_code-$(ARCH).fd,readonly=on \
+	-drive if=pflash,format=raw,unit=1,file=ovmf/ovmf_vars-$(ARCH).fd \
+	-device uefi-vars-x64,jsonfile=uefi_nvram.json \
 	-cdrom $(LIVECD) -d guest_errors	
 
 .PHONY: format
@@ -212,4 +155,4 @@ clean:
 
 .PHONY: distclean
 distclean:
-	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR) $(RELEASE_DIR) ovmf/
+	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR) $(RELEASE_DIR)

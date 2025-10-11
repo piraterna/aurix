@@ -1,3 +1,6 @@
 [submodule "boot/platform/uefi/libefi"]
 	path = boot/platform/uefi/libefi
 	url = https://git.piraterna.org/piraterna/libsefi
+[submodule "ovmf"]
+	path = ovmf
+	url = https://git.piraterna.org/piraterna/ovmf-bins

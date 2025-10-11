@@ -17,7 +17,7 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <drivers/rtc.h>
+#include <platform/time/rtc.h>
 #include <arch/util/io.h>
 #include <debug/log.h>
 #include <stdbool.h>

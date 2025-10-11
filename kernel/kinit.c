@@ -19,6 +19,7 @@
 
 #include <boot/aurix.h>
 #include <acpi/acpi.h>
+#include <boot/args.h>
 #include <cpu/cpu.h>
 #include <debug/uart.h>
 #include <debug/log.h>
@@ -29,7 +30,7 @@
 #include <lib/string.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
-#include <drivers/rtc.h>
+#include <platform/time/rtc.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -161,6 +162,8 @@ void _start(struct aurix_parameters *params)
 	paging_init();
 
 	acpi_init((void *)boot_params->rsdp_addr);
+	debug("kernel cmdline: %s\n", boot_params->cmdline);
+	parse_boot_args(boot_params->cmdline);
 	pmm_reclaim_bootparms();
 
 	heap_init(vinit(kernel_pm, 0x1000));
@@ -181,10 +184,7 @@ void _start(struct aurix_parameters *params)
 
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
 		 time.day, time.hours, time.minutes, time.seconds);
-
 	info("Kernel boot complete in ? seconds\n");
-
-	debug("kernel cmdline: %s\n", boot_params->cmdline);
 
 	for (;;) {
 #ifdef __x86_64__
