@@ -1,11 +1,14 @@
 {
-    "version": 2,
     "variables": [
         {
+            "vendor_uuid": "gBootArgsGuid",
             "name": "boot-args",
-            "guid": "d8637320-2230-4748-b8e8-a69d8e9708f6",
-            "attr": 7,
-            "data": "68656c6c6f00"
+            "data": "hello\\u0000"
+        },
+        {
+            "vendor_uuid": "gEfiGlobalVariableGuid",
+            "name": "Lang",
+            "data": "eng"
         }
     ]
 }

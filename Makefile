@@ -115,6 +115,41 @@ ovmf:
 	@printf ">>> Downloading OVMF images...\n"
 	@utils/download-ovmf.sh
 
+# TODO: Make it work for mutliple entries (only works for single now, prob issue with ovmf.py or nvram.sh)
+nvram:
+	@printf ">>> Generating NVRAM image...\n"
+	@if [ ! -f nvram.json ]; then \
+		echo "Error: nvram.json not found"; \
+		exit 1; \
+	fi
+	@if ! command -v jq >/dev/null 2>&1; then \
+		echo "Error: 'jq' is required but not installed"; \
+		exit 1; \
+	fi
+	@INPUT_FD=$(ROOT_DIR)/ovmf/ovmf-$(ARCH)-vars.fd; \
+	OUTPUT_FD=$(ROOT_DIR)/nvram.fd; \
+	TEMP_FD=$(ROOT_DIR)/nvram_temp.fd; \
+	if [ ! -f "$$INPUT_FD" ]; then \
+		echo "Error: Input file $$INPUT_FD does not exist"; \
+		exit 1; \
+	fi; \
+	cp $$INPUT_FD $$TEMP_FD; \
+	VARS=$$(jq -c '.variables[]' nvram.json); \
+	INDEX=0; \
+	for VAR in $$VARS; do \
+		VENDOR_UUID=$$(echo "$$VAR" | jq -r '.vendor_uuid'); \
+		NAME=$$(echo "$$VAR" | jq -r '.name'); \
+		DATA=$$(echo "$$VAR" | jq -r '.data'); \
+		if [ $$INDEX -eq 0 ]; then \
+			./utils/nvram.sh $$INPUT_FD $$OUTPUT_FD "$$VENDOR_UUID" "$$NAME" "$$DATA"; \
+		else \
+			./utils/nvram.sh $$TEMP_FD $$OUTPUT_FD "$$VENDOR_UUID" "$$NAME" "$$DATA"; \
+		fi; \
+		cp $$OUTPUT_FD $$TEMP_FD; \
+		INDEX=$$((INDEX + 1)); \
+	done; \
+	rm -f $$TEMP_FD
+
 .PHONY: livecd
 livecd: install
 	@printf ">>> Generating Live CD..."
@@ -140,10 +175,13 @@ run: livecd
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
 
 .PHONY: run-uefi
-run-uefi: livecd ovmf
+run-uefi: livecd ovmf nvram
 	@printf ">>> Running QEMU (UEFI)...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -drive if=pflash,format=raw,readonly=on,file=ovmf/ovmf-$(ARCH).fd -drive if=pflash,format=raw,file=ovmf/ovmf-$(ARCH)-vars.fd -cdrom $(LIVECD)
-		
+	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) \
+	-drive if=pflash,format=raw,unit=0,file=ovmf/ovmf-$(ARCH).fd,readonly=on \
+	-drive if=pflash,format=raw,unit=1,file=nvram.fd \
+	-cdrom $(LIVECD) -d guest_errors	
+
 .PHONY: format
 format:
 	@clang-format -i $(shell find . -name "*.c" -o -name "*.h")

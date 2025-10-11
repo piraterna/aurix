@@ -15,3 +15,6 @@ Brewfile.lock.json
 
 .cache/
 compile_commands.json
+
+nvram.fd
+temp*
