@@ -1288,8 +1288,7 @@ struct flanterm_context *flanterm_fb_init(
 	_ctx->deinit = flanterm_fb_deinit;
 
 	flanterm_context_reinit(_ctx);
-	// flanterm_fb_full_refresh(_ctx);
-	// ^ dont touch our logo mr flanterm
+	flanterm_fb_full_refresh(_ctx);
 
 #ifndef FLANTERM_FB_DISABLE_BUMP_ALLOC
 	if (_malloc == bump_alloc) {

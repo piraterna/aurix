@@ -404,24 +404,6 @@ void aurix_load(char *kernel_path)
 	parameters.smbios_addr = platform_get_smbios();
 #endif
 
-	// paint the AurixOS logo on screen, very important!
-	uint32_t lx = (parameters.framebuffer.width / 2) - (aurix_logo.width / 2);
-	uint32_t ty = (parameters.framebuffer.height / 2) - (aurix_logo.height / 2);
-	for (uint32_t y = ty, idx = 0;
-		 y < ty + aurix_logo.height &&
-		 idx < (aurix_logo.width * aurix_logo.height * 4);
-		 y++) {
-		for (uint32_t x = lx; x < lx + aurix_logo.width; x++) {
-			*((uint32_t *)(parameters.framebuffer.addr -
-						   parameters.hhdm_offset +
-						   parameters.framebuffer.pitch * y + 4 * x)) =
-				0xFF000000 | (aurix_logo.pixel_data[idx] << 16) |
-				(aurix_logo.pixel_data[idx + 1] << 8) |
-				aurix_logo.pixel_data[idx + 2];
-			idx += 4;
-		}
-	}
-
 	debug(
 		"aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n",
 		pm, stack, kernel_entry);

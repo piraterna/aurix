@@ -23,10 +23,17 @@
 #include <util/kprintf.h>
 #include <stdarg.h>
 
+/* TODO: Use boot args */
 #ifndef DEBUG
 #define DEBUG 1
 #endif
 
+#ifndef LOG_COLOR
+#define LOG_COLOR 1
+#endif
+/* end todo */
+
+#if LOG_COLOR
 #define LOG_COLOR_INFO "\033[92m" /* Green */
 #define LOG_COLOR_WARN "\033[93m" /* Yellow */
 #define LOG_COLOR_ERROR "\033[91m" /* Red */
@@ -36,6 +43,17 @@
 #define LOG_COLOR_CRITICAL "\033[31m" /* Bright Red */
 #define LOG_COLOR_SUCCESS "\033[32m" /* Bright Green */
 #define LOG_COLOR_RESET "\033[0m" /* Reset */
+#else
+#define LOG_COLOR_INFO ""
+#define LOG_COLOR_WARN ""
+#define LOG_COLOR_ERROR ""
+#define LOG_COLOR_DEBUG ""
+#define LOG_COLOR_TEST ""
+#define LOG_COLOR_TRACE ""
+#define LOG_COLOR_CRITICAL ""
+#define LOG_COLOR_SUCCESS ""
+#define LOG_COLOR_RESET ""
+#endif
 
 // TODO: Proper time since boot or whatever
 #define _log_callback(color, level, fmt, ...) \
