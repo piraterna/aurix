@@ -52,19 +52,19 @@ static uint8_t bin_to_bcd(uint8_t bin)
 static bool is_valid_time(const rtc_time_t *time)
 {
 	if (!time) {
-		error("RTC: Null time pointer");
+		error("RTC: Null time pointer\n");
 		return false;
 	}
 	if (time->seconds > 59) {
-		warn("RTC: Invalid seconds: %d", time->seconds);
+		warn("RTC: Invalid seconds: %d\n", time->seconds);
 		return false;
 	}
 	if (time->minutes > 59) {
-		warn("RTC: Invalid minutes: %d", time->minutes);
+		warn("RTC: Invalid minutes: %d\n", time->minutes);
 		return false;
 	}
 	if (time->hours > 23) {
-		warn("RTC: Invalid hours: %d", time->hours);
+		warn("RTC: Invalid hours: %d\n", time->hours);
 		return false;
 	}
 	if (time->day < 1 || time->day > 31) {
@@ -72,15 +72,15 @@ static bool is_valid_time(const rtc_time_t *time)
 		return false;
 	}
 	if (time->month < 1 || time->month > 12) {
-		warn("RTC: Invalid month: %d", time->month);
+		warn("RTC: Invalid month: %d\n", time->month);
 		return false;
 	}
 	if (time->year < 1970) {
-		warn("RTC: Invalid year: %d", time->year);
+		warn("RTC: Invalid year: %d\n", time->year);
 		return false;
 	}
-	if (time->weekday > 6) {
-		warn("RTC: Invalid weekday: %d", time->weekday);
+	if (time->weekday > 7) {
+		warn("RTC: Invalid weekday: %d\n", time->weekday);
 		return false;
 	}
 	return true;
@@ -99,7 +99,7 @@ static bool wait_for_update(void)
 		}
 		io_wait();
 	}
-	error("RTC: Update timeout after retries");
+	error("RTC: Update timeout after retries\n");
 	return false;
 }
 
@@ -122,11 +122,11 @@ rtc_error_t rtc_get_time(rtc_time_t *time)
 {
 	memset(time, 0, sizeof(rtc_time_t));
 	if (!rtc_initialized) {
-		error("RTC: Not initialized");
+		error("RTC: Not initialized\n");
 		return RTC_ERR_NOT_INIT;
 	}
 	if (!time) {
-		error("RTC: Null time pointer");
+		error("RTC: Null time pointer\n");
 		return RTC_ERR_INVALID;
 	}
 
@@ -163,7 +163,7 @@ rtc_error_t rtc_get_time(rtc_time_t *time)
 	if (century_bcd != 0xFF && century_bcd != 0x00) {
 		century = bcd_to_bin(century_bcd);
 	} else {
-		error("RTC: Invalid century byte: 0x%02x", century_bcd);
+		error("RTC: Invalid century byte: 0x%02x\n", century_bcd);
 	}
 	time->year = century * 100 + year_low;
 
@@ -177,7 +177,7 @@ rtc_error_t rtc_get_time(rtc_time_t *time)
 rtc_error_t rtc_set_time(const rtc_time_t *time)
 {
 	if (!rtc_initialized) {
-		error("RTC: Not initialized");
+		error("RTC: Not initialized\n");
 		return RTC_ERR_NOT_INIT;
 	}
 	if (!is_valid_time(time)) {
