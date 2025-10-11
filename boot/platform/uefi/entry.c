@@ -29,7 +29,7 @@
 #include <power.h>
 #include <print.h>
 
-#include <aurix_logo.h> // Include the logo header
+#include <aurix_logo.h>
 
 #include <stddef.h>
 #include <stdint.h>
