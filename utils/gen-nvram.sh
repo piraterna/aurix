@@ -64,12 +64,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z $output_file ]]; then
-    printf "Error: Output file not specified with -o\n"
-    exit 1
-fi
 
 json_output="{\"version\":2,\"variables\":[$(IFS=','; echo "${variables[*]}")]}"
+
+
+if [[ -z $output_file ]]; then
+    echo "$json_output"
+    exit 0
+fi
 
 echo "$json_output" > "$output_file"
 
