@@ -135,8 +135,12 @@ run: livecd
 	@printf ">>> Running QEMU...\n"
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
 
+nvram:
+	@printf ">>> Generating NVRAM...\n"
+	@./utils/gen-nvram.sh -o uefi_nvram.json -var,guid=d8637320-2230-4748-b8e8-a69d8e9708f6,name=boot-args,data="-v debug\0",attr=7
+
 .PHONY: run-uefi
-run-uefi: livecd
+run-uefi: livecd nvram
 	@printf ">>> Running QEMU (UEFI)...\n"
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) \
 	-drive if=pflash,format=raw,unit=0,file=ovmf/ovmf_code-$(ARCH).fd,readonly=on \
