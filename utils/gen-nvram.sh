@@ -1,10 +1,4 @@
 #!/bin/bash
-
-if [[ -z $1 ]]; then
-    printf "Please don't invoke this script manually. Run \`make nvram\` instead.\n"
-    exit 1
-fi
-
 output_file=""
 variables=()
 
