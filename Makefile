@@ -23,6 +23,12 @@ GITREV := $(shell git rev-parse --short HEAD)
 export AURIXBUILD
 
 ##
+# Kconfig configuration
+#
+KCONFIG_CONFIG := .config
+MENUCONFIG_STYLE := aquatic
+
+##
 # Build configuration
 #
 
@@ -142,7 +148,15 @@ run-uefi: livecd
 	-drive if=pflash,format=raw,unit=0,file=ovmf/ovmf_code-$(ARCH).fd,readonly=on \
 	-drive if=pflash,format=raw,unit=1,file=ovmf/ovmf_vars-$(ARCH).fd \
 	-device uefi-vars-x64,jsonfile=uefi_nvram.json \
-	-cdrom $(LIVECD) -d guest_errors	
+	-cdrom $(LIVECD) -d guest_errors
+
+.PHONY: genconfig
+genconfig: .config
+	@python3 utils/kconfiglib/genconfig.py --header-path $(ROOT_DIR)/kernel/include/config.h
+
+.PHONY: menuconfig
+menuconfig:
+	@python3 utils/kconfiglib/menuconfig.py
 
 .PHONY: format
 format:

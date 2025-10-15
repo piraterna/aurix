@@ -75,7 +75,7 @@ bool acpi_init(void *rsdp_addr)
 	return true;
 }
 
-void *find_sdt(char *sig, size_t len)
+void *find_sdt(char *sig)
 {
 	size_t sdt_len = is_xsdt ? (xsdt->hdr.len - sizeof(struct sdt_header) / 8) :
 							   (rsdt->hdr.len - sizeof(struct sdt_header) / 4);
@@ -89,9 +89,9 @@ void *find_sdt(char *sig, size_t len)
 										boot_params->hhdm_offset);
 		}
 
-		if (strncmp(hdr->sig, sig, len) == 0) {
+		if (strncmp(hdr->sig, sig, 4) == 0) {
 			if (checksum(hdr)) {
-				return (void *)((uintptr_t)hdr + boot_params->hhdm_offset);
+				return (void *)hdr;
 			}
 		}
 	}

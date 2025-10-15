@@ -66,6 +66,6 @@ struct xsdt {
 } __attribute__((packed));
 
 bool acpi_init(void *rsdp_addr);
-void *find_sdt(char *sig, size_t len);
+void *find_sdt(char *sig);
 
 #endif /* _ACPI_ACPI_H */

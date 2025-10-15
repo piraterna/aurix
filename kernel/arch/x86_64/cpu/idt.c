@@ -83,7 +83,6 @@ void idt_init()
 	}
 
 	__asm__ volatile("lidt %0" ::"m"(idtr));
-	__asm__ volatile("sti");
 }
 
 void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,

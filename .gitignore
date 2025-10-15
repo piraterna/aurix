@@ -12,3 +12,4 @@ Brewfile.lock.json
 *.log
 
 nvram.json
+.config

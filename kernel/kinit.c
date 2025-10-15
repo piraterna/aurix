@@ -18,6 +18,7 @@
 /*********************************************************************************/
 
 #include <boot/aurix.h>
+#include <arch/cpu/cpu.h>
 #include <acpi/acpi.h>
 #include <boot/args.h>
 #include <cpu/cpu.h>
@@ -43,6 +44,7 @@ const char *aurix_banner =
 	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2025 Jozef Nagy";
 
 /* ======== TESTS ======== */
+#if 0
 typedef void (*test_func_t)(void);
 typedef unsigned int uint32_t;
 
@@ -128,6 +130,10 @@ static void heap_test(void)
 		kfree(test);
 	}
 }
+#else
+#define TEST_ADD(x,y)
+#define test_run(x)
+#endif
 /* ====================== */
 
 void _start(struct aurix_parameters *params)
@@ -162,8 +168,7 @@ void _start(struct aurix_parameters *params)
 	test_run(10);
 
 	paging_init();
-
-	acpi_init((void *)boot_params->rsdp_addr);
+	cpu_enable_interrupts();
 	debug("kernel cmdline: %s\n", boot_params->cmdline);
 	parse_boot_args(boot_params->cmdline);
 	pmm_reclaim_bootparms();
@@ -171,6 +176,8 @@ void _start(struct aurix_parameters *params)
 	heap_init(vinit(kernel_pm, 0x1000));
 	TEST_ADD(heap_test, heap_test);
 	test_run(10);
+
+	acpi_init((void *)boot_params->rsdp_addr);
 
 	rtc_time_t time;
 	rtc_error_t err;

@@ -70,9 +70,14 @@ struct stack_frame {
 // Utilities
 ///
 
+static inline void cpu_enable_interrupts(void)
+{
+	__asm__ volatile("sti");
+}
+
 static inline void cpu_disable_interrupts(void)
 {
-	__asm__ volatile("cli" ::: "memory");
+	__asm__ volatile("cli");
 }
 
 static inline uint64_t read_cr0()
