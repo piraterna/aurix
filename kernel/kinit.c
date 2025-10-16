@@ -170,14 +170,14 @@ void _start(struct aurix_parameters *params)
 	paging_init();
 	cpu_enable_interrupts();
 	debug("kernel cmdline: %s\n", boot_params->cmdline);
+	acpi_init((void *)boot_params->rsdp_addr);
+
 	parse_boot_args(boot_params->cmdline);
 	pmm_reclaim_bootparms();
 
 	heap_init(vinit(kernel_pm, 0x1000));
 	TEST_ADD(heap_test, heap_test);
 	test_run(10);
-
-	acpi_init((void *)boot_params->rsdp_addr);
 
 	rtc_time_t time;
 	rtc_error_t err;
