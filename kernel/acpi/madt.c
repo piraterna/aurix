@@ -27,17 +27,17 @@
 #include <acpi/madt.h>
 #include <debug/log.h>
 #include <lib/string.h>
+#include <config.h>
 #include <stdint.h>
 
 struct madt *madt = NULL;
 
-// TODO: Add KConfig
-#define CONFIG_CPU_MAX 64
-#define CONFIG_IOAPIC_MAX 4
-
 #if defined(__x86_64__)
-struct madt_lapic *lapics[CONFIG_CPU_MAX];
-struct madt_ioapic *ioapics[CONFIG_IOAPIC_MAX];
+struct madt_lapic *lapics[CONFIG_CPU_MAX_COUNT];
+struct madt_ioapic *ioapics[CONFIG_IOAPIC_MAX_COUNT];
+
+size_t lapic_count = 0;
+size_t ioapic_count = 0;
 #endif
 
 static char *madt_type_to_str(uint8_t type)
@@ -94,8 +94,26 @@ void acpi_madt_init()
 		struct madt_header *mhdr = (struct madt_header *)(madt->structures + i);
 		switch (mhdr->type) {
 #if defined(__x86_64__)
-			case MADT_LAPIC:
-			case MADT_IOAPIC:
+			case MADT_LAPIC: {
+				struct madt_lapic *lapic = (struct madt_lapic *)(madt->structures + i);
+				if (lapic_count >= CONFIG_CPU_MAX_COUNT) {
+					error("Reached maximum allowed CPUs, processor #%u will be left disabled.\n", lapic->id);
+					break;
+				}
+				lapics[lapic_count++] = lapic;
+				debug("Registered LAPIC for processor #%u with _UID %u (%s)\n", lapic->id, lapic->uid, (lapic->flags & 1) ? "enabled" : "disabled");
+				break;
+			}
+			case MADT_IOAPIC: {
+				struct madt_ioapic *ioapic = (struct madt_ioapic *)(madt->structures + i);
+				if (ioapic_count >= CONFIG_IOAPIC_MAX_COUNT) {
+					error("Reached maximum allowed IOAPIC controllers, IOAPIC #%u will be unused.\n", ioapic->id);
+					break;
+				}
+				ioapics[ioapic_count++] = ioapic;
+				debug("Registered IOAPIC #%u located at 0x%llx (gsi base=%llx)\n", ioapic->id, ioapic->addr, ioapic->gsi_base);
+				break;
+			}
 			case MADT_ISO:
 			case MADT_NMI_SRC:
 			case MADT_LAPIC_NMI:

@@ -14,6 +14,7 @@ brew "qemu"
 brew "ffmpeg"
 brew "llvm"
 brew "lld"
+brew "jq"
 brew "util-linux" if OS.mac?
 brew "gsed" if OS.mac?
 
@@ -35,5 +36,5 @@ brew "nasm"
 # ONLY for the aarch64 architecture.
 ###
 
-brew "aarch64-elf-binutils"
-brew "aarch64-elf-gcc"
+#brew "aarch64-elf-binutils"
+#brew "aarch64-elf-gcc"

@@ -1,1 +1,3 @@
 mainmenu "AurixOS Kconfig configuration"
+
+source "kernel/Kconfig"

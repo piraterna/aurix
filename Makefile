@@ -25,8 +25,8 @@ export AURIXBUILD
 ##
 # Kconfig configuration
 #
-KCONFIG_CONFIG := .config
-MENUCONFIG_STYLE := aquatic
+export KCONFIG_CONFIG := .config
+export MENUCONFIG_STYLE := aquatic
 
 ##
 # Build configuration
@@ -88,7 +88,7 @@ endif
 #
 
 .PHONY: all
-all: boot kernel
+all: genconfig boot kernel
 	@:
 
 .PHONY: boot
