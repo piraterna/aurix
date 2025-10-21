@@ -19,6 +19,7 @@
 
 #include <boot/aurix.h>
 #include <arch/cpu/cpu.h>
+#include <arch/apic/apic.h>
 #include <acpi/acpi.h>
 #include <boot/args.h>
 #include <cpu/cpu.h>
@@ -35,6 +36,8 @@
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
+
+uintptr_t hhdm_offset = 0;
 
 const char *aurix_banner =
 	"    _              _       ___  ____\n"
@@ -139,6 +142,7 @@ static void heap_test(void)
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
+	hhdm_offset = params->hhdm_offset;
 	serial_init();
 
 	if (params->revision != AURIX_PROTOCOL_REVISION) {
@@ -171,9 +175,10 @@ void _start(struct aurix_parameters *params)
 	cpu_enable_interrupts();
 	debug("kernel cmdline: %s\n", boot_params->cmdline);
 	acpi_init((void *)boot_params->rsdp_addr);
-
-	parse_boot_args(boot_params->cmdline);
 	pmm_reclaim_bootparms();
+	apic_init();
+
+	//parse_boot_args(boot_params->cmdline);
 
 	heap_init(vinit(kernel_pm, 0x1000));
 	TEST_ADD(heap_test, heap_test);
@@ -197,7 +202,7 @@ void _start(struct aurix_parameters *params)
 
 	for (;;) {
 #ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
+		__asm__ volatile("hlt");
 #elif __aarch64__
 		__asm__ volatile("wfe");
 #endif

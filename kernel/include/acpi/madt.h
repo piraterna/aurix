@@ -31,7 +31,7 @@
 #define MADT_ISO 0x02
 #define MADT_NMI_SRC 0x03
 #define MADT_LAPIC_NMI 0x04
-#define MADT_LAPIC_NMI_OVERRIDE 0x05
+#define MADT_LAPIC_OVERRIDE 0x05
 #define MADT_LX2APIC 0x09
 #define MADT_LX2APIC_NMI 0x0a
 
@@ -93,7 +93,7 @@ struct madt_lapic_nmi {
 	uint8_t LINTn;
 } __attribute__((packed));
 
-struct madt_lapic_addr_override {
+struct madt_lapic_override {
 	struct madt_header hdr;
 	uint16_t reserved;
 	uint64_t addr;

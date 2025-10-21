@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  paging.h */
+/* Module Name:  aurix.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,25 +20,15 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _MM_PAGING_H
-#define _MM_PAGING_H
+#ifndef _AURIX_H
+#define _AURIX_H
 
+#include <debug/log.h>
 #include <stdint.h>
 
-#define PAGE_SIZE 0x1000
+extern uintptr_t hhdm_offset;
 
-#define VMM_PRESENT 1
-#define VMM_WRITABLE (1 << 1)
-#define VMM_USER (1 << 2)
-#define VMM_WRITETHROUGH (1 << 3)
-#define VMM_CACHE_DISABLE (1 << 4)
+#define PHYS_TO_VIRT(addr) ((addr) + hhdm_offset)
+#define VIRT_TO_PHYS(addr) ((addr) - hhdm_offset)
 
-#define VMM_NX (1ull << 63)
-
-typedef struct {
-	uint64_t entries[512];
-} pagetable;
-
-extern pagetable *kernel_pm;
-
-#endif /* _MM_PAGING_H */
+#endif /* _AURIX_H */

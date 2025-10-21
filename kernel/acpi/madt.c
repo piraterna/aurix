@@ -33,6 +33,8 @@
 struct madt *madt = NULL;
 
 #if defined(__x86_64__)
+uintptr_t lapic_base = 0;
+
 struct madt_lapic *lapics[CONFIG_CPU_MAX_COUNT];
 struct madt_ioapic *ioapics[CONFIG_IOAPIC_MAX_COUNT];
 
@@ -54,8 +56,8 @@ static char *madt_type_to_str(uint8_t type)
 			return "non-maskable interrupt source";
 		case MADT_LAPIC_NMI:
 			return "non-maskable interrupt";
-		case MADT_LAPIC_NMI_OVERRIDE:
-			return "non-maskable interrupt override";
+		case MADT_LAPIC_OVERRIDE:
+			return "lapic address override";
 		case MADT_LX2APIC:
 			return "local x2apic";
 		case MADT_LX2APIC_NMI:
@@ -88,6 +90,8 @@ void acpi_madt_init()
 		outb(0x21, 0xff);
 		outb(0xa1, 0xff);
 	}
+
+	lapic_base = madt->lapic_addr;
 #endif
 
 	for (uint64_t i = 0; i < (madt->hdr.len - sizeof(struct madt));) {
@@ -114,10 +118,21 @@ void acpi_madt_init()
 				debug("Registered IOAPIC #%u located at 0x%llx (gsi base=%llx)\n", ioapic->id, ioapic->addr, ioapic->gsi_base);
 				break;
 			}
-			case MADT_ISO:
+			case MADT_ISO: {
+				struct madt_iso *iso = (struct madt_iso *)(madt->structures + i);
+				debug("Interrupt source override on bus %u with source %u (gsi=%u, flags=%x)\n", iso->bus, iso->src, iso->gsi, iso->flags);
+				break;
+			}
+			// case MADT_NMI_SRC:
+			// case MADT_LAPIC_NMI:
+			case MADT_LAPIC_OVERRIDE: {
+				struct madt_lapic_override *override = (struct madt_lapic_override *)(madt->structures + i);
+				lapic_base = override->addr;
+				debug("Overridden LAPIC base address: 0x%llx\n", override->addr);
+				break;
+			}
 			case MADT_NMI_SRC:
 			case MADT_LAPIC_NMI:
-			case MADT_LAPIC_NMI_OVERRIDE:
 			case MADT_LX2APIC:
 			case MADT_LX2APIC_NMI:
 #elif defined(__aarch64__)
