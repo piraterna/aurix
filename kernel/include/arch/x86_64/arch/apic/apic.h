@@ -80,16 +80,23 @@ enum ioapic_trigger_mode {
     IOAPIC_TRIGGER_LEVEL = 1
 };
 
-struct ioapic_redirect_entry {
-    uint8_t vec;
-    uint8_t delivery_mode : 3;
-    uint8_t destination_mode : 1;
-    uint8_t delivery_status : 1;
-    uint8_t pin_polarity : 1;
-    uint8_t remote_irr : 1;
-    uint8_t trigger_mode : 1;
-    uint8_t mask : 1;
-    uint8_t dest;
+union ioapic_redirect_entry {
+    struct {
+        uint8_t vec;
+        uint8_t delivery_mode : 3;
+        uint8_t destination_mode : 1;
+        uint8_t delivery_status : 1;
+        uint8_t pin_polarity : 1;
+        uint8_t remote_irr : 1;
+        uint8_t trigger_mode : 1;
+        uint8_t mask : 1;
+        uint8_t dest;
+    };
+    struct {
+        uint32_t low;
+        uint32_t high;
+    } bytes;
+    
 } __attribute__((packed));
 
 uint64_t apic_msr_read(uint64_t offset);

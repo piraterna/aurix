@@ -40,6 +40,12 @@ struct madt_ioapic *ioapics[CONFIG_IOAPIC_MAX_COUNT];
 
 size_t lapic_count = 0;
 size_t ioapic_count = 0;
+
+struct madt_iso *isos[16];
+size_t iso_count = 0;
+
+struct madt_lapic_nmi *nmis[224];
+size_t nmi_count = 0;
 #endif
 
 static char *madt_type_to_str(uint8_t type)
@@ -120,11 +126,17 @@ void acpi_madt_init()
 			}
 			case MADT_ISO: {
 				struct madt_iso *iso = (struct madt_iso *)(madt->structures + i);
+				isos[iso_count++] = iso;
 				debug("Interrupt source override on bus %u with source %u (gsi=%u, flags=%x)\n", iso->bus, iso->src, iso->gsi, iso->flags);
 				break;
 			}
 			// case MADT_NMI_SRC:
-			// case MADT_LAPIC_NMI:
+			case MADT_LAPIC_NMI: {
+				struct madt_lapic_nmi *nmi = (struct madt_lapic_nmi *)(madt->structures + i);
+				nmis[nmi_count++] = nmi;
+				debug("NMI for LINT#%u on processor with _UID %u, flags %x\n", nmi->LINTn, nmi->acpi_uid, nmi->flags);
+				break;
+			}
 			case MADT_LAPIC_OVERRIDE: {
 				struct madt_lapic_override *override = (struct madt_lapic_override *)(madt->structures + i);
 				lapic_base = override->addr;
@@ -132,7 +144,6 @@ void acpi_madt_init()
 				break;
 			}
 			case MADT_NMI_SRC:
-			case MADT_LAPIC_NMI:
 			case MADT_LX2APIC:
 			case MADT_LX2APIC_NMI:
 #elif defined(__aarch64__)
