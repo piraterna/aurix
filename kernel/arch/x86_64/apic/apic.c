@@ -16,6 +16,12 @@ extern struct madt_ioapic *ioapics[];
 extern size_t lapic_count;
 extern size_t ioapic_count;
 
+extern struct madt_iso *isos[16];
+extern size_t iso_count = 0;
+
+extern struct madt_lapic_nmi *nmis[224];
+extern size_t nmi_count = 0;
+
 uint64_t apic_msr_read(uint64_t offset)
 {
 	return rdmsr(APIC_BASE_MSR + offset);
