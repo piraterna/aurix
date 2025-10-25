@@ -1,0 +1,11 @@
+menu "Processor settings"
+
+config CPU_MAX_COUNT
+    int "Maximum amount of CPUs"
+    default 64
+
+config IOAPIC_MAX_COUNT
+    int "Maximum amount of I/O APIC controllers"
+    default 4
+
+endmenu

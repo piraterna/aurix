@@ -28,9 +28,12 @@
 #define PAGE_SIZE 0x1000
 
 #define VMM_PRESENT 1
-#define VMM_WRITABLE 2
+#define VMM_WRITABLE (1 << 1)
+#define VMM_USER (1 << 2)
+#define VMM_WRITETHROUGH (1 << 3)
+#define VMM_CACHE_DISABLE (1 << 4)
+
 #define VMM_NX (1ull << 63)
-#define VMM_USER 4
 
 typedef struct {
 	uint64_t entries[512];

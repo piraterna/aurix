@@ -269,7 +269,6 @@ char *aurix_get_cmdline()
 		mem_free(bootargs);
 		return NULL;
 	}
-	debug("%s\n", bootargs);
 
 	return bootargs;
 }

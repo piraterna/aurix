@@ -4,3 +4,6 @@
 [submodule "ovmf"]
 	path = ovmf
 	url = https://git.piraterna.org/piraterna/ovmf-bins
+[submodule "utils/kconfiglib"]
+	path = utils/kconfiglib
+	url = https://github.com/zephyrproject-rtos/Kconfiglib.git

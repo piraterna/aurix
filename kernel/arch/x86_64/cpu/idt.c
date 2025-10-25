@@ -20,6 +20,7 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
+#include <arch/apic/apic.h>
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/idt.h>
 #include <cpu/trace.h>
@@ -83,7 +84,6 @@ void idt_init()
 	}
 
 	__asm__ volatile("lidt %0" ::"m"(idtr));
-	__asm__ volatile("sti");
 }
 
 void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
@@ -127,6 +127,9 @@ void isr_common_handler(struct interrupt_frame frame)
 
 		critical("Backtrace (cpu %u):\n", 1);
 		stack_trace(16);
+	} else if (frame.vector < 0x30) {
+		debug("Got interrupt!\n");
+		apic_send_eoi();
 	} else {
 		warn("Unhandled interrupt %u\n", frame.vector);
 	}

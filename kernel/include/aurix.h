@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  acpi.c */
+/* Module Name:  aurix.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,52 +20,15 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _ACPI_ACPI_H
-#define _ACPI_ACPI_H
+#ifndef _AURIX_H
+#define _AURIX_H
 
+#include <debug/log.h>
 #include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
 
-struct sdt_header {
-	char sig[4];
-	uint32_t len;
-	uint8_t revision;
-	uint8_t csum;
-	char oem_id[6];
-	char oem_table_id[8];
-	uint32_t oem_revision;
-	uint32_t creator_id;
-	uint32_t creator_revision;
-} __attribute__((packed));
+extern uintptr_t hhdm_offset;
 
-struct rsdp {
-	char sig[8];
-	uint8_t csum;
-	char oem_id[6];
-	uint8_t revision;
-	uint32_t rsdt_addr;
-} __attribute__((packed));
+#define PHYS_TO_VIRT(addr) ((addr) + hhdm_offset)
+#define VIRT_TO_PHYS(addr) ((addr) - hhdm_offset)
 
-struct xsdp {
-	struct rsdp rsdp;
-	uint32_t len;
-	uint64_t xsdt_addr;
-	uint8_t ext_csum;
-	uint8_t reserved[3];
-} __attribute__((packed));
-
-struct rsdt {
-	struct sdt_header hdr;
-	uint32_t sdt_ptr[];
-} __attribute__((packed));
-
-struct xsdt {
-	struct sdt_header hdr;
-	uint64_t sdt_ptr[];
-} __attribute__((packed));
-
-bool acpi_init(void *rsdp_addr);
-void *find_sdt(char *sig);
-
-#endif /* _ACPI_ACPI_H */
+#endif /* _AURIX_H */
