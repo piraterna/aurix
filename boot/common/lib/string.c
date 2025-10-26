@@ -154,7 +154,7 @@ char *strncpy(char *dest, const char *src, size_t n)
 
 	char *pdest = dest;
 
-	while (*src != '\0' || n--) {
+	while (*src != '\0' && n--) {
 		*pdest++ = *src++;
 	}
 
