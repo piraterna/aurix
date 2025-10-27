@@ -148,16 +148,20 @@ char *strcpy(char *dest, const char *src)
 
 char *strncpy(char *dest, const char *src, size_t n)
 {
-	if (dest == NULL || src == NULL) {
+	if (dest == NULL || src == NULL || n == 0) {
 		return NULL;
 	}
 
 	char *pdest = dest;
+	size_t i = 0;
 
-	while (*src != '\0' && n--) {
+	// Copy at most n-1 characters to leave room for null terminator
+	while (*src != '\0' && i < n - 1) {
 		*pdest++ = *src++;
+		i++;
 	}
 
+	// Always null-terminate within bounds
 	*pdest = '\0';
 	return dest;
 }

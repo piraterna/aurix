@@ -154,7 +154,9 @@ void *mem_realloc(void *addr, size_t n)
 		return NULL;
 	}
 
-	memcpy(new, addr, old_size);
+	// Only copy the minimum of old_size and new size to prevent overflow
+	size_t copy_size = (old_size < n) ? old_size : n;
+	memcpy(new, addr, copy_size);
 	mem_free(addr);
 	return new;
 }
