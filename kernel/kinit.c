@@ -134,7 +134,7 @@ static void heap_test(void)
 	}
 }
 #else
-#define TEST_ADD(x,y)
+#define TEST_ADD(x)
 #define test_run(x)
 #endif
 /* ====================== */

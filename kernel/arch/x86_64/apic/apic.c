@@ -17,10 +17,10 @@ extern size_t lapic_count;
 extern size_t ioapic_count;
 
 extern struct madt_iso *isos[16];
-extern size_t iso_count = 0;
+extern size_t iso_count;
 
 extern struct madt_lapic_nmi *nmis[224];
-extern size_t nmi_count = 0;
+extern size_t nmi_count;
 
 uint64_t apic_msr_read(uint64_t offset)
 {
@@ -62,20 +62,28 @@ void apic_send_eoi()
 void apic_init()
 {
 	// initialize lapic
-	map_page(NULL, PHYS_TO_VIRT(lapic_base), lapic_base, VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH | VMM_CACHE_DISABLE);
+	map_page(NULL, PHYS_TO_VIRT(lapic_base), lapic_base,
+			 VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH | VMM_CACHE_DISABLE);
 	lapic_base = PHYS_TO_VIRT(lapic_base);
 
 	// initialize ioapic
 	for (size_t i = 0; i < ioapic_count; i++) {
-		debug("Mapping I/O APIC #%u (0x%llx -> 0x%llx)...\n", i, ioapics[i]->addr, PHYS_TO_VIRT(ioapics[i]->addr));
-		map_page(NULL, PHYS_TO_VIRT(ioapics[i]->addr), ioapics[i]->addr, VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH | VMM_CACHE_DISABLE);
+		debug("Mapping I/O APIC #%u (0x%llx -> 0x%llx)...\n", i,
+			  ioapics[i]->addr, PHYS_TO_VIRT(ioapics[i]->addr));
+		map_page(NULL, PHYS_TO_VIRT(ioapics[i]->addr), ioapics[i]->addr,
+				 VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH |
+					 VMM_CACHE_DISABLE);
 
 		// mask interrupts
-		uint8_t maxreds = (ioapic_read(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICVER) >> 16) & 0xFF;
-		debug("Initializing %u masked interrupts for I/O APIC #%u...\n", maxreds, i);
-		
+		uint8_t maxreds =
+			(ioapic_read(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICVER) >> 16) &
+			0xFF;
+		debug("Initializing %u masked interrupts for I/O APIC #%u...\n",
+			  maxreds, i);
+
 		for (int n = 0; n < maxreds; n++) {
-			ioapic_write(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICREDTBLL(n), (1 << 16));
+			ioapic_write(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICREDTBLL(n),
+						 (1 << 16));
 			ioapic_write(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICREDTBLH(n), 0);
 		}
 	}
