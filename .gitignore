@@ -11,5 +11,5 @@ Brewfile.lock.json
 *.img
 *.log
 
-nvram.json
+uefi_nvram.json
 .config
