@@ -149,7 +149,7 @@ static inline uint8_t inb(uint16_t port)
 
 static inline void outb(uint16_t port, uint8_t val)
 {
-	__asm__ volatile("outb %b0, %w1" :: "a"(val), "Nd"(port) : "memory");
+	__asm__ volatile("outb %b0, %w1" ::"a"(val), "Nd"(port) : "memory");
 }
 
 static inline void invlpg(void *addr)
@@ -159,15 +159,15 @@ static inline void invlpg(void *addr)
 
 static inline void wrmsr(uint64_t msr, uint64_t val)
 {
-    uint32_t lo = val & 0xFFFFFFFF;
-    uint32_t hi = val >> 32;
-    __asm__ volatile("wrmsr" :: "c"(msr), "a"(lo), "d"(hi));
+	uint32_t lo = val & 0xFFFFFFFF;
+	uint32_t hi = val >> 32;
+	__asm__ volatile("wrmsr" ::"c"(msr), "a"(lo), "d"(hi));
 }
 
 static inline uint64_t rdmsr(uint64_t msr)
 {
-    uint32_t lo, hi;
-    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+	uint32_t lo, hi;
+	__asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
 	return ((uint64_t)hi << 32) | lo;
 }
 

@@ -24,7 +24,7 @@
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/idt.h>
 #include <cpu/trace.h>
-#include <debug/log.h>
+#include <aurix.h>
 #include <stdint.h>
 
 #define IDT_TRAP 0xF

@@ -20,8 +20,8 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _AURIX_H
-#define _AURIX_H
+#ifndef _BOOT_AXPROT_H
+#define _BOOT_AXPROT_H
 
 #include <stdint.h>
 #include <flanterm/flanterm.h>
@@ -88,4 +88,4 @@ struct aurix_parameters {
 extern struct aurix_parameters *boot_params;
 extern struct flanterm_context *ft_ctx;
 
-#endif /* _PROTO_AURIX_H */
+#endif /* _BOOT_AXPROT_H */

@@ -16,6 +16,7 @@
 /* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
+
 #ifndef _HEAP_FF_H
 #define _HEAP_FF_H
 
@@ -23,7 +24,7 @@
 #include <stdint.h>
 
 #ifndef FF_POOL_SIZE
-#define FF_POOL_SIZE 512
+#define FF_POOL_SIZE 512 // 2MB
 #endif // FF_POOL_SIZE
 
 typedef struct block {

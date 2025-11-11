@@ -22,9 +22,9 @@
 
 #include <arch/cpu/cpu.h>
 #include <cpu/trace.h>
-#include <debug/log.h>
-#include <stdint.h>
 #include <mm/vmm.h>
+#include <aurix.h>
+#include <stdint.h>
 
 void stack_trace(uint16_t max_depth)
 {
@@ -37,8 +37,8 @@ void stack_trace(uint16_t max_depth)
 			break;
 		if (rbp & 0x7) /* must be 8-byte aligned */
 			break;
-		if (virt_to_phys(NULL, rbp) == 0 ||
-			virt_to_phys(NULL, rbp + sizeof(void *)) == 0)
+		if (vget_phys(NULL, rbp) == 0 ||
+			vget_phys(NULL, rbp + sizeof(void *)) == 0)
 			break;
 		uintptr_t *rbp_ptr = (uintptr_t *)rbp;
 		uintptr_t saved_rip = rbp_ptr[1];

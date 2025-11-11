@@ -19,9 +19,9 @@
 
 #include <platform/time/rtc.h>
 #include <arch/util/io.h>
-#include <debug/log.h>
-#include <stdbool.h>
 #include <lib/string.h>
+#include <aurix.h>
+#include <stdbool.h>
 
 #define CMOS_INDEX_PORT 0x70
 #define CMOS_DATA_PORT 0x71

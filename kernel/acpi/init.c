@@ -22,9 +22,10 @@
 
 #include <acpi/acpi.h>
 #include <acpi/madt.h>
-#include <boot/aurix.h>
-#include <debug/log.h>
+#include <acpi/hpet.h>
+#include <boot/axprot.h>
 #include <lib/string.h>
+#include <aurix.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -48,9 +49,8 @@ static bool checksum(struct sdt_header *hdr)
 bool acpi_init(void *rsdp_addr)
 {
 	uint8_t checksum = 0;
-	void *rsdp_ptr = (void *)((uintptr_t)rsdp_addr + boot_params->hhdm_offset);
-	struct xsdp *rsdp =
-		(struct xsdp *)((uintptr_t)rsdp_addr + boot_params->hhdm_offset);
+	void *rsdp_ptr = (void *)PHYS_TO_VIRT(rsdp_addr);
+	struct xsdp *rsdp = (struct xsdp *)PHYS_TO_VIRT(rsdp_addr);
 	is_xsdt = rsdp->rsdp.revision >= 2;
 
 	for (size_t i = 0;
@@ -64,12 +64,13 @@ bool acpi_init(void *rsdp_addr)
 	}
 
 	if (is_xsdt) {
-		xsdt = (struct xsdt *)(rsdp->xsdt_addr + boot_params->hhdm_offset);
+		xsdt = (struct xsdt *)PHYS_TO_VIRT(rsdp->xsdt_addr);
 	} else {
-		rsdt = (struct rsdt *)(rsdp->rsdp.rsdt_addr + boot_params->hhdm_offset);
+		rsdt = (struct rsdt *)PHYS_TO_VIRT(rsdp->rsdp.rsdt_addr);
 	}
 
 	// parse the almighty SDTs!
+	acpi_hpet_init();
 	acpi_madt_init();
 
 	return true;
@@ -82,11 +83,9 @@ void *find_sdt(char *sig)
 	struct sdt_header *hdr;
 	for (size_t i = 0; i < sdt_len; i++) {
 		if (is_xsdt) {
-			hdr = (struct sdt_header *)(xsdt->sdt_ptr[i] +
-										boot_params->hhdm_offset);
+			hdr = (struct sdt_header *)PHYS_TO_VIRT(xsdt->sdt_ptr[i]);
 		} else {
-			hdr = (struct sdt_header *)(rsdt->sdt_ptr[i] +
-										boot_params->hhdm_offset);
+			hdr = (struct sdt_header *)PHYS_TO_VIRT(rsdt->sdt_ptr[i]);
 		}
 
 		if (strncmp(hdr->sig, sig, 4) == 0) {

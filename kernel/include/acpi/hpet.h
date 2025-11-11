@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  acpi.h */
+/* Module Name:  hpet.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,60 +20,44 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _ACPI_ACPI_H
-#define _ACPI_ACPI_H
+#ifndef _ACPI_HPET_H
+#define _ACPI_HPET_H
 
+#include <acpi/acpi.h>
 #include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
 
-struct sdt_header {
-	char sig[4];
-	uint32_t len;
-	uint8_t revision;
-	uint8_t csum;
-	char oem_id[6];
-	char oem_table_id[8];
-	uint32_t oem_revision;
-	uint32_t creator_id;
-	uint32_t creator_revision;
-} __attribute__((packed));
-
-struct acpi_address {
-	uint8_t addr_space_id;
-	uint8_t regbit_width;
-	uint8_t regbit_off;
-	uint8_t reserved;
-	uint64_t addr;
-} __attribute__((packed));
-
-struct rsdp {
-	char sig[8];
-	uint8_t csum;
-	char oem_id[6];
-	uint8_t revision;
-	uint32_t rsdt_addr;
-} __attribute__((packed));
-
-struct xsdp {
-	struct rsdp rsdp;
-	uint32_t len;
-	uint64_t xsdt_addr;
-	uint8_t ext_csum;
-	uint8_t reserved[3];
-} __attribute__((packed));
-
-struct rsdt {
+struct hpet_sdt {
 	struct sdt_header hdr;
-	uint32_t sdt_ptr[];
+	uint32_t etblock_id;
+	struct acpi_address addr;
+	uint8_t hpet_num;
+	uint16_t min_tick; // in periodic mode
+	uint8_t page_prot;
 } __attribute__((packed));
 
-struct xsdt {
-	struct sdt_header hdr;
-	uint64_t sdt_ptr[];
+struct hpet_timer {
+	volatile uint64_t conf_caps;
+	volatile uint64_t comp_val;
+	volatile uint64_t fsb_int_route;
+	volatile uint64_t reserved;
 } __attribute__((packed));
 
-bool acpi_init(void *rsdp_addr);
-void *find_sdt(char *sig);
+struct hpet {
+	volatile uint64_t general_caps;
+	volatile uint64_t reserved0;
+	volatile uint64_t general_conf;
+	volatile uint64_t reserved1;
+	volatile uint64_t general_int_stat;
+	volatile uint64_t reserved2;
+	volatile uint64_t reserved3[2][12];
+	volatile uint64_t main_count_val;
+	volatile uint64_t reserved4;
+	struct hpet_timer timers[];
+} __attribute__((packed));
 
-#endif /* _ACPI_ACPI_H */
+void acpi_hpet_init();
+void hpet_msleep(uint64_t ms);
+void hpet_usleep(uint64_t us);
+void hpet_nsleep(uint64_t ns);
+
+#endif /* _ACPI_HPET_H */

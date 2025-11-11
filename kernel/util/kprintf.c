@@ -36,7 +36,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-#include <boot/aurix.h>
+#include <boot/axprot.h>
 
 int32_t _fltused = 0;
 int32_t __eqdf2 = 0;

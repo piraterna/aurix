@@ -20,14 +20,14 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
+#include <boot/axprot.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
-#include <boot/aurix.h>
 #include <lib/bitmap.h>
 #include <lib/align.h>
-#include <sys/spinlock.h>
 #include <lib/string.h>
-#include <debug/log.h>
+#include <sys/spinlock.h>
+#include <aurix.h>
 
 #define PAGE_CACHE_SIZE 1024
 #define MIN_ALIGN PAGE_SIZE
@@ -101,7 +101,7 @@ void pmm_init(void)
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE && e->base != 0 &&
 			e->size >= bitmap_size) {
-			bitmap = (uint8_t *)(e->base + boot_params->hhdm_offset);
+			bitmap = (uint8_t *)PHYS_TO_VIRT(e->base);
 			memset(bitmap, 0xFF, bitmap_size);
 			e->base += bitmap_size;
 			e->size -= bitmap_size;
@@ -115,20 +115,18 @@ void pmm_init(void)
 		return;
 	}
 
-	cache_size = PAGE_CACHE_SIZE;
-	cache_index = 0;
-	memset(page_cache, 0, sizeof(page_cache));
-
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE) {
-			for (uint64_t j = e->base; j < e->base + e->size; j += PAGE_SIZE) {
-				if ((j / PAGE_SIZE) < bitmap_pages) {
-					bitmap_clear(bitmap, j / PAGE_SIZE);
-				}
-			}
+			pfree((void *)e->base, e->size);
 		}
 	}
+
+	int free = 0;
+	for (size_t i = 0; i < bitmap_size * 8; i++) {
+		free += bitmap_get(bitmap, i) ? 0 : 1024;
+	}
+	info("Free memory: %u\n", free_pages * PAGE_SIZE);
 
 	// NULL should be reserved
 	bitmap_set(bitmap, 0);
@@ -136,10 +134,6 @@ void pmm_init(void)
 
 void pmm_reclaim_bootparms()
 {
-	map_pages(NULL, (uintptr_t)bitmap,
-			  (uintptr_t)(bitmap - boot_params->hhdm_offset), bitmap_size,
-			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
-
 	if (boot_params->mmap_entries == 0 || boot_params->mmap_entries > 1000) {
 		error("Invalid mmap_entries: %llu\n", boot_params->mmap_entries);
 		return;
@@ -149,9 +143,8 @@ void pmm_reclaim_bootparms()
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE ||
 			e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
-			if (e->base >= (uintptr_t)(bitmap - boot_params->hhdm_offset) &&
-				e->base < (uintptr_t)(bitmap - boot_params->hhdm_offset) +
-							  bitmap_size) {
+			if (e->base >= VIRT_TO_PHYS(bitmap) &&
+				e->base < VIRT_TO_PHYS(bitmap) + bitmap_size) {
 				trace(
 					"Skipping reclaim of bitmap region: base=0x%llx, size=%llu\n",
 					e->base, e->size);
@@ -169,15 +162,6 @@ void *palloc(size_t pages)
 		return NULL;
 
 	spinlock_acquire(&pmm_lock);
-
-	if (pages == 1 && cache_index > 0) {
-		void *addr = (void *)(page_cache[--cache_index] * PAGE_SIZE);
-		bitmap_set(bitmap, (uint64_t)addr / PAGE_SIZE);
-		free_pages--;
-		memset(addr, 0, pages * PAGE_SIZE);
-		spinlock_release(&pmm_lock);
-		return addr;
-	}
 
 	uint64_t word_count =
 		(bitmap_pages + BITMAP_WORD_SIZE - 1) / BITMAP_WORD_SIZE;

@@ -20,12 +20,12 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
+#include <boot/axprot.h>
 #include <arch/cpu/cpu.h>
-#include <boot/aurix.h>
-#include <debug/log.h>
 #include <lib/align.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
+#include <aurix.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -37,12 +37,10 @@
 #define PML_SHIFT_L3 30
 #define PML_SHIFT_L4 39
 
-static inline uintptr_t phys_to_virt(uintptr_t phys)
-{
-	return phys + (uintptr_t)boot_params->hhdm_offset;
-}
-
 pagetable *kernel_pm = NULL;
+
+extern uint8_t *bitmap;
+extern uint64_t bitmap_size;
 
 extern char _start_text[];
 extern char _end_text[];
@@ -64,7 +62,7 @@ bool paging_init(void)
 		return false;
 	}
 
-	memset((void *)phys_to_virt(pm_phys), 0, PAGE_SIZE);
+	memset((void *)PHYS_TO_VIRT(pm_phys), 0, PAGE_SIZE);
 	kernel_pm = (pagetable *)pm_phys;
 
 	map_page(NULL, (uintptr_t)kernel_pm, (uintptr_t)kernel_pm,
@@ -109,8 +107,8 @@ bool paging_init(void)
 		map_pages(NULL, (uintptr_t)(e->base), (uintptr_t)e->base, e->size,
 				  flags);
 
-		map_pages(NULL, (uintptr_t)(e->base + boot_params->hhdm_offset),
-				  (uintptr_t)e->base, e->size, flags);
+		map_pages(NULL, (uintptr_t)(PHYS_TO_VIRT(e->base)), (uintptr_t)e->base,
+				  e->size, flags);
 	}
 
 	uint64_t stack = ALIGN_DOWN(boot_params->stack_addr, PAGE_SIZE);
@@ -141,30 +139,36 @@ bool paging_init(void)
 		map_page(NULL, addr, phys, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 	}
 
+	// map bitmap
+	debug("Mapping bitmap at %llx...\n", bitmap);
+	map_pages(NULL, (uintptr_t)bitmap, VIRT_TO_PHYS(bitmap), bitmap_size,
+			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+
 	unmap_page(NULL, (uintptr_t)NULL);
 
-	boot_params->mmap = (struct aurix_memmap *)((uintptr_t)boot_params->mmap +
-												boot_params->hhdm_offset);
-	boot_params = (struct aurix_parameters *)((uintptr_t)boot_params +
-											  boot_params->hhdm_offset);
+	boot_params->mmap = (struct aurix_memmap *)PHYS_TO_VIRT(boot_params->mmap);
+	boot_params = (struct aurix_parameters *)PHYS_TO_VIRT(boot_params);
 
 	write_cr3((uint64_t)kernel_pm);
 	return true;
 }
 
-static inline uint16_t pml1_index(uintptr_t v)
+uint16_t pml1_index(uintptr_t v)
 {
 	return (v >> PML_SHIFT_L1) & PML_IDX_MASK;
 }
-static inline uint16_t pml2_index(uintptr_t v)
+
+uint16_t pml2_index(uintptr_t v)
 {
 	return (v >> PML_SHIFT_L2) & PML_IDX_MASK;
 }
-static inline uint16_t pml3_index(uintptr_t v)
+
+uint16_t pml3_index(uintptr_t v)
 {
 	return (v >> PML_SHIFT_L3) & PML_IDX_MASK;
 }
-static inline uint16_t pml4_index(uintptr_t v)
+
+uint16_t pml4_index(uintptr_t v)
 {
 	return (v >> PML_SHIFT_L4) & PML_IDX_MASK;
 }
@@ -174,7 +178,7 @@ static uintptr_t alloc_pt_page_phys(void)
 	uintptr_t p = (uintptr_t)palloc(1);
 	if (!p)
 		return 0;
-	memset((void *)phys_to_virt(p), 0, PAGE_SIZE);
+	memset((void *)PHYS_TO_VIRT(p), 0, PAGE_SIZE);
 	return p;
 }
 
@@ -197,7 +201,7 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 	if (flags & VMM_WRITABLE)
 		flags |= VMM_NX;
 
-	pagetable *pml4_table = (pagetable *)phys_to_virt(pm_phys);
+	pagetable *pml4_table = (pagetable *)PHYS_TO_VIRT(pm_phys);
 
 	if (!(pml4_table->entries[p4] & VMM_PRESENT)) {
 		uintptr_t new_pml3_phys = alloc_pt_page_phys();
@@ -208,7 +212,7 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 	}
 
 	pagetable *pml3_table =
-		(pagetable *)phys_to_virt(pml4_table->entries[p4] & PAGE_FRAME_MASK);
+		(pagetable *)PHYS_TO_VIRT(pml4_table->entries[p4] & PAGE_FRAME_MASK);
 
 	if (!(pml3_table->entries[p3] & VMM_PRESENT)) {
 		uintptr_t new_pml2_phys = alloc_pt_page_phys();
@@ -219,7 +223,7 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 	}
 
 	pagetable *pml2_table =
-		(pagetable *)phys_to_virt(pml3_table->entries[p3] & PAGE_FRAME_MASK);
+		(pagetable *)PHYS_TO_VIRT(pml3_table->entries[p3] & PAGE_FRAME_MASK);
 
 	if (!(pml2_table->entries[p2] & VMM_PRESENT)) {
 		uintptr_t new_pml1_phys = alloc_pt_page_phys();
@@ -230,7 +234,8 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 	}
 
 	pagetable *pml1_table =
-		(pagetable *)phys_to_virt(pml2_table->entries[p2] & PAGE_FRAME_MASK);
+		(pagetable *)PHYS_TO_VIRT(pml2_table->entries[p2] & PAGE_FRAME_MASK);
+
 	pml1_table->entries[p1] =
 		(phys & PAGE_FRAME_MASK) | (flags & ~PAGE_FRAME_MASK);
 
@@ -252,22 +257,22 @@ static inline void _unmap(pagetable *pm_phys_ptr, uintptr_t virt)
 	uint64_t p2 = pml2_index(virt);
 	uint64_t p1 = pml1_index(virt);
 
-	pagetable *pml4_table = (pagetable *)phys_to_virt(pm_phys);
+	pagetable *pml4_table = (pagetable *)PHYS_TO_VIRT(pm_phys);
 	if (!(pml4_table->entries[p4] & VMM_PRESENT))
 		goto not_mapped;
 
 	pagetable *pml3_table =
-		(pagetable *)phys_to_virt(pml4_table->entries[p4] & PAGE_FRAME_MASK);
+		(pagetable *)PHYS_TO_VIRT(pml4_table->entries[p4] & PAGE_FRAME_MASK);
 	if (!(pml3_table->entries[p3] & VMM_PRESENT))
 		goto not_mapped;
 
 	pagetable *pml2_table =
-		(pagetable *)phys_to_virt(pml3_table->entries[p3] & PAGE_FRAME_MASK);
+		(pagetable *)PHYS_TO_VIRT(pml3_table->entries[p3] & PAGE_FRAME_MASK);
 	if (!(pml2_table->entries[p2] & VMM_PRESENT))
 		goto not_mapped;
 
 	pagetable *pml1_table =
-		(pagetable *)phys_to_virt(pml2_table->entries[p2] & PAGE_FRAME_MASK);
+		(pagetable *)PHYS_TO_VIRT(pml2_table->entries[p2] & PAGE_FRAME_MASK);
 	pml1_table->entries[p1] = 0;
 
 	if (read_cr3() == pm_phys)
@@ -325,40 +330,6 @@ pagetable *create_pagemap(void)
 		error("create_pagemap(): Failed to allocate memory for a new pm.\n");
 		return NULL;
 	}
-	memset((void *)phys_to_virt(pm_phys), 0, PAGE_SIZE);
+	memset((void *)PHYS_TO_VIRT(pm_phys), 0, PAGE_SIZE);
 	return (pagetable *)pm_phys;
-}
-
-uintptr_t virt_to_phys(pagetable *pm, uintptr_t virt)
-{
-	if (!pm)
-		pm = (pagetable *)kernel_pm;
-	uintptr_t pm_phys = (uintptr_t)pm;
-
-	uint64_t p4 = pml4_index(virt);
-	uint64_t p3 = pml3_index(virt);
-	uint64_t p2 = pml2_index(virt);
-	uint64_t p1 = pml1_index(virt);
-
-	pagetable *pml4_table = (pagetable *)phys_to_virt(pm_phys);
-	if (!(pml4_table->entries[p4] & VMM_PRESENT))
-		return 0;
-
-	pagetable *pml3_table =
-		(pagetable *)phys_to_virt(pml4_table->entries[p4] & PAGE_FRAME_MASK);
-	if (!(pml3_table->entries[p3] & VMM_PRESENT))
-		return 0;
-
-	pagetable *pml2_table =
-		(pagetable *)phys_to_virt(pml3_table->entries[p3] & PAGE_FRAME_MASK);
-	if (!(pml2_table->entries[p2] & VMM_PRESENT))
-		return 0;
-
-	pagetable *pml1_table =
-		(pagetable *)phys_to_virt(pml2_table->entries[p2] & PAGE_FRAME_MASK);
-	if (!(pml1_table->entries[p1] & VMM_PRESENT))
-		return 0;
-
-	return (pml1_table->entries[p1] & PAGE_FRAME_MASK) |
-		   (virt & (PAGE_SIZE - 1));
 }
