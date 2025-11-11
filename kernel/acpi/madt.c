@@ -29,6 +29,7 @@
 #include <config.h>
 #include <aurix.h>
 #include <stdint.h>
+#include <debug/log.h>
 
 struct madt *madt = NULL;
 

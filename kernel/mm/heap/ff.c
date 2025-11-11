@@ -23,16 +23,18 @@
 #include <mm/vmm.h>
 #include <lib/align.h>
 #include <aurix.h>
+#include <string.h>
 
 #define ALIGNMENT 16
 #define CANARY_SIZE sizeof(uint64_t)
 #define CANARY_VALUE 0xdeadbeefdeadbeefULL
 #define CHECK_MAGIC 0xfeedfacefeedfaceULL
 
-static void *pool;
+static void *pool = NULL;
+static size_t pool_pages = 0;
 static block_t *freelist = NULL;
 
-static size_t compute_check(block_t *b)
+static size_t compute_check(const block_t *b)
 {
 	return (uintptr_t)b->prev ^ (uintptr_t)b->next ^ b->size ^ b->user_size ^
 		   CHECK_MAGIC;
@@ -43,29 +45,109 @@ static void set_check(block_t *b)
 	b->check = compute_check(b);
 }
 
-static int validate(block_t *b)
+static int validate(const block_t *b)
 {
 	if (b->check != compute_check(b)) {
-		error("Heap corruption detected in block %p!\n", (void *)b);
+		error("HEAP CORRUPTION: block %p header corrupted!\n", (void *)b);
 		return 0;
 	}
 	return 1;
 }
 
+static uint64_t *leading_canary_ptr(const block_t *b)
+{
+	return (uint64_t *)((uint8_t *)b + sizeof(block_t));
+}
+
+static uint64_t *trailing_canary_ptr(const block_t *b)
+{
+	return (uint64_t *)((uint8_t *)b + sizeof(block_t) +
+						ALIGN_UP(b->user_size, ALIGNMENT));
+}
+
+static void write_canaries(block_t *b)
+{
+	*leading_canary_ptr(b) = CANARY_VALUE;
+	*trailing_canary_ptr(b) = CANARY_VALUE;
+}
+
+static int check_canaries(const block_t *b)
+{
+	if (*leading_canary_ptr(b) != CANARY_VALUE) {
+		error("HEAP OVERFLOW (leading canary) at block %p!\n", (void *)b);
+		return 0;
+	}
+	if (*trailing_canary_ptr(b) != CANARY_VALUE) {
+		error("HEAP OVERFLOW (trailing canary) at block %p!\n", (void *)b);
+		return 0;
+	}
+	return 1;
+}
+
+static int grow_heap(vctx_t *ctx, size_t needed_pages)
+{
+	size_t add_pages = ALIGN_UP(needed_pages, 64);
+	void *new_mem = valloc(ctx, add_pages, VALLOC_RW);
+	if (!new_mem) {
+		error("HEAP GROWTH FAILED: cannot allocate %zu more pages!\n",
+			  add_pages);
+		return 0;
+	}
+
+	warn("HEAP GROWING: adding %zu pages (now %zu total)\n", add_pages,
+		 pool_pages + add_pages);
+
+	block_t *new_block = (block_t *)new_mem;
+	new_block->prev = NULL;
+	new_block->next = NULL;
+	new_block->user_size = 0;
+	new_block->size = add_pages * PAGE_SIZE - sizeof(block_t);
+	new_block->size = ALIGN_DOWN(new_block->size, ALIGNMENT);
+	set_check(new_block);
+
+	if (pool) {
+		block_t *last = (block_t *)((uint8_t *)pool + pool_pages * PAGE_SIZE -
+									sizeof(block_t));
+		if (!validate(last))
+			return 0;
+
+		if ((uint8_t *)last + sizeof(block_t) + last->size ==
+			(uint8_t *)new_block) {
+			last->size += sizeof(block_t) + new_block->size;
+			set_check(last);
+		} else {
+			new_block->next = freelist;
+			if (freelist)
+				freelist->prev = new_block;
+			freelist = new_block;
+		}
+	} else {
+		pool = new_mem;
+		freelist = new_block;
+	}
+
+	pool_pages += add_pages;
+	return 1;
+}
+
 void heap_init(vctx_t *ctx)
 {
-	pool = valloc(ctx, FF_POOL_SIZE, VALLOC_RW);
-	if (!pool) /* TODO: call something like kpanic */ {
-		error("Failed to allocate memory for heap pool!\n");
+	const size_t initial_pages = FF_POOL_SIZE;
+	pool = valloc(ctx, initial_pages, VALLOC_RW);
+	if (!pool) {
+		error("Failed to allocate initial heap pool (%zu pages)!\n",
+			  initial_pages);
 		for (;;)
 			;
 	}
+	pool_pages = initial_pages;
+
 	freelist = (block_t *)pool;
 	freelist->prev = NULL;
 	freelist->next = NULL;
 	freelist->user_size = 0;
 	freelist->size =
-		ALIGN_DOWN((FF_POOL_SIZE * PAGE_SIZE) - sizeof(block_t), ALIGNMENT);
+		ALIGN_DOWN(initial_pages * PAGE_SIZE - sizeof(block_t), ALIGNMENT);
 	set_check(freelist);
 }
 
@@ -74,59 +156,74 @@ void *kmalloc(size_t size)
 	if (size == 0)
 		return NULL;
 
-	size_t user_size = ALIGN_UP(size, ALIGNMENT);
-	size_t effective_size = ALIGN_UP(user_size + CANARY_SIZE, ALIGNMENT);
+	size_t user_sz = ALIGN_UP(size, ALIGNMENT);
+	size_t payload = user_sz + 2 * CANARY_SIZE;
+	size_t effective = ALIGN_UP(payload, ALIGNMENT);
 
 	block_t *cur = freelist;
+	block_t *chosen = NULL;
+
 	while (cur) {
 		if (!validate(cur))
 			return NULL;
-		if (cur->size >= effective_size) {
-			size_t min_split_remainder = sizeof(block_t) + ALIGNMENT;
-			if (cur->size >= effective_size + min_split_remainder) {
-				block_t *new_block =
-					(block_t *)((uint8_t *)cur + sizeof(block_t) +
-								effective_size);
-				new_block->size = cur->size - effective_size;
-				new_block->user_size = 0;
-				new_block->prev = cur->prev;
-				new_block->next = cur->next;
-				set_check(new_block);
-				if (new_block->next) {
-					new_block->next->prev = new_block;
-					set_check(new_block->next);
-				}
-				if (new_block->prev) {
-					new_block->prev->next = new_block;
-					set_check(new_block->prev);
-				}
-				if (freelist == cur)
-					freelist = new_block;
-				cur->size = effective_size;
-			} else {
-				effective_size = cur->size;
-				if (cur->prev) {
-					cur->prev->next = cur->next;
-					set_check(cur->prev);
-				} else {
-					freelist = cur->next;
-				}
-				if (cur->next) {
-					cur->next->prev = cur->prev;
-					set_check(cur->next);
-				}
-			}
-			cur->prev = NULL;
-			cur->next = NULL;
-			cur->user_size = user_size;
-			set_check(cur);
-			void *ptr = (uint8_t *)cur + sizeof(block_t);
-			*(uint64_t *)((uint8_t *)ptr + user_size) = CANARY_VALUE;
-			return ptr;
+
+		if (cur->size >= effective) {
+			chosen = cur;
+			break;
 		}
 		cur = cur->next;
 	}
-	return NULL;
+
+	if (!chosen) {
+		size_t needed =
+			(effective + sizeof(block_t) + ALIGNMENT - 1) / PAGE_SIZE + 1;
+		if (!grow_heap(NULL, needed))
+			return NULL;
+		return kmalloc(size);
+	}
+
+	const size_t min_remain = sizeof(block_t) + ALIGNMENT;
+	if (chosen->size >= effective + min_remain) {
+		block_t *remainder =
+			(block_t *)((uint8_t *)chosen + sizeof(block_t) + effective);
+		remainder->size = chosen->size - effective - sizeof(block_t);
+		remainder->size = ALIGN_DOWN(remainder->size, ALIGNMENT);
+		remainder->user_size = 0;
+		remainder->prev = chosen->prev;
+		remainder->next = chosen->next;
+		set_check(remainder);
+
+		if (remainder->prev) {
+			remainder->prev->next = remainder;
+			set_check(remainder->prev);
+		}
+		if (remainder->next) {
+			remainder->next->prev = remainder;
+			set_check(remainder->next);
+		}
+		if (freelist == chosen)
+			freelist = remainder;
+
+		chosen->size = effective;
+	} else {
+		effective = chosen->size;
+		if (chosen->prev) {
+			chosen->prev->next = chosen->next;
+			set_check(chosen->prev);
+		} else
+			freelist = chosen->next;
+		if (chosen->next) {
+			chosen->next->prev = chosen->prev;
+			set_check(chosen->next);
+		}
+	}
+
+	chosen->prev = chosen->next = NULL;
+	chosen->user_size = user_sz;
+	set_check(chosen);
+	write_canaries(chosen);
+
+	return (void *)((uint8_t *)chosen + sizeof(block_t) + CANARY_SIZE);
 }
 
 void kfree(void *ptr)
@@ -134,67 +231,61 @@ void kfree(void *ptr)
 	if (!ptr)
 		return;
 
-	block_t *block = (block_t *)((uint8_t *)ptr - sizeof(block_t));
-	if (!validate(block))
+	block_t *b = (block_t *)((uint8_t *)ptr - CANARY_SIZE - sizeof(block_t));
+	if (!validate(b))
 		return;
 
-	uint64_t *canary_ptr = (uint64_t *)((uint8_t *)ptr + block->user_size);
-	if (*canary_ptr != CANARY_VALUE) {
-		error("Heap canary corruption at %p!\n", ptr);
+	if (!check_canaries(b))
 		return;
-	}
 
-	block->user_size = 0;
+	b->user_size = 0;
 
 	block_t *cur = freelist;
-	block_t *ins_prev = NULL;
-	while (cur && cur < block) {
+	block_t *prev = NULL;
+	while (cur && cur < b) {
 		if (!validate(cur))
 			return;
-		ins_prev = cur;
+		prev = cur;
 		cur = cur->next;
 	}
 
-	block->next = cur;
-	block->prev = ins_prev;
-	set_check(block);
+	b->prev = prev;
+	b->next = cur;
+	set_check(b);
 
-	if (ins_prev) {
-		ins_prev->next = block;
-		set_check(ins_prev);
-	} else {
-		freelist = block;
-	}
-
+	if (prev) {
+		prev->next = b;
+		set_check(prev);
+	} else
+		freelist = b;
 	if (cur) {
-		cur->prev = block;
+		cur->prev = b;
 		set_check(cur);
 	}
 
-	if (block->next && ((uint8_t *)block + sizeof(block_t) + block->size) ==
-						   (uint8_t *)block->next) {
-		if (!validate(block->next))
+	if (b->next &&
+		(uint8_t *)b + sizeof(block_t) + b->size == (uint8_t *)b->next) {
+		if (!validate(b->next))
 			return;
-		block->size += sizeof(block_t) + block->next->size;
-		block_t *next_next = block->next->next;
-		block->next = next_next;
-		set_check(block);
-		if (next_next) {
-			next_next->prev = block;
-			set_check(next_next);
+		b->size += sizeof(block_t) + b->next->size;
+		b->next = b->next->next;
+		set_check(b);
+		if (b->next) {
+			b->next->prev = b;
+			set_check(b->next);
 		}
 	}
 
-	if (block->prev && ((uint8_t *)block->prev + sizeof(block_t) +
-						block->prev->size) == (uint8_t *)block) {
-		if (!validate(block->prev))
+	if (b->prev &&
+		(uint8_t *)b->prev + sizeof(block_t) + b->prev->size == (uint8_t *)b) {
+		if (!validate(b->prev))
 			return;
-		block->prev->size += sizeof(block_t) + block->size;
-		block->prev->next = block->next;
-		set_check(block->prev);
-		if (block->next) {
-			block->next->prev = block->prev;
-			set_check(block->next);
+		b->prev->size += sizeof(block_t) + b->size;
+		b->prev->next = b->next;
+		set_check(b->prev);
+		if (b->next) {
+			b->next->prev = b->prev;
+			set_check(b->next);
 		}
 	}
 }
