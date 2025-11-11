@@ -28,6 +28,7 @@
 #include <lib/string.h>
 #include <config.h>
 #include <stdint.h>
+#include <debug/log.h>
 
 struct madt *madt = NULL;
 
