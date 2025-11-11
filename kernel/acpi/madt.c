@@ -27,6 +27,7 @@
 #include <acpi/madt.h>
 #include <lib/string.h>
 #include <config.h>
+#include <aurix.h>
 #include <stdint.h>
 
 struct madt *madt = NULL;

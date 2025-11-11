@@ -10,8 +10,6 @@ struct hpet *hpet;
 
 uint64_t period = 0;
 
-extern void pmm_reclaim_bootparms();
-
 void acpi_hpet_init()
 {
 	hpet_sdt = (struct hpet_sdt *)find_sdt("HPET");
