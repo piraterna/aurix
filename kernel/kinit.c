@@ -17,22 +17,22 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <boot/aurix.h>
+#include <boot/axprot.h>
 #include <arch/cpu/cpu.h>
 #include <arch/apic/apic.h>
 #include <acpi/acpi.h>
 #include <boot/args.h>
 #include <cpu/cpu.h>
 #include <debug/uart.h>
-#include <debug/log.h>
-#include <stddef.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <mm/heap.h>
 #include <lib/string.h>
+#include <aurix.h>
+#include <platform/time/rtc.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
-#include <platform/time/rtc.h>
+#include <stddef.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -172,15 +172,17 @@ void _start(struct aurix_parameters *params)
 	test_run(10);
 
 	paging_init();
-	cpu_enable_interrupts();
 	debug("kernel cmdline: %s\n", boot_params->cmdline);
 	acpi_init((void *)boot_params->rsdp_addr);
-	pmm_reclaim_bootparms();
 	apic_init();
+
+	pmm_reclaim_bootparms();
+
+	cpu_enable_interrupts();
 
 	//parse_boot_args(boot_params->cmdline);
 
-	heap_init(vinit(kernel_pm, 0x1000));
+	// heap_init(vinit(kernel_pm, 0x1000));
 	TEST_ADD(heap_test);
 	test_run(10);
 

@@ -16,12 +16,13 @@
 /* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
+
 #include <mm/heap.h>
 #include <mm/heap/ff.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <lib/align.h>
-#include <debug/log.h>
+#include <aurix.h>
 #include <string.h>
 
 #define ALIGNMENT 16

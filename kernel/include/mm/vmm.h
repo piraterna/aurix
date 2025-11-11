@@ -39,8 +39,6 @@ void map_pages(pagetable *pm, uintptr_t virt, uintptr_t phys, size_t size,
 void unmap_page(pagetable *pm, uintptr_t virt);
 void unmap_pages(pagetable *pm, uintptr_t virt, size_t size);
 
-uintptr_t virt_to_phys(pagetable *pm, uintptr_t virt);
-
 #ifndef VPM_MIN_ADDR
 #define VPM_MIN_ADDR 0x1000
 #endif // VPM_MIN_ADDR
@@ -81,6 +79,8 @@ void *vallocat(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys);
 void *vadd(vctx_t *ctx, uint64_t vaddr, uint64_t paddr, size_t pages,
 		   uint64_t flags);
 void vfree(vctx_t *ctx, void *ptr);
+
 vregion_t *vget(vctx_t *ctx, uint64_t vaddr);
+uintptr_t vget_phys(pagetable *pm, uintptr_t virt);
 
 #endif /* _MM_VMM_H */

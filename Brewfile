@@ -8,6 +8,7 @@
 brew "git"
 brew "make"
 brew "gptfdisk"
+brew "clang-format"
 brew "xorriso"
 brew "mtools"
 brew "qemu"

@@ -19,11 +19,11 @@
  */
 /* SOFTWARE. */
 /*********************************************************************************/
+
 #ifndef _MM_PMM_H
 #define _MM_PMM_H
 
 #include <stddef.h>
-#include <boot/aurix.h>
 
 #define PAGE_SIZE 0x1000
 

@@ -17,9 +17,9 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <debug/log.h>
 #include <mm/heap.h>
 #include <lib/string.h>
+#include <aurix.h>
 
 void parse_boot_args(char *args)
 {

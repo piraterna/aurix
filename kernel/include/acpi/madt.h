@@ -128,10 +128,7 @@ enum gicc_flags {
 	VGIC_MAINTENANCE_INT_EDGE = 5
 };
 
-enum gic_msi_frame_flags {
-	SPI_IGNORE = 0,
-	SPI_OVERRIDE = 1
-};
+enum gic_msi_frame_flags { SPI_IGNORE = 0, SPI_OVERRIDE = 1 };
 
 struct madt_gicc {
 	struct madt_header hdr;

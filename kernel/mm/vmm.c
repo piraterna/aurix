@@ -24,16 +24,30 @@
 #include <mm/pmm.h>
 #include <lib/string.h>
 #include <lib/align.h>
+#include <aurix.h>
 #include <stdbool.h>
-#include <debug/log.h>
+
+#define PAGE_FRAME_MASK 0x000FFFFFFFFFF000ULL
+#define PML_IDX_MASK 0x1ffULL
+#define PML_SHIFT_L1 12
+#define PML_SHIFT_L2 21
+#define PML_SHIFT_L3 30
+#define PML_SHIFT_L4 39
+
+extern uint16_t pml1_index(uintptr_t);
+extern uint16_t pml2_index(uintptr_t);
+extern uint16_t pml3_index(uintptr_t);
+extern uint16_t pml4_index(uintptr_t);
 
 vctx_t *vinit(pagetable *pm, uint64_t start)
 {
-	vctx_t *ctx = (vctx_t *)(palloc(1) + boot_params->hhdm_offset);
+	vctx_t *ctx = (vctx_t *)PHYS_TO_VIRT(palloc(1));
 	if (!ctx)
 		return NULL;
+
 	memset(ctx, 0, sizeof(vctx_t));
-	ctx->root = (vregion_t *)(palloc(1) + boot_params->hhdm_offset);
+
+	ctx->root = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 	if (!ctx->root) {
 		pfree(ctx, 1);
 		return NULL;
@@ -71,7 +85,7 @@ void *valloc(vctx_t *ctx, size_t pages, uint64_t flags)
 	while (region) {
 		if (region->next == NULL ||
 			region->start + (region->pages * PAGE_SIZE) < region->next->start) {
-			new = (vregion_t *)(palloc(1) + boot_params->hhdm_offset);
+			new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 			if (!new)
 				return NULL;
 
@@ -95,7 +109,7 @@ void *valloc(vctx_t *ctx, size_t pages, uint64_t flags)
 		region = region->next;
 	}
 
-	new = (vregion_t *)(palloc(1) + boot_params->hhdm_offset);
+	new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 	if (!new)
 		return NULL;
 
@@ -131,7 +145,7 @@ void *vallocat(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys)
 	while (region) {
 		if (region->next == NULL ||
 			region->start + (pages * PAGE_SIZE) < region->next->start) {
-			new = (vregion_t *)(palloc(1) + boot_params->hhdm_offset);
+			new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 			if (!new)
 				return NULL;
 
@@ -155,7 +169,7 @@ void *vallocat(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys)
 		region = region->next;
 	}
 
-	new = (vregion_t *)(palloc(1) + boot_params->hhdm_offset);
+	new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 	if (!new)
 		return NULL;
 
@@ -202,7 +216,7 @@ void *vadd(vctx_t *ctx, uint64_t vaddr, uint64_t paddr, size_t pages,
 		region = region->next;
 	}
 
-	vregion_t *new = (vregion_t *)(palloc(1) + boot_params->hhdm_offset);
+	vregion_t *new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 	if (!new)
 		return NULL;
 
@@ -246,7 +260,7 @@ void vfree(vctx_t *ctx, void *ptr)
 
 	for (uint64_t i = 0; i < region->pages; i++) {
 		uint64_t virt = region->start + (i * PAGE_SIZE);
-		uint64_t phys = virt_to_phys(kernel_pm, virt);
+		uint64_t phys = vget_phys(kernel_pm, virt);
 
 		if (phys != 0) {
 			pfree((void *)phys, 1);
@@ -283,4 +297,38 @@ vregion_t *vget(vctx_t *ctx, uint64_t vaddr)
 	}
 
 	return NULL;
+}
+
+uintptr_t vget_phys(pagetable *pm, uintptr_t virt)
+{
+	if (!pm)
+		pm = (pagetable *)kernel_pm;
+	uintptr_t pm_phys = (uintptr_t)pm;
+
+	uint64_t p4 = pml4_index(virt);
+	uint64_t p3 = pml3_index(virt);
+	uint64_t p2 = pml2_index(virt);
+	uint64_t p1 = pml1_index(virt);
+
+	pagetable *pml4_table = (pagetable *)PHYS_TO_VIRT(pm_phys);
+	if (!(pml4_table->entries[p4] & VMM_PRESENT))
+		return 0;
+
+	pagetable *pml3_table =
+		(pagetable *)PHYS_TO_VIRT(pml4_table->entries[p4] & PAGE_FRAME_MASK);
+	if (!(pml3_table->entries[p3] & VMM_PRESENT))
+		return 0;
+
+	pagetable *pml2_table =
+		(pagetable *)PHYS_TO_VIRT(pml3_table->entries[p3] & PAGE_FRAME_MASK);
+	if (!(pml2_table->entries[p2] & VMM_PRESENT))
+		return 0;
+
+	pagetable *pml1_table =
+		(pagetable *)PHYS_TO_VIRT(pml2_table->entries[p2] & PAGE_FRAME_MASK);
+	if (!(pml1_table->entries[p1] & VMM_PRESENT))
+		return 0;
+
+	return (pml1_table->entries[p1] & PAGE_FRAME_MASK) |
+		   (virt & (PAGE_SIZE - 1));
 }

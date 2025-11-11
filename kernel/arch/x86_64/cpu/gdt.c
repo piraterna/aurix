@@ -60,7 +60,7 @@ void gdt_init()
 
 	uint16_t tss_index = 5 * sizeof(struct gdt_descriptor);
 
-	__asm__ volatile("ltr %0" :: "d"(tss_index));
+	__asm__ volatile("ltr %0" ::"d"(tss_index));
 }
 
 void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit,

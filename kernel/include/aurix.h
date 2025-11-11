@@ -28,7 +28,7 @@
 
 extern uintptr_t hhdm_offset;
 
-#define PHYS_TO_VIRT(addr) ((addr) + hhdm_offset)
-#define VIRT_TO_PHYS(addr) ((addr) - hhdm_offset)
+#define PHYS_TO_VIRT(addr) ((uintptr_t)(addr) + hhdm_offset)
+#define VIRT_TO_PHYS(addr) ((uintptr_t)(addr) - hhdm_offset)
 
 #endif /* _AURIX_H */

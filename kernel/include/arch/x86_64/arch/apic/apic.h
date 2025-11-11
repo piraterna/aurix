@@ -28,75 +28,62 @@
 #define APIC_BASE_MSR 0x1b
 
 enum apic_regs {
-    APIC_ID = 0x20,
-    APIC_VER = 0x30,
-    APIC_TPR = 0x80,
-    APIC_APR = 0x90,
-    APIC_PPR = 0xA0,
-    APIC_EOI = 0xB0,
-    APIC_RRD = 0xC0,
-    APIC_LOCAL_DEST = 0xD0,
-    APIC_DEST_FORMAT = 0xE0,
-    APIC_SPURIOUS_IVR = 0xF0,
+	APIC_ID = 0x20,
+	APIC_VER = 0x30,
+	APIC_TPR = 0x80,
+	APIC_APR = 0x90,
+	APIC_PPR = 0xA0,
+	APIC_EOI = 0xB0,
+	APIC_RRD = 0xC0,
+	APIC_LOCAL_DEST = 0xD0,
+	APIC_DEST_FORMAT = 0xE0,
+	APIC_SPURIOUS_IVR = 0xF0,
 
-    APIC_ERROR_STATUS = 0x280
+	APIC_ERROR_STATUS = 0x280
 };
 
-enum ioapic_regs {
-    IOAPICID = 0,
-    IOAPICVER = 1,
-    IOAPICARB = 2
-};
+enum ioapic_regs { IOAPICID = 0, IOAPICVER = 1, IOAPICARB = 2 };
 
 #define IOAPICREDTBLL(n) (0x10 + 2 * (n))
 #define IOAPICREDTBLH(n) (0x10 + 2 * (n) + 1)
 
 enum ioapic_delivery_mode {
-    IOAPIC_FIXED = 0,
-    IOAPIC_LOW_PRIOR = 1,
-    IOAPIC_SMI = 2,
-    IOAPIC_NMI = 3,
-    IOAPIC_INIT = 4,
-    IOAPIC_EXTINT = 5
+	IOAPIC_FIXED = 0,
+	IOAPIC_LOW_PRIOR = 1,
+	IOAPIC_SMI = 2,
+	IOAPIC_NMI = 3,
+	IOAPIC_INIT = 4,
+	IOAPIC_EXTINT = 5
 };
 
 enum ioapic_destination_mode {
-    IOAPIC_PHYSICAL_DESTINATION = 0,
-    IOAPIC_LOGICAL_DESTINATION = 1
+	IOAPIC_PHYSICAL_DESTINATION = 0,
+	IOAPIC_LOGICAL_DESTINATION = 1
 };
 
-enum ioapic_delivery_status {
-    IOAPIC_RELAXED = 0,
-    IOAPIC_WAIT_FOR_PROCESS = 1
-};
+enum ioapic_delivery_status { IOAPIC_RELAXED = 0, IOAPIC_WAIT_FOR_PROCESS = 1 };
 
-enum ioapic_pin_polarity {
-    IOAPIC_ACTIVE_HI = 0,
-    IOAPIC_ACTIVE_LO = 1
-};
+enum ioapic_pin_polarity { IOAPIC_ACTIVE_HI = 0, IOAPIC_ACTIVE_LO = 1 };
 
-enum ioapic_trigger_mode {
-    IOAPIC_TRIGGER_EDGE = 0,
-    IOAPIC_TRIGGER_LEVEL = 1
-};
+enum ioapic_trigger_mode { IOAPIC_TRIGGER_EDGE = 0, IOAPIC_TRIGGER_LEVEL = 1 };
 
 union ioapic_redirect_entry {
-    struct {
-        uint8_t vec;
-        uint8_t delivery_mode : 3;
-        uint8_t destination_mode : 1;
-        uint8_t delivery_status : 1;
-        uint8_t pin_polarity : 1;
-        uint8_t remote_irr : 1;
-        uint8_t trigger_mode : 1;
-        uint8_t mask : 1;
-        uint8_t dest;
-    };
-    struct {
-        uint32_t low;
-        uint32_t high;
-    } bytes;
-    
+	struct {
+		uint8_t vec;
+		uint8_t delivery_mode : 3;
+		uint8_t destination_mode : 1;
+		uint8_t delivery_status : 1;
+		uint8_t pin_polarity : 1;
+		uint8_t remote_irr : 1;
+		uint8_t trigger_mode : 1;
+		uint8_t mask : 1;
+		uint8_t dest;
+	};
+	struct {
+		uint32_t low;
+		uint32_t high;
+	} bytes;
+
 } __attribute__((packed));
 
 uint64_t apic_msr_read(uint64_t offset);
