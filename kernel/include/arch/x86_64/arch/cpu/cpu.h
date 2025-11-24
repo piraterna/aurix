@@ -66,6 +66,12 @@ struct stack_frame {
 	uint64_t rip;
 } __attribute__((packed));
 
+struct cpu {
+	uint8_t id;
+};
+
+struct cpu *cpu_get_current(void);
+
 ////
 // Utilities
 ///

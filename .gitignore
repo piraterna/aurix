@@ -12,4 +12,4 @@ Brewfile.lock.json
 *.log
 
 uefi_nvram.json
-.config
+.config*

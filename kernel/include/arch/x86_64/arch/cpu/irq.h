@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  init.c */
+/* Module Name:  irq.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,39 +20,21 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <arch/cpu/cpu.h>
-#include <arch/cpu/gdt.h>
-#include <arch/cpu/idt.h>
-#include <stddef.h>
-#include <config.h>
-#include <aurix.h>
+#ifndef _ARCH_CPU_IRQ_H
+#define _ARCH_CPU_IRQ_H
 
-#define CPU_ID_MSR 0xC0000103
+#include <stdint.h>
 
-struct cpu cpuinfo[CONFIG_CPU_MAX_COUNT];
-size_t cpu_count = 0;
+typedef void (*irq_callback)(void *);
 
-int cpu_early_init()
-{
-	gdt_init();
-	idt_init();
+struct irq_handler {
+	void *ctx;
+	irq_callback callback;
+};
 
-	// save cpuinfo
-	cpuinfo[cpu_count].id = cpu_count;
-	wrmsr(CPU_ID_MSR, cpu_count);
-	cpu_count++;
+void irq_install(uint8_t vec, irq_callback callback, void *ctx);
+void irq_uninstall(uint8_t vec);
 
-	return 1; // all good
-}
+void irq_dispatch(uint8_t irq);
 
-struct cpu *cpu_get_current()
-{
-	uint32_t id = rdmsr(CPU_ID_MSR);
-	struct cpu *cpu = &cpuinfo[id];
-	if (cpu->id != id) {
-		error("I'm running on an unregistered core!\n");
-		return NULL;
-	}
-
-	return cpu;
-}
+#endif /* _ARCH_CPU_IRQ_H */

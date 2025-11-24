@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  init.c */
+/* Module Name:  irq.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,39 +20,58 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <arch/cpu/cpu.h>
-#include <arch/cpu/gdt.h>
+#include <arch/apic/apic.h>
 #include <arch/cpu/idt.h>
-#include <stddef.h>
-#include <config.h>
+#include <arch/cpu/irq.h>
+#include <arch/cpu/cpu.h>
 #include <aurix.h>
+#include <stddef.h>
 
-#define CPU_ID_MSR 0xC0000103
+// this probably isn't the best way to do it... beats me
+struct irq_handler irq_handlers[224] = {0};
 
-struct cpu cpuinfo[CONFIG_CPU_MAX_COUNT];
-size_t cpu_count = 0;
-
-int cpu_early_init()
+void irq_install(uint8_t irq, irq_callback callback, void *ctx)
 {
-	gdt_init();
-	idt_init();
-
-	// save cpuinfo
-	cpuinfo[cpu_count].id = cpu_count;
-	wrmsr(CPU_ID_MSR, cpu_count);
-	cpu_count++;
-
-	return 1; // all good
-}
-
-struct cpu *cpu_get_current()
-{
-	uint32_t id = rdmsr(CPU_ID_MSR);
-	struct cpu *cpu = &cpuinfo[id];
-	if (cpu->id != id) {
-		error("I'm running on an unregistered core!\n");
-		return NULL;
+	if (irq > 16) {
+		warn("Tried to install an IRQ handler for IRQ#%u.\n", irq);
+		return;
 	}
 
-	return cpu;
+	struct irq_handler *h = &irq_handlers[irq];
+	if (h->callback) {
+		warn("Overwriting IRQ callback 0x%llx for IRQ%u with 0x%llx.\n", h->callback, irq, callback);
+	}
+
+	h->callback = callback;
+	h->ctx = ctx;
+
+	ioapic_write_red(irq, 0x20 + irq, 0, 0, 0, cpu_get_current()->id);
+
+	debug("Installed IRQ handler 0x%llx for IRQ%u.\n", callback, irq);
+}
+
+void irq_uninstall(uint8_t irq)
+{
+	if (irq > 16) {
+		warn("Tried to uninstall an IRQ handler for IRQ#%u.\n", irq);
+		return;
+	}
+
+	struct irq_handler *h = &irq_handlers[irq];
+
+	h->callback = NULL;
+	h->ctx = NULL;
+
+	debug("Uninstalled IRQ handler for IRQ#%u.\n", irq);
+}
+
+void irq_dispatch(uint8_t irq)
+{
+	struct irq_handler *h = &irq_handlers[irq];
+	if (!h->callback) {
+		debug("Unhandled IRQ#%u.\n", irq);
+		return;
+	}
+
+	h->callback(h->ctx);
 }

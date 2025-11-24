@@ -4,8 +4,10 @@ config CPU_MAX_COUNT
     int "Maximum amount of CPUs"
     default 64
 
-config IOAPIC_MAX_COUNT
-    int "Maximum amount of I/O APIC controllers"
+config IRQ_MAX_CALLBACKS
+    int "Maximum amount of callbacks to be assigned to an IRQ"
     default 4
+
+source "kernel/arch/$(ARCH)/Kconfig"
 
 endmenu

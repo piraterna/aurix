@@ -23,6 +23,7 @@
 #include <arch/apic/apic.h>
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/idt.h>
+#include <arch/cpu/irq.h>
 #include <cpu/trace.h>
 #include <aurix.h>
 #include <stdint.h>
@@ -72,7 +73,6 @@ struct idtr idtr = { .limit =
 					 .base = (uint64_t)&idt[0] };
 
 extern void *isr_stubs[256];
-void *irq_handlers[16] = { 0 };
 
 void idt_init()
 {
@@ -127,8 +127,8 @@ void isr_common_handler(struct interrupt_frame frame)
 
 		critical("Backtrace (cpu %u):\n", 1);
 		stack_trace(16);
-	} else if (frame.vector < 0x30) {
-		debug("Got interrupt!\n");
+	} else if (frame.vector < 0x80) {
+		irq_dispatch(frame.vector - 0x20);
 		apic_send_eoi();
 	} else {
 		warn("Unhandled interrupt %u\n", frame.vector);

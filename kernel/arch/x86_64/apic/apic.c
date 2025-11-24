@@ -59,12 +59,64 @@ void apic_send_eoi()
 	lapic_write(APIC_EOI, 0);
 }
 
+void ioapic_write_red(uint32_t gsi, uint8_t vec, uint8_t delivery_mode, uint8_t polarity, uint8_t trigger_mode, uint8_t lapic_id)
+{
+	union ioapic_redirect_entry redent = {0};
+	redent.vec = vec;
+	redent.delivery_mode = delivery_mode;
+	redent.delivery_status = 0;
+	redent.pin_polarity = polarity;
+	redent.remote_irr = 0;
+	redent.trigger_mode = trigger_mode;
+	redent.mask = 0;
+	redent.reserved = 0;
+	redent.dest = lapic_id;
+
+	size_t i;
+	bool found = false;
+	for (i = 0; i < ioapic_count; i++) {
+		uint8_t maxreds =
+			(ioapic_read(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICVER) >> 16) &
+			0xFF;
+		if (ioapics[i]->gsi_base <= gsi && ioapics[i]->gsi_base + maxreds > gsi) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		error("Couldn't find IOAPIC for GSI %u\n", gsi);
+		return;
+	}
+
+	uint32_t pin = gsi - ioapics[i]->gsi_base;
+
+	ioapic_write(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICREDTBLL(pin), redent.bytes.low);
+	ioapic_write(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICREDTBLH(pin), redent.bytes.high);
+
+	debug("Set IOAPIC redirection entry for vector %u, gsi %u (0x%lx%lx)\n", vec, gsi, redent.bytes.high, redent.bytes.low);
+}
+
 void apic_init()
 {
 	// initialize lapic
 	map_page(NULL, PHYS_TO_VIRT(lapic_base), lapic_base,
 			 VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH | VMM_CACHE_DISABLE);
 	lapic_base = PHYS_TO_VIRT(lapic_base);
+
+	uint64_t lapicMsr = rdmsr(0x1b);
+    wrmsr(0x1b, (lapicMsr | 0x800) & ~0x100);
+
+    lapic_write(0xf0, lapic_read(0xf0) | 0x100);
+
+    lapic_write(0x320, 0x10000);
+    lapic_write(0x330, (1 << 16));
+    lapic_write(0x340, (1 << 16));
+    lapic_write(0x350, (1 << 16));
+    lapic_write(0x360, (1 << 16));
+    lapic_write(0x370, (1 << 16));
+
+    lapic_write(0x80, 0);
 
 	// initialize ioapic
 	for (size_t i = 0; i < ioapic_count; i++) {
@@ -89,6 +141,6 @@ void apic_init()
 	}
 
 	// enable apic
-	lapic_write(APIC_SPURIOUS_IVR, 0x1FF);
+	lapic_write(APIC_SPURIOUS_IVR, lapic_read(APIC_SPURIOUS_IVR) | 0x100);
 	debug("Enabled APIC\n");
 }

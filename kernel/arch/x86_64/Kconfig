@@ -1,0 +1,3 @@
+config IOAPIC_MAX_COUNT
+    int "Maximum amount of I/O APIC controllers"
+    default 4

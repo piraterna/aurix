@@ -24,6 +24,7 @@
 #include <boot/args.h>
 #include <cpu/cpu.h>
 #include <debug/uart.h>
+#include <arch/cpu/irq.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <mm/heap.h>
@@ -139,6 +140,12 @@ static void heap_test(void)
 #endif
 /* ====================== */
 
+void tick(void *ctx)
+{
+	(void)ctx;
+	info("Tick!\n");
+}
+
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
@@ -197,6 +204,16 @@ void _start(struct aurix_parameters *params)
 	if (err != RTC_OK) {
 		error("RTC get time failed: %d\n", err);
 	}
+
+	uint16_t divisor = 1193;
+    outb(0x43, 0x36);
+    outb(0x40, (uint8_t)(divisor & 0xFF));
+    outb(0x40, (uint8_t)((divisor >> 8) & 0xFF));
+
+	__asm__ volatile("cli");
+	irq_install(0, tick, NULL);
+
+	__asm__ volatile("sti");
 
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
 		 time.day, time.hours, time.minutes, time.seconds);
