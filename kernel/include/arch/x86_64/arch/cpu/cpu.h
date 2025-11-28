@@ -23,6 +23,7 @@
 #ifndef _ARCH_CPU_CPU_H
 #define _ARCH_CPU_CPU_H
 
+#include <aurix.h>
 #include <stdint.h>
 
 struct interrupt_frame {
@@ -75,6 +76,15 @@ struct cpu *cpu_get_current(void);
 ////
 // Utilities
 ///
+
+static inline void cpu_halt(void)
+{
+	for (;;) {
+		__asm__ volatile("cli;hlt");
+	}
+
+	UNREACHABLE();
+}
 
 static inline void cpu_enable_interrupts(void)
 {

@@ -127,6 +127,8 @@ void isr_common_handler(struct interrupt_frame frame)
 
 		critical("Backtrace (cpu %u):\n", 1);
 		stack_trace(16);
+
+		cpu_halt();
 	} else if (frame.vector < 0x80) {
 		irq_dispatch(frame.vector - 0x20);
 		apic_send_eoi();

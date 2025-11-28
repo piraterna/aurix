@@ -31,4 +31,8 @@ extern uintptr_t hhdm_offset;
 #define PHYS_TO_VIRT(addr) ((uintptr_t)(addr) + hhdm_offset)
 #define VIRT_TO_PHYS(addr) ((uintptr_t)(addr) - hhdm_offset)
 
+#ifndef UNREACHABLE
+#define UNREACHABLE() __builtin_unreachable()
+#endif
+
 #endif /* _AURIX_H */

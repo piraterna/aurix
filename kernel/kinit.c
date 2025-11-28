@@ -189,7 +189,7 @@ void _start(struct aurix_parameters *params)
 
 	//parse_boot_args(boot_params->cmdline);
 
-	// heap_init(vinit(kernel_pm, 0x1000));
+	heap_init(vinit(kernel_pm, 0x1000));
 	TEST_ADD(heap_test);
 	test_run(10);
 
