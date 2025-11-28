@@ -56,7 +56,7 @@ void lapic_write(uint16_t reg, uint32_t val)
 
 void apic_send_eoi()
 {
-	lapic_write(APIC_EOI, 0);
+	lapic_write(APIC_EOI, 12);
 }
 
 void ioapic_write_red(uint32_t gsi, uint8_t vec, uint8_t delivery_mode, uint8_t polarity, uint8_t trigger_mode, uint8_t lapic_id)
@@ -73,6 +73,20 @@ void ioapic_write_red(uint32_t gsi, uint8_t vec, uint8_t delivery_mode, uint8_t 
 	redent.dest = lapic_id;
 
 	size_t i;
+	for (i = 0; i < iso_count; i++) {
+		if ((vec - 32) == isos[i]->src) {
+			gsi = isos[i]->gsi;
+
+			if (isos[i]->flags & 2) {
+				redent.pin_polarity = IOAPIC_ACTIVE_LO;
+			}
+			if (isos[i]->flags & 8) {
+				redent.trigger_mode = IOAPIC_TRIGGER_LEVEL;
+			}
+			break;
+		}
+	}
+
 	bool found = false;
 	for (i = 0; i < ioapic_count; i++) {
 		uint8_t maxreds =

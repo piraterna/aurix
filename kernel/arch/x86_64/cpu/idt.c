@@ -133,5 +133,4 @@ void isr_common_handler(struct interrupt_frame frame)
 	} else {
 		warn("Unhandled interrupt %u\n", frame.vector);
 	}
-	__asm__ volatile("cli;hlt");
 }

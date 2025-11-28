@@ -4,6 +4,7 @@
 
 [extern isr_common_handler]
 isr_handler_stub:
+	cli
 	pushaq
 
 	mov rax, cr4
@@ -27,6 +28,7 @@ isr_handler_stub:
 	popaq
 	add rsp, 0x0F
 
+	sti
 	iretq
 
 %macro create_isr 1

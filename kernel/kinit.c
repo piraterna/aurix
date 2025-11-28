@@ -205,23 +205,13 @@ void _start(struct aurix_parameters *params)
 		error("RTC get time failed: %d\n", err);
 	}
 
-	uint16_t divisor = 1193;
-    outb(0x43, 0x36);
-    outb(0x40, (uint8_t)(divisor & 0xFF));
-    outb(0x40, (uint8_t)((divisor >> 8) & 0xFF));
-
-	__asm__ volatile("cli");
-	irq_install(0, tick, NULL);
-
-	__asm__ volatile("sti");
-
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
 		 time.day, time.hours, time.minutes, time.seconds);
 	info("Kernel boot complete in ? seconds\n");
 
 	for (;;) {
 #ifdef __x86_64__
-		__asm__ volatile("hlt");
+		__asm__ volatile("cli;hlt");
 #elif __aarch64__
 		__asm__ volatile("wfe");
 #endif
