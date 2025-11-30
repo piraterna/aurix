@@ -140,12 +140,6 @@ static void heap_test(void)
 #endif
 /* ====================== */
 
-void tick(void *ctx)
-{
-	(void)ctx;
-	info("Tick!\n");
-}
-
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;

@@ -83,10 +83,12 @@ void pmm_init(void)
 	debug("Dumping memory map:\n");
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
+
 		if (e->type == AURIX_MMAP_USABLE) {
 			uint64_t top = e->base + e->size;
 			if (top > high)
 				high = top;
+
 			free_pages += e->size / PAGE_SIZE;
 		}
 
@@ -95,7 +97,7 @@ void pmm_init(void)
 	}
 
 	bitmap_pages = high / PAGE_SIZE;
-	bitmap_size = ALIGN_UP(bitmap_pages / 8, PAGE_SIZE);
+	bitmap_size = bitmap_pages / 8;
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
@@ -103,9 +105,9 @@ void pmm_init(void)
 			e->size >= bitmap_size) {
 			bitmap = (uint8_t *)PHYS_TO_VIRT(e->base);
 			memset(bitmap, 0xFF, bitmap_size);
-			e->base += bitmap_size;
-			e->size -= bitmap_size;
-			free_pages -= bitmap_size / PAGE_SIZE;
+			e->base += ALIGN_UP(bitmap_size, PAGE_SIZE);
+			e->size -= ALIGN_UP(bitmap_size, PAGE_SIZE);
+			free_pages -= ALIGN_UP(bitmap_size, PAGE_SIZE) / PAGE_SIZE;
 			break;
 		}
 	}
@@ -118,15 +120,9 @@ void pmm_init(void)
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
 		if (e->type == AURIX_MMAP_USABLE) {
-			pfree((void *)e->base, e->size);
+			pfree((void *)e->base, ALIGN_UP(e->size, PAGE_SIZE) / PAGE_SIZE);
 		}
 	}
-
-	int free = 0;
-	for (size_t i = 0; i < bitmap_size * 8; i++) {
-		free += bitmap_get(bitmap, i) ? 0 : 1024;
-	}
-	info("Free memory: %u\n", free_pages * PAGE_SIZE);
 
 	// NULL should be reserved
 	bitmap_set(bitmap, 0);
@@ -207,7 +203,8 @@ void pfree(void *ptr, size_t pages)
 
 	uint64_t start = (uint64_t)ptr / PAGE_SIZE;
 
-	if (start + pages > bitmap_pages) {
+	if (start + pages > bitmap_size * 8) {
+		error("early return pfree (start + pages = %u, bitmap_size = %u)\n", start + pages, bitmap_size);
 		spinlock_release(&pmm_lock);
 		return;
 	}
