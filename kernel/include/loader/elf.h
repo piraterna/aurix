@@ -23,7 +23,6 @@
 #ifndef _LOADER_ELF_H
 #define _LOADER_ELF_H
 
-#include <mm/vmm.h>
 #include <stdint.h>
 
 ///
@@ -159,12 +158,5 @@ typedef struct {
 #define PT_SHLIB 5
 #define PT_PHDR 6
 #define PT_TLS 7
-
-#define PF_X 0x1
-#define PF_W 0x2
-#define PF_R 0x4
-
-uintptr_t elf_load(char *kernel, uintptr_t *addr, size_t *size,
-				   pagetable *pagemap);
 
 #endif /* _LOADER_ELF_H */

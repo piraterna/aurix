@@ -2,7 +2,7 @@
 ## Module Name:  Makefile                                                        ##
 ## Project:      AurixOS                                                         ##
 ##                                                                               ##
-## Copyright (c) 2024 Jozef Nagy                                                 ##
+## Copyright (c) 2024-2025 Jozef Nagy                                            ##
 ##                                                                               ##
 ## This source is subject to the MIT License.                                    ##
 ## See License.txt in the root of this repository.                               ##
@@ -27,6 +27,7 @@ SYSROOT_DIR ?= sysroot
 KERNEL_FILE := $(BUILD_DIR)/axkrnl
 
 INCLUDE_DIRS := include \
+				include/aurix \
 				include/lib \
 				include/ext \
 				include/arch/$(ARCH) \
@@ -83,7 +84,7 @@ else
 KERNEL_CFLAGS += -O2
 endif
 
-KERNEL_CFILES := $(shell find . -type d \( -name arch -o -name platform \) -prune -o -name '*.c' -print)
+KERNEL_CFILES := $(shell find . -type d \( -name arch -o -name platform -o -name modules \) -prune -o -name '*.c' -print)
 KERNEL_ARCH_CFILES := $(shell find arch/$(ARCH) -name '*.c')
 KERNEL_ARCH_ASFILES := $(shell find arch/$(ARCH) -name '*.S')
 KERNEL_ARCH_NASMFILES := $(shell find arch/$(ARCH) -name '*.asm')

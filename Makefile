@@ -48,6 +48,8 @@ export NOUEFI ?= n
 # Image generation and running
 #
 
+RAMDISK := $(BUILD_DIR)/ramdisk.gz
+
 LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
@@ -88,7 +90,7 @@ endif
 #
 
 .PHONY: all
-all: genconfig boot kernel
+all: genconfig boot kernel kmodules
 	@:
 
 .PHONY: boot
@@ -101,8 +103,12 @@ kernel:
 	@printf ">>> Building kernel...\n"
 	@$(MAKE) -C kernel
 
+.PHONY: kmodules
+kmodules:
+	@$(MAKE) -C kernel/modules
+
 .PHONY: install
-install: boot kernel
+install: boot kernel kmodules
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
 ifneq (,$(filter $(ARCH),i686 x86_64))
@@ -116,6 +122,11 @@ ifeq ($(NOUEFI),n)
 endif
 endif
 	@$(MAKE) -C kernel install
+	@$(MAKE) -C kernel/modules install
+	@printf "  GEN ramdisk\n"
+	@mkdir -p $(SYSROOT_DIR)/ramdisk/modules
+	@cp $(SYSROOT_DIR)/System/support/dummy.sys $(SYSROOT_DIR)/ramdisk/
+	@utils/genramdisk.sh $(SYSROOT_DIR)/System/ramdisk
 
 .PHONY: livecd
 livecd: install

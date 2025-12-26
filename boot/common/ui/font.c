@@ -33,7 +33,7 @@
 
 bool font_init(struct ui_context *ctx, char *font_path, int size)
 {
-	vfs_read(font_path, &(ctx->font_file));
+	vfs_read(font_path, &(ctx->font_file), NULL);
 	if (!ctx->font_file) {
 		return false;
 	}
@@ -83,7 +83,7 @@ void font_free(struct ui_context *ctx)
 /*
 void font_ttf_init(char *font_path, int initial_size)
 {
-        vfs_read(font_path, (char **)&font_buf);
+        vfs_read(font_path, (char **)&font_buf, NULL);
         if (!font_buf) {
                 debug("Font not loaded, returning...\n");
                 return;

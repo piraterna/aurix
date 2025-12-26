@@ -61,6 +61,11 @@ struct aurix_framebuffer {
 	int format;
 };
 
+struct aurix_ramdisk {
+	void *addr;
+	size_t size;
+};
+
 struct aurix_parameters {
 	// PROTOCOL INFO
 	uint8_t revision;
@@ -79,6 +84,9 @@ struct aurix_parameters {
 	// RSDP and SMBIOS
 	uintptr_t rsdp_addr;
 	uintptr_t smbios_addr;
+
+	// initram
+	struct aurix_ramdisk ramdisk;
 
 	// FRAMEBUFFER
 	struct aurix_framebuffer framebuffer;

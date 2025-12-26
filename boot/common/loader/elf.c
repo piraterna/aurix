@@ -44,9 +44,8 @@ uintptr_t elf32_load(char *data, uintptr_t *addr, size_t *size,
 uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 					 pagetable *pagemap)
 {
-	struct elf_header *header = (struct elf_header *)data;
-	struct elf_program_header *ph =
-		(struct elf_program_header *)((uint8_t *)data + header->e_phoff);
+	Elf64_Ehdr *header = (Elf64_Ehdr *)data;
+	Elf64_Phdr *ph = (Elf64_Phdr *)((uint8_t *)data + header->e_phoff);
 
 	uint64_t max_align = 0;
 	uint64_t kernel_size = 0;
@@ -122,22 +121,28 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 uintptr_t elf_load(char *data, uintptr_t *addr, size_t *size,
 				   pagetable *pagemap)
 {
-	struct elf_header *header = (struct elf_header *)data;
+	Elf32_Ehdr *header = (Elf32_Ehdr *)data;
 
-	if (header->e_magic != ELF_MAGIC) {
-		error("elf_load(): Invalid ELF magic: 0x%x", header->e_magic);
+	if (header->e_ident[EI_MAG0] != ELFMAG0 ||
+		header->e_ident[EI_MAG1] != ELFMAG1 ||
+		header->e_ident[EI_MAG2] != ELFMAG2 ||
+		header->e_ident[EI_MAG3] != ELFMAG3) {
+		error("elf_load(): Invalid ELF magic: 0x%.1x%.1x%.1x%.1x",
+			  header->e_ident[EI_MAG0], header->e_ident[EI_MAG1],
+			  header->e_ident[EI_MAG2], header->e_ident[EI_MAG3]);
 		return 0;
 	}
 
-	if (header->e_class != 2) {
-		error("elf_load(): Unsupported ELF class: %u", header->e_class);
+	if (header->e_ident[EI_CLASS] != ELFCLASS64) {
+		error("elf_load(): Unsupported ELF class: %u",
+			  header->e_ident[EI_CLASS]);
 		return 0;
 	}
 
-	if (header->e_machine == 20 || header->e_machine == 3 ||
+	if (header->e_machine == 20 || header->e_machine == EM_386 ||
 		header->e_machine == 40) {
 		return elf32_load(data, addr, size, pagemap);
-	} else if (header->e_machine == 62) {
+	} else if (header->e_machine == EM_AMD64) {
 		return elf64_load(data, addr, size, pagemap);
 	}
 

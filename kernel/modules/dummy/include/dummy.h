@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  vfs.h */
+/* Module Name:  dummy.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,34 +20,10 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _VFS_VFS_H
-#define _VFS_VFS_H
+#ifndef _DUMMY_H
+#define _DUMMY_H
 
-#include <stddef.h>
-#include <stdint.h>
-#include <vfs/drive.h>
+int mod_init(void);
+void mod_exit(void);
 
-struct vfs_filesystem {
-	size_t (*read)(char *, char **, size_t *, struct vfs_drive *, void *);
-	uint8_t (*write)(char *, char *, size_t, struct vfs_drive *, void *);
-
-	void *fsdata;
-};
-
-struct vfs_mount {
-	char *mnt;
-	struct vfs_drive *drive;
-};
-
-int vfs_init(char *root_mountpoint);
-
-/* This function allocates `buf`. Passing a non-NULL value will result in an
- * error. */
-/* NOTE: Remember to free the allocated memory afterwards! */
-size_t vfs_read(char *filename, char **buf, size_t *size);
-int vfs_write(char *filename, char *buf, size_t size);
-
-/* Every platform will define this on its own */
-struct vfs_drive *mount_boot_volume(char *mountpoint);
-
-#endif /* _VFS_VFS_H */
+#endif /* _DUMMY_H */
