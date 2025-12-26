@@ -109,8 +109,8 @@ struct vfs_drive *sfs_init(char *mountpoint)
 	return drive;
 }
 
-size_t sfs_read(char *filename, char **buffer, struct vfs_drive *dev,
-				void *fsdata)
+size_t sfs_read(char *filename, char **buffer, size_t *size,
+				struct vfs_drive *dev, void *fsdata)
 {
 	(void)dev;
 
@@ -155,6 +155,9 @@ size_t sfs_read(char *filename, char **buffer, struct vfs_drive *dev,
 	file->GetInfo(file, &fi_guid, &fileinfo_size, fileinfo);
 	len = fileinfo->FileSize;
 	mem_free(fileinfo);
+
+	if (size)
+		*size = len;
 
 	*buffer = (char *)mem_alloc(len * sizeof(char));
 	if (!*buffer) {

@@ -48,24 +48,24 @@ int vfs_init(char *root_mountpoint)
 	return 1;
 }
 
-size_t vfs_read(char *filename, char **buf)
+size_t vfs_read(char *filename, char **buf, size_t *size)
 {
 	if (boot_drive->fs->read == NULL) {
 		error("vfs_read(): Filesystem didn't set up a read function!\n");
 		return 0;
 	}
 
-	return boot_drive->fs->read(filename, buf, boot_drive,
+	return boot_drive->fs->read(filename, buf, size, boot_drive,
 								boot_drive->fs->fsdata);
 }
 
-int vfs_write(char *filename, char *buf, size_t len)
+int vfs_write(char *filename, char *buf, size_t size)
 {
 	if (boot_drive->fs->write == NULL) {
 		error("vfs_read(): Filesystem didn't setup a write function!\n");
 		return 0;
 	}
 
-	return boot_drive->fs->write(filename, buf, len, boot_drive,
+	return boot_drive->fs->write(filename, buf, size, boot_drive,
 								 boot_drive->fs->fsdata);
 }

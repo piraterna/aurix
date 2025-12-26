@@ -83,10 +83,11 @@ void config_init(void)
 	}
 
 	char *config_buf = NULL;
+	size_t config_len = 0;
 	uint8_t open = 0;
 
 	for (size_t i = 0; i < ARRAY_LENGTH(config_paths); i++) {
-		vfs_read(config_paths[i], &config_buf);
+		vfs_read(config_paths[i], &config_buf, &config_len);
 		if (config_buf != NULL) {
 			open = 1;
 			break;

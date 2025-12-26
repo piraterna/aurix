@@ -16,6 +16,7 @@ brew "ffmpeg"
 brew "llvm"
 brew "lld"
 brew "jq"
+brew "gnu-tar"
 brew "util-linux" if OS.mac?
 brew "gsed" if OS.mac?
 

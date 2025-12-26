@@ -23,7 +23,9 @@
 #include <acpi/acpi.h>
 #include <acpi/madt.h>
 #include <acpi/hpet.h>
+#include <arch/mm/paging.h>
 #include <boot/axprot.h>
+#include <mm/vmm.h>
 #include <lib/string.h>
 #include <aurix.h>
 #include <stdint.h>

@@ -299,7 +299,7 @@ bool aurix_get_framebuffer(struct aurix_parameters *params)
 void aurix_load(char *kernel_path)
 {
 	char *kbuf = NULL;
-	vfs_read(kernel_path, &kbuf);
+	vfs_read(kernel_path, &kbuf, NULL);
 
 	pagetable *pm = create_pagemap();
 	if (!pm) {
@@ -391,6 +391,13 @@ void aurix_load(char *kernel_path)
 #ifdef ARCH_SMBIOS_AVAILABLE
 	parameters.smbios_addr = platform_get_smbios();
 #endif
+
+	// load init ramdisk
+	char *ramdisk = NULL;
+	size_t ramdisk_size = 0;
+	vfs_read("\\System\\ramdisk", &ramdisk, &ramdisk_size);
+	parameters.ramdisk.addr = (void *)(ramdisk + parameters.hhdm_offset);
+	parameters.ramdisk.size = ramdisk_size;
 
 	debug(
 		"aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n",

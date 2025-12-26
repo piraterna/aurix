@@ -28,8 +28,8 @@
 
 struct vfs_drive *sfs_init(char *mountpoint);
 
-size_t sfs_read(char *filename, char **buffer, struct vfs_drive *dev,
-				void *fsdata);
+size_t sfs_read(char *filename, char **buffer, size_t *size,
+				struct vfs_drive *dev, void *fsdata);
 uint8_t sfs_write(char *filename, char *buffer, size_t size,
 				  struct vfs_drive *dev, void *fsdata);
 
