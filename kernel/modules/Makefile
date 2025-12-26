@@ -41,7 +41,9 @@ endif
 $(MAKE_TARGETS): $(MOD_DIRS)
 
 $(MOD_DIRS):
+ifeq ($(MAKECMDGOALS),)
 	@printf ">>> Building module '$(patsubst %/,%,$(dir $(@)))'...\n"
+endif
 	@$(MAKE) -C $@ $(MAKECMDGOALS)
 
 .PHONY: $(MAKE_TARGETS) $(MOD_DIRS)
