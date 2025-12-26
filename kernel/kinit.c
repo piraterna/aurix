@@ -140,6 +140,10 @@ static void heap_test(void)
 #endif
 /* ====================== */
 
+// FIXME: local variables inside this function are behaving weird
+rtc_time_t time;
+rtc_error_t rtc_err;
+
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
@@ -187,16 +191,14 @@ void _start(struct aurix_parameters *params)
 	TEST_ADD(heap_test);
 	test_run(10);
 
-	rtc_time_t time;
-	rtc_error_t err;
-	err = rtc_init();
-	if (err != RTC_OK) {
-		error("RTC init failed: %d\n", err);
+	rtc_err = rtc_init();
+	if (rtc_err != RTC_OK) {
+		error("RTC init failed: %d\n", rtc_err);
 	}
 
-	err = rtc_get_time(&time);
-	if (err != RTC_OK) {
-		error("RTC get time failed: %d\n", err);
+	rtc_err = rtc_get_time(&time);
+	if (rtc_err != RTC_OK) {
+		error("RTC get time failed: %d\n", rtc_err);
 	}
 
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,

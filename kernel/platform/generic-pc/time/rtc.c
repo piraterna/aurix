@@ -120,6 +120,9 @@ rtc_error_t rtc_init(void)
 
 rtc_error_t rtc_get_time(rtc_time_t *time)
 {
+	if (!time)
+		return RTC_ERR_INVALID;
+
 	memset(time, 0, sizeof(rtc_time_t));
 	if (!rtc_initialized) {
 		error("RTC: Not initialized\n");

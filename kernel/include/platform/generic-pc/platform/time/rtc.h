@@ -34,9 +34,9 @@ typedef struct {
 
 typedef enum {
 	RTC_OK = 0,
-	RTC_ERR_INVALID = -1, /* Invalid time/date */
-	RTC_ERR_HW = -2, /* Hardware failure */
-	RTC_ERR_NOT_INIT = -3 /* RTC not initialized */
+	RTC_ERR_INVALID = 1, /* Invalid time/date */
+	RTC_ERR_HW = 2, /* Hardware failure */
+	RTC_ERR_NOT_INIT = 3 /* RTC not initialized */
 } rtc_error_t;
 
 rtc_error_t rtc_init(void);

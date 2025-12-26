@@ -66,7 +66,8 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		*size = kernel_size;
 
 	uint64_t phys =
-		(uint64_t)mem_alloc(ALIGN_UP(kernel_size, PAGE_SIZE)) & ~0xFFF;
+		(uint64_t)mem_alloc(ALIGN_UP(kernel_size, PAGE_SIZE) + PAGE_SIZE) &
+		~0xFFF;
 	if (!phys) {
 		error("elf64_load(): Failed to allocate memory for kernel!\n");
 		return 0;
@@ -96,7 +97,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		if (!(ph[i].p_flags & PF_X))
 			flags |= VMM_NX;
 
-		uint64_t virt = (uint64_t)(phys + ph[i].p_vaddr - aligned_vaddr);
+		uint64_t virt = (uint64_t)(phys + (ph[i].p_vaddr - aligned_vaddr));
 
 		debug("elf64_load(): phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n",
 			  phys, ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_memsz);

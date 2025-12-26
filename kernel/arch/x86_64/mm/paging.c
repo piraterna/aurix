@@ -103,10 +103,6 @@ bool paging_init(void)
 			break;
 		}
 
-		// TODO: Dont identity map
-		map_pages(NULL, (uintptr_t)(e->base), (uintptr_t)e->base, e->size,
-				  flags);
-
 		map_pages(NULL, (uintptr_t)(PHYS_TO_VIRT(e->base)), (uintptr_t)e->base,
 				  e->size, flags);
 	}
@@ -118,26 +114,21 @@ bool paging_init(void)
 	uintptr_t kvirt = 0xffffffff80000000ULL;
 	uintptr_t kphys = boot_params->kernel_addr;
 
+	debug("Mapping kernel at 0x%llx...\n", kvirt);
 	uint64_t text_start = ALIGN_DOWN((uintptr_t)_start_text, PAGE_SIZE);
 	uint64_t text_end = ALIGN_UP((uintptr_t)_end_text, PAGE_SIZE);
-	for (uint64_t addr = text_start; addr < text_end; addr += PAGE_SIZE) {
-		uint64_t phys = addr - kvirt + kphys;
-		map_page(NULL, addr, phys, VMM_PRESENT);
-	}
+	map_pages(NULL, text_start, text_start - kvirt + kphys,
+			  text_end - text_start, VMM_PRESENT);
 
 	uint64_t rodata_start = ALIGN_DOWN((uintptr_t)_start_rodata, PAGE_SIZE);
 	uint64_t rodata_end = ALIGN_UP((uintptr_t)_end_rodata, PAGE_SIZE);
-	for (uint64_t addr = rodata_start; addr < rodata_end; addr += PAGE_SIZE) {
-		uint64_t phys = addr - kvirt + kphys;
-		map_page(NULL, addr, phys, VMM_PRESENT | VMM_NX);
-	}
+	map_pages(NULL, rodata_start, rodata_start - kvirt + kphys,
+			  rodata_end - rodata_start, VMM_PRESENT | VMM_NX);
 
 	uint64_t data_start = ALIGN_DOWN((uintptr_t)_start_data, PAGE_SIZE);
 	uint64_t data_end = ALIGN_UP((uintptr_t)_end_data, PAGE_SIZE);
-	for (uint64_t addr = data_start; addr < data_end; addr += PAGE_SIZE) {
-		uint64_t phys = addr - kvirt + kphys;
-		map_page(NULL, addr, phys, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
-	}
+	map_pages(NULL, data_start, data_start - kvirt + kphys,
+			  data_end - data_start, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	// map bitmap
 	debug("Mapping bitmap at %llx...\n", bitmap);

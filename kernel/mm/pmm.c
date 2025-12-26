@@ -179,7 +179,8 @@ void *palloc(size_t pages)
 
 						void *addr =
 							(void *)((start_bit + j - pages + 1) * PAGE_SIZE);
-						memset(addr, 0, pages * PAGE_SIZE);
+						memset((void *)PHYS_TO_VIRT(addr), 0,
+							   pages * PAGE_SIZE);
 						spinlock_release(&pmm_lock);
 						return addr;
 					}
@@ -204,7 +205,8 @@ void pfree(void *ptr, size_t pages)
 	uint64_t start = (uint64_t)ptr / PAGE_SIZE;
 
 	if (start + pages > bitmap_size * 8) {
-		error("early return pfree (start + pages = %u, bitmap_size = %u)\n", start + pages, bitmap_size);
+		error("early return pfree (start + pages = %u, bitmap_size = %u)\n",
+			  start + pages, bitmap_size);
 		spinlock_release(&pmm_lock);
 		return;
 	}

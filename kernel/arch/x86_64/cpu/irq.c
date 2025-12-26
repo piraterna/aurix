@@ -28,7 +28,7 @@
 #include <stddef.h>
 
 // this probably isn't the best way to do it... beats me
-struct irq_handler irq_handlers[224] = {0};
+struct irq_handler irq_handlers[224] = { 0 };
 
 void irq_install(uint8_t irq, irq_callback callback, void *ctx)
 {
@@ -39,7 +39,8 @@ void irq_install(uint8_t irq, irq_callback callback, void *ctx)
 
 	struct irq_handler *h = &irq_handlers[irq];
 	if (h->callback) {
-		warn("Overwriting IRQ callback 0x%llx for IRQ%u with 0x%llx.\n", h->callback, irq, callback);
+		warn("Overwriting IRQ callback 0x%llx for IRQ%u with 0x%llx.\n",
+			 h->callback, irq, callback);
 	}
 
 	h->callback = callback;
