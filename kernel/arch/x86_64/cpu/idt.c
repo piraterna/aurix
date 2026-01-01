@@ -27,6 +27,7 @@
 #include <cpu/trace.h>
 #include <aurix.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #define IDT_TRAP 0xF
 #define IDT_INTERRUPT 0xE
@@ -74,6 +75,9 @@ struct idtr idtr = { .limit =
 
 extern void *isr_stubs[256];
 
+extern struct cpu cpuinfo[];
+extern size_t cpu_count;
+
 void idt_init()
 {
 	for (int v = 0; v < 32; v++) {
@@ -101,10 +105,21 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 void isr_common_handler(struct interrupt_frame frame)
 {
 	if (frame.vector < 0x20) {
-		// TODO: get cpu which triggered the exception
+		// signal other CPUs to immediately stop everything
+		uint8_t this_cpu = cpu_get_current()->id;
+		for (size_t i = 0; i < cpu_count; i++) {
+			if (i == this_cpu) {
+				continue;
+			}
+
+			// send shutdown ipi
+			lapic_write(0x310, cpuinfo[i].id << 24);
+			lapic_write(0x300, 0xff);
+		}
+
 		critical(
 			"panic(cpu %u): Kernel trap at 0x%.16llx, type %u=%s, registers:\n",
-			1, frame.rip, frame.vector, exception_str[frame.vector]);
+			this_cpu, frame.rip, frame.vector, exception_str[frame.vector]);
 		critical(
 			"rax: 0x%.16llx, rbx: 0x%.16llx, rcx: 0x%.16llx, rdx: 0x%.16llx\n",
 			frame.rax, frame.rbx, frame.rcx, frame.rdx);
@@ -125,13 +140,17 @@ void isr_common_handler(struct interrupt_frame frame)
 			frame.rflags, frame.rip, frame.cs, frame.ds);
 		critical("err: 0x%.16llx\n", frame.err);
 
-		critical("Backtrace (cpu %u):\n", 1);
+		critical("Backtrace (cpu %u):\n", this_cpu);
 		stack_trace(16);
 
 		cpu_halt();
 	} else if (frame.vector < 0x80) {
 		irq_dispatch(frame.vector - 0x20);
 		apic_send_eoi();
+	} else if (frame.vector == 0xff) {
+		// shutdown
+		cpu_halt();
+		UNREACHABLE();
 	} else {
 		warn("Unhandled interrupt %u\n", frame.vector);
 	}
