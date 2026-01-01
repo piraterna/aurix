@@ -103,6 +103,8 @@ bool paging_init(void)
 			break;
 		}
 
+		// map_pages(NULL, (uintptr_t)e->base, (uintptr_t)e->base,
+		//   e->size, flags);
 		map_pages(NULL, (uintptr_t)(PHYS_TO_VIRT(e->base)), (uintptr_t)e->base,
 				  e->size, flags);
 	}
@@ -189,8 +191,8 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 	uint64_t p2 = pml2_index(virt);
 	uint64_t p1 = pml1_index(virt);
 
-	if (flags & VMM_WRITABLE)
-		flags |= VMM_NX;
+	// if (flags & VMM_WRITABLE)
+	// flags |= VMM_NX;
 
 	pagetable *pml4_table = (pagetable *)PHYS_TO_VIRT(pm_phys);
 

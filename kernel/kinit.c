@@ -181,15 +181,13 @@ void _start(struct aurix_parameters *params)
 	acpi_init((void *)boot_params->rsdp_addr);
 	apic_init();
 
-	pmm_reclaim_bootparms();
-
-	cpu_enable_interrupts();
-
 	//parse_boot_args(boot_params->cmdline);
 
 	heap_init(vinit(kernel_pm, 0x1000));
 	TEST_ADD(heap_test);
 	test_run(10);
+
+	cpu_init_mp();
 
 	rtc_err = rtc_init();
 	if (rtc_err != RTC_OK) {
@@ -200,6 +198,8 @@ void _start(struct aurix_parameters *params)
 	if (rtc_err != RTC_OK) {
 		error("RTC get time failed: %d\n", rtc_err);
 	}
+
+	pmm_reclaim_bootparms();
 
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
 		 time.day, time.hours, time.minutes, time.seconds);

@@ -23,6 +23,7 @@
 #ifndef _ARCH_CPU_CPU_H
 #define _ARCH_CPU_CPU_H
 
+#include <arch/cpu/smp.h>
 #include <aurix.h>
 #include <stdint.h>
 
@@ -76,6 +77,16 @@ struct cpu *cpu_get_current(void);
 ////
 // Utilities
 ///
+
+static inline void cpu_init_mp(void)
+{
+	smp_init();
+}
+
+static inline void cpu_nop(void)
+{
+	__asm__ volatile("nop");
+}
 
 static inline void cpu_halt(void)
 {

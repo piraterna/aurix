@@ -1,5 +1,6 @@
 #include <acpi/acpi.h>
 #include <acpi/hpet.h>
+#include <arch/cpu/cpu.h>
 // #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <aurix.h>
@@ -9,6 +10,28 @@ struct hpet_sdt *hpet_sdt;
 struct hpet *hpet;
 
 uint64_t period = 0;
+
+uint64_t hpet_get_ns(void)
+{
+	return hpet->main_count_val * period;
+}
+
+void hpet_msleep(uint64_t ms)
+{
+	hpet_nsleep(ms * 1000000);
+}
+
+void hpet_nsleep(uint64_t ns)
+{
+	uint64_t start = hpet_get_ns();
+	uint64_t target = start + ns;
+	uint64_t cur = hpet_get_ns();
+
+	while (cur <= target) {
+		cur = hpet_get_ns();
+		cpu_nop();
+	}
+}
 
 void acpi_hpet_init()
 {

@@ -91,9 +91,6 @@ void acpi_madt_init()
 	madt = (struct madt *)find_sdt("APIC");
 	info("MADT Address: 0x%llx\n", (void *)madt);
 
-	// DEBUG_POINT
-	return;
-
 #if defined(__x86_64__) || defined(__i686__)
 	if (madt->flags & 1) {
 		debug("Masking 8259 PIC vectors\n");
