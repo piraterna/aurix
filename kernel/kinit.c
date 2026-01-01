@@ -181,6 +181,8 @@ void _start(struct aurix_parameters *params)
 	acpi_init((void *)boot_params->rsdp_addr);
 	apic_init();
 
+	cpu_init();
+
 	//parse_boot_args(boot_params->cmdline);
 
 	heap_init(vinit(kernel_pm, 0x1000));

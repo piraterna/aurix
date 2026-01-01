@@ -20,12 +20,14 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
+#include <arch/apic/apic.h>
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/gdt.h>
 #include <arch/cpu/idt.h>
-#include <stddef.h>
 #include <config.h>
 #include <aurix.h>
+#include <string.h>
+#include <stddef.h>
 
 #define CPU_ID_MSR 0xC0000103
 
@@ -43,6 +45,54 @@ int cpu_early_init()
 	cpu_count++;
 
 	return 1; // all good
+}
+
+void cpu_init()
+{
+	struct cpu *cpu = cpu_get_current();
+	if (!cpu) {
+		error("Couldn't figure out which core I'm running on :/\n");
+		return;
+	}
+
+	// overwrite default assigned ID with a proper LAPIC ID
+	cpu->id = lapic_read(0x20);
+	wrmsr(CPU_ID_MSR, cpu->id);
+
+	memset(cpu, 0, sizeof(struct cpu));
+
+	uint32_t extfunc;
+	cpuid(0, &extfunc, (uint32_t *)(cpu->vendor_str),
+		  (uint32_t *)(cpu->vendor_str + 8), (uint32_t *)(cpu->vendor_str + 4));
+	cpu->vendor_str[12] = 0;
+
+	uint32_t eax, ebx, ecx, edx;
+	cpuid(0x80000000, &extfunc, &ebx, &ecx, &edx);
+	(void)eax;
+	if (extfunc >= 0x80000004) {
+		cpuid(0x80000002, (uint32_t *)(cpu->name_ext),
+			  (uint32_t *)(cpu->name_ext + 4), (uint32_t *)(cpu->name_ext + 8),
+			  (uint32_t *)(cpu->name_ext + 12));
+		cpuid(0x80000003, (uint32_t *)(cpu->name_ext + 16),
+			  (uint32_t *)(cpu->name_ext + 20),
+			  (uint32_t *)(cpu->name_ext + 24),
+			  (uint32_t *)(cpu->name_ext + 28));
+		cpuid(0x80000004, (uint32_t *)(cpu->name_ext + 32),
+			  (uint32_t *)(cpu->name_ext + 36),
+			  (uint32_t *)(cpu->name_ext + 40),
+			  (uint32_t *)(cpu->name_ext + 44));
+
+		int lead = 0;
+		char *p = &cpu->name_ext[0];
+		while (*p++ == ' ') {
+			lead++;
+		}
+
+		if (lead >= 1) {
+			memcpy(&cpu->name_ext[0], &cpu->name_ext[lead], 48 - lead);
+			memset(&cpu->name_ext[48 - lead], 0, lead);
+		}
+	}
 }
 
 struct cpu *cpu_get_current()

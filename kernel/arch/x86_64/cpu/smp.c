@@ -28,6 +28,7 @@
 #include <acpi/acpi.h>
 #include <acpi/hpet.h>
 #include <acpi/madt.h>
+#include <cpu/cpu.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <aurix.h>
@@ -141,6 +142,8 @@ void smp_init()
 __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 {
 	cpu_early_init();
+	cpu_enable_interrupts();
+	cpu_init();
 
 	// set up own stack
 	void *stack = palloc(4); // 16kib
@@ -149,14 +152,15 @@ __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 		cpu_halt();
 	}
 
-	__asm__ volatile("mov %0, %%rsp" ::"r"(stack));
+	map_pages(NULL, (uintptr_t)stack, (uintptr_t)stack, 16 * 1024,
+			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+
+	__asm__ volatile("mov %0, %%rsp" ::"r"(stack + (16 * 1024)));
 
 	// we rollin' in parallel now
 	atomic_store(&cpu_ready, true);
 
 	// TODO: hook CPU to a scheduler
-	for (;;) {
-		__asm__ volatile("cli;hlt");
-	}
+	cpu_halt();
 	UNREACHABLE();
 }

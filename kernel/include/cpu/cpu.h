@@ -24,5 +24,6 @@
 #define _CPU_CPU_H
 
 void cpu_early_init(void);
+void cpu_init(void);
 
 #endif /* _CPU_CPU_H */
