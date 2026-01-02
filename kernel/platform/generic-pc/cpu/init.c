@@ -49,6 +49,8 @@ int cpu_early_init()
 
 void cpu_init()
 {
+	uint32_t eax, ebx, ecx, edx;
+
 	struct cpu *cpu = cpu_get_current();
 	if (!cpu) {
 		error("Couldn't figure out which core I'm running on :/\n");
@@ -61,15 +63,20 @@ void cpu_init()
 
 	memset(cpu, 0, sizeof(struct cpu));
 
-	uint32_t extfunc;
-	cpuid(0, &extfunc, (uint32_t *)(cpu->vendor_str),
+	uint32_t func;
+	cpuid(0x01, &func, (uint32_t *)(cpu->vendor_str),
 		  (uint32_t *)(cpu->vendor_str + 8), (uint32_t *)(cpu->vendor_str + 4));
 	cpu->vendor_str[12] = 0;
 
-	uint32_t eax, ebx, ecx, edx;
-	cpuid(0x80000000, &extfunc, &ebx, &ecx, &edx);
-	(void)eax;
-	if (extfunc >= 0x80000004) {
+	// get feature set
+	cpuid(0x01, &eax, &ebx, &ecx, &edx);
+
+	cpu->cpuid.ecx = ecx;
+	cpu->cpuid.edx = edx;
+
+	// get CPU name
+	cpuid(0x80000000, &func, &ebx, &ecx, &edx);
+	if (func >= 0x80000004) {
 		cpuid(0x80000002, (uint32_t *)(cpu->name_ext),
 			  (uint32_t *)(cpu->name_ext + 4), (uint32_t *)(cpu->name_ext + 8),
 			  (uint32_t *)(cpu->name_ext + 12));
