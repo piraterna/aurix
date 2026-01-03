@@ -28,6 +28,7 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <mm/heap.h>
+#include <smbios/smbios.h>
 #include <lib/string.h>
 #include <aurix.h>
 #include <platform/time/rtc.h>
@@ -177,12 +178,15 @@ void _start(struct aurix_parameters *params)
 	test_run(10);
 
 	paging_init();
-	debug("kernel cmdline: %s\n", boot_params->cmdline);
+
+	smbios_init((void *)boot_params->smbios_addr);
+
 	acpi_init((void *)boot_params->rsdp_addr);
 	apic_init();
 
 	cpu_init();
 
+	debug("kernel cmdline: %s\n", boot_params->cmdline);
 	//parse_boot_args(boot_params->cmdline);
 
 	heap_init(vinit(kernel_pm, 0x1000));
