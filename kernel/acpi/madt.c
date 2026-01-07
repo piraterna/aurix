@@ -109,13 +109,13 @@ void acpi_madt_init()
 			struct madt_lapic *lapic =
 				(struct madt_lapic *)(madt->structures + i);
 			if (lapic_count >= CONFIG_CPU_MAX_COUNT) {
-				error(
+				warn(
 					"Reached maximum allowed CPUs, processor #%u will be left disabled.\n",
 					lapic->id);
 				break;
 			}
 			lapics[lapic_count++] = lapic;
-			debug("Registered LAPIC for processor #%u with _UID %u (%s)\n",
+			info("Registered LAPIC for processor #%u with _UID %u (%s)\n",
 				  lapic->id, lapic->uid,
 				  (lapic->flags & 1) ? "enabled" : "disabled");
 			break;
@@ -124,20 +124,20 @@ void acpi_madt_init()
 			struct madt_ioapic *ioapic =
 				(struct madt_ioapic *)(madt->structures + i);
 			if (ioapic_count >= CONFIG_IOAPIC_MAX_COUNT) {
-				error(
+				warn(
 					"Reached maximum allowed IOAPIC controllers, IOAPIC #%u will be unused.\n",
 					ioapic->id);
 				break;
 			}
 			ioapics[ioapic_count++] = ioapic;
-			debug("Registered IOAPIC #%u located at 0x%llx (gsi base=%llx)\n",
+			info("Registered IOAPIC #%u located at 0x%llx (gsi base=%llx)\n",
 				  ioapic->id, ioapic->addr, ioapic->gsi_base);
 			break;
 		}
 		case MADT_ISO: {
 			struct madt_iso *iso = (struct madt_iso *)(madt->structures + i);
 			isos[iso_count++] = iso;
-			debug(
+			info(
 				"Interrupt source override on bus %u with source %u (gsi=%u, flags=%x)\n",
 				iso->bus, iso->src, iso->gsi, iso->flags);
 			break;
@@ -147,7 +147,7 @@ void acpi_madt_init()
 			struct madt_lapic_nmi *nmi =
 				(struct madt_lapic_nmi *)(madt->structures + i);
 			nmis[nmi_count++] = nmi;
-			debug("NMI for LINT#%u on processor with _UID %u, flags %x\n",
+			info("NMI for LINT#%u on processor with _UID %u, flags %x\n",
 				  nmi->LINTn, nmi->acpi_uid, nmi->flags);
 			break;
 		}
@@ -155,7 +155,7 @@ void acpi_madt_init()
 			struct madt_lapic_override *override =
 				(struct madt_lapic_override *)(madt->structures + i);
 			lapic_base = override->addr;
-			debug("Overridden LAPIC base address: 0x%llx\n", override->addr);
+			info("Overridden LAPIC base address: 0x%llx\n", override->addr);
 			break;
 		}
 		case MADT_NMI_SRC:
@@ -169,7 +169,7 @@ void acpi_madt_init()
 		case MADT_GIC_ITS:
 #endif
 		default:
-			error("Unhandled MADT Entry with type %u (%s)\n", mhdr->type,
+			warn("Unhandled MADT Entry with type %u (%s)\n", mhdr->type,
 				  madt_type_to_str(mhdr->type));
 			break;
 		}

@@ -105,7 +105,7 @@ void smp_init()
 
 	atomic_init(&cpu_ready, false);
 
-	debug("SMP trampoline initialized, starting up other cores...\n");
+	info("SMP trampoline initialized, starting up other cores...\n");
 
 	// wake up! grab a brush and put a little makeup!
 	for (size_t i = 0; i < lapic_count; i++) {
@@ -118,7 +118,7 @@ void smp_init()
 		int retries = 0;
 		while (retries++ <= CORE_STARTUP_MAX_RETRIES) {
 			if (atomic_load(&cpu_ready)) {
-				info("CPU %u is up and running\n", i);
+				success("CPU %u is up and running\n", i);
 				break;
 			}
 			hpet_msleep(10);

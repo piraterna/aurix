@@ -36,4 +36,5 @@ void parse_boot_args(char *args)
 	//       0x04: Send logs to a serial port
 	//       0x08: Drop into a debugger on NMI
 	//		 0x10: Drop into a debugger on #DB
+	warn("Boot argument parsing is skipped for now...\n");
 }
