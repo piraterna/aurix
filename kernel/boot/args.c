@@ -37,4 +37,9 @@ void parse_boot_args(char *args)
 	//       0x08: Drop into a debugger on NMI
 	//		 0x10: Drop into a debugger on #DB
 	warn("Boot argument parsing is skipped for now...\n");
+	char *arg = strtok(args, " ");
+	while (arg != NULL) {
+		info("  bootarg: %s\n", arg);
+		arg = strtok(NULL, " ");
+	}
 }

@@ -101,3 +101,50 @@ size_t strlen(const char *str)
 		s++;
 	return s - str;
 }
+
+char *strtok(char *restrict str, const char *restrict delim)
+{
+	static char *saved;
+	char *token_start;
+	const char *d;
+
+	if (str == NULL) {
+		str = saved;
+		if (str == NULL) {
+			return NULL;
+		}
+	}
+
+	while (*str) {
+		for (d = delim; *d; d++) {
+			if (*str == *d) {
+				break;
+			}
+		}
+		if (*d == '\0') {
+			break;
+		}
+		str++;
+	}
+
+	if (*str == '\0') {
+		saved = NULL;
+		return NULL;
+	}
+
+	token_start = str;
+
+	while (*str) {
+		for (d = delim; *d; d++) {
+			if (*str == *d) {
+				*str = '\0';
+				saved = str + 1;
+				return token_start;
+			}
+		}
+		str++;
+	}
+
+	saved = NULL;
+	return token_start;
+}
