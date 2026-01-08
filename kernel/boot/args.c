@@ -24,7 +24,7 @@
 void parse_boot_args(char *args)
 {
 	if (args == NULL || strlen(args) == 0) {
-		debug("No boot arguments present, returning...\n");
+		warn("No boot arguments present, skipping...\n");
 		return;
 	}
 
