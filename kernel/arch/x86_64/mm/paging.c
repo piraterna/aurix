@@ -326,3 +326,58 @@ pagetable *create_pagemap(void)
 	memset((void *)PHYS_TO_VIRT(pm_phys), 0, PAGE_SIZE);
 	return (pagetable *)pm_phys;
 }
+
+void destroy_pagemap(pagetable *pm)
+{
+	if (!pm) {
+		warn("Tried to destroy NULL pagemap?\n");
+		return;
+	}
+
+	if (pm == kernel_pm) {
+		warn("Attempt to destroy kernel pagemap.\n");
+		return;
+	}
+
+	if (read_cr3() == (uint64_t)pm) {
+		warn("Pagemap %p is currently active (CR3).\n", pm);
+		return;
+	}
+
+	pagetable *pml4 = (pagetable *)PHYS_TO_VIRT((uintptr_t)pm);
+
+	for (size_t p4 = 0; p4 < 512; p4++) {
+		if (!(pml4->entries[p4] & VMM_PRESENT))
+			continue;
+
+		pagetable *pml3 =
+			(pagetable *)PHYS_TO_VIRT(pml4->entries[p4] & PAGE_FRAME_MASK);
+
+		for (size_t p3 = 0; p3 < 512; p3++) {
+			if (!(pml3->entries[p3] & VMM_PRESENT))
+				continue;
+
+			pagetable *pml2 =
+				(pagetable *)PHYS_TO_VIRT(pml3->entries[p3] & PAGE_FRAME_MASK);
+
+			for (size_t p2 = 0; p2 < 512; p2++) {
+				if (!(pml2->entries[p2] & VMM_PRESENT))
+					continue;
+
+				pagetable *pml1 = (pagetable *)PHYS_TO_VIRT(pml2->entries[p2] &
+															PAGE_FRAME_MASK);
+
+				pfree((void *)VIRT_TO_PHYS(pml1), 1);
+				pml2->entries[p2] = 0;
+			}
+
+			pfree((void *)VIRT_TO_PHYS(pml2), 1);
+			pml3->entries[p3] = 0;
+		}
+
+		pfree((void *)VIRT_TO_PHYS(pml3), 1);
+		pml4->entries[p4] = 0;
+	}
+
+	pfree(pm, 1);
+}

@@ -29,6 +29,7 @@
 #include <stddef.h>
 
 pagetable *create_pagemap(void);
+void destroy_pagemap(pagetable *pm);
 
 bool paging_init(void);
 

@@ -142,7 +142,7 @@ static void heap_test(void)
 #endif
 /* ====================== */
 
-void test_proc(void)
+void hello(void)
 {
 	info("Hello from thread: %d!\n", 0);
 	return;
@@ -151,6 +151,7 @@ void test_proc(void)
 // FIXME: local variables inside this function are behaving weird
 rtc_time_t time;
 rtc_error_t rtc_err;
+pcb *test_proc;
 
 void _start(struct aurix_parameters *params)
 {
@@ -203,6 +204,13 @@ void _start(struct aurix_parameters *params)
 	cpu_init_mp();
 
 	sched_init();
+	test_proc = proc_create();
+	proc_destroy(test_proc);
+
+	pmm_reclaim_bootparms();
+
+	// finished with init, now just display fancy stuff
+	kprintf("--------------------------------------------------\n");
 
 	rtc_err = rtc_init();
 	if (rtc_err != RTC_OK) {
@@ -213,8 +221,6 @@ void _start(struct aurix_parameters *params)
 	if (rtc_err != RTC_OK) {
 		error("RTC get time failed: %d\n", rtc_err);
 	}
-
-	pmm_reclaim_bootparms();
 
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
 		 time.day, time.hours, time.minutes, time.seconds);
