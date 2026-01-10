@@ -323,7 +323,14 @@ pagetable *create_pagemap(void)
 		error("create_pagemap(): Failed to allocate memory for a new pm.\n");
 		return NULL;
 	}
+
 	memset((void *)PHYS_TO_VIRT(pm_phys), 0, PAGE_SIZE);
+
+	for (size_t i = 256; i < 512; i++) {
+		((pagetable *)PHYS_TO_VIRT(pm_phys))->entries[i] =
+			kernel_pm->entries[i];
+	}
+
 	return (pagetable *)pm_phys;
 }
 
