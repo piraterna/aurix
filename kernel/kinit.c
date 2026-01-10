@@ -35,6 +35,7 @@
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
 #include <stddef.h>
+#include <sys/sched.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -141,6 +142,12 @@ static void heap_test(void)
 #endif
 /* ====================== */
 
+void test_proc(void)
+{
+	info("Hello from thread: %d!\n", 0);
+	return;
+}
+
 // FIXME: local variables inside this function are behaving weird
 rtc_time_t time;
 rtc_error_t rtc_err;
@@ -194,6 +201,8 @@ void _start(struct aurix_parameters *params)
 	test_run(10);
 
 	cpu_init_mp();
+
+	sched_init();
 
 	rtc_err = rtc_init();
 	if (rtc_err != RTC_OK) {

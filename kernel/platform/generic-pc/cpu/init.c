@@ -100,6 +100,9 @@ void cpu_init()
 			memset(&cpu->name_ext[48 - lead], 0, lead);
 		}
 	}
+
+	cpu->thread_count = 0;
+	cpu->thread_list = NULL;
 }
 
 struct cpu *cpu_get_current()

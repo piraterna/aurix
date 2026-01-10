@@ -139,12 +139,16 @@ struct cpuid {
 	};
 };
 
+struct tcb; // forward declare becuz stupid errors with including sched.h
 struct cpu {
 	uint32_t id;
 
 	struct cpuid cpuid;
 	char vendor_str[13];
 	char name_ext[48];
+
+	struct tcb *thread_list;
+	uint64_t thread_count;
 };
 
 struct cpu *cpu_get_current(void);
