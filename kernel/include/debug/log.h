@@ -56,8 +56,9 @@
 #endif
 
 // TODO: Proper time since boot or whatever
-#define _log_callback(color, level, fmt, ...) \
-	kprintf("[0.000] " color "%s: " LOG_COLOR_RESET fmt, level, ##__VA_ARGS__)
+#define _log_callback(color, level, fmt, ...)                            \
+	kprintf("[0.000] %s(): " color "%s: " LOG_COLOR_RESET fmt, __func__, \
+			level, ##__VA_ARGS__)
 
 #define info(fmt, ...) _log_callback(LOG_COLOR_INFO, "info", fmt, ##__VA_ARGS__)
 
