@@ -36,10 +36,12 @@ typedef struct tcb {
 
 typedef struct pcb {
 	uint64_t pid;
-	struct pagemap *pm;
+	pagetable *pm;
 	struct tcb *threads;
 } pcb;
 
 void sched_init(void);
+pcb *proc_create(void);
+void proc_destroy(pcb *proc);
 
 #endif // _SYS_SCHED_H
