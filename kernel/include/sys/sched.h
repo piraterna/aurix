@@ -64,7 +64,8 @@ void proc_destroy(pcb *proc);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
-f static inline int pid_valid(uint32_t pid)
+
+static inline int pid_valid(uint32_t pid)
 {
 	return ID_KIND(pid) == PID_KIND_NORMAL_PROCESS && ID_SEQ(pid) != 0;
 }
