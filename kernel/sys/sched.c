@@ -15,6 +15,9 @@
 
 #define SCHED_DEFAULT_SLICE 10
 
+static uint64_t next_pid = 1;
+static uint64_t next_tid = 1;
+
 void sched_init()
 {
 	if (cpu_get_current()->thread_count != 0) {
@@ -23,31 +26,45 @@ void sched_init()
 	}
 
 	// just hope that the thread list is empty :^)
+	// TODO: clear on every CPU
 	cpu_get_current()->thread_count = 0;
 	cpu_get_current()->thread_list = NULL;
 }
 
 pcb *proc_create()
 {
-	pcb *proc = (pcb *)kmalloc(sizeof(pcb));
+	pcb *proc = kmalloc(sizeof(pcb));
 	if (!proc) {
 		error("Failed to create process: Failed to allocate memory!\n");
 		return NULL;
 	}
 
-	proc->pid = (uint64_t)proc; // for now
+	memset(proc, 0, sizeof(pcb));
+
+	proc->pid = MAKE_ID(PID_KIND_NORMAL_PROCESS, next_pid++);
 	proc->pm = create_pagemap();
-	proc->threads = NULL; // dont create a thread yet
-	debug("Created new process with PID=%ld, pagemap=%p\n", proc->pid,
-		  proc->pm);
+	proc->threads = NULL;
+
+	debug("Created new process PID=%lu (kind=%u, seq=%lu), pagemap=%p\n",
+		  proc->pid, ID_KIND(proc->pid), ID_SEQ(proc->pid), proc->pm);
 
 	return proc;
 }
 
 void proc_destroy(pcb *proc)
 {
+	if (!proc)
+		return;
+
+	tcb *curr = proc->threads;
+	while (curr) {
+		tcb *next = curr->next;
+		thread_destroy(curr);
+		curr = next;
+	}
+
 	destroy_pagemap(proc->pm);
-	// TODO: clear up threads
+
 	info("Destroyed process with PID=%ld\n", proc->pid);
 	kfree(proc);
 }
@@ -60,10 +77,74 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	}
 	(void)proc;
 	(void)entry;
-	return NULL;
+
+	tcb *thread = (tcb *)kmalloc(sizeof(tcb));
+	if (!thread) {
+		error("Failed to create thread: Failed to allocate memory!\n");
+		return NULL;
+	}
+	memset(thread, 0, sizeof(tcb));
+
+	thread->magic = TCB_MAGIC_ALIVE;
+	thread->process = proc;
+	thread->frame = (struct interrupt_frame){ 0 };
+	thread->next = NULL;
+	thread->tid = MAKE_ID(TID_KIND_NORMAL_THREAD, next_tid++);
+	thread->time_slice = SCHED_DEFAULT_SLICE;
+
+	// TODO: setup full frame, stack and stuff
+	thread->frame.rip = (uint64_t)
+		entry; // this just hopes the entry function is an address in the parent procs pagemap.
+
+	// Append to the process's thread list
+	if (!proc->threads) {
+		proc->threads = thread;
+	} else {
+		tcb *curr = proc->threads;
+		while (curr->next) {
+			curr = curr->next;
+		}
+		curr->next = thread;
+	}
+
+	debug("Created new thread TID=%x (kind=%u, seq=%lu), parent PID=%lu\n",
+		  thread->tid, ID_KIND(thread->tid), ID_SEQ(thread->tid), proc->pid);
+
+	return thread;
 }
 
 void thread_destroy(tcb *thread)
 {
-	(void)thread;
+	if (!thread)
+		return;
+
+	/* Check magic first — do NOT trust heap yet */
+	if (thread->magic != TCB_MAGIC_ALIVE) {
+		warn(
+			"Tried to destroy a thread that is already destroyed or corrupt (%p)\n",
+			thread);
+		return;
+	}
+
+	pcb *proc = thread->process;
+
+	// Unlink the thread from process list
+	if (proc) {
+		tcb **link = &proc->threads;
+		while (*link) {
+			if (*link == thread) {
+				*link = thread->next;
+				break;
+			}
+			link = &(*link)->next;
+		}
+	}
+
+	// Poison fields (kill it basically, incase the memory doesnt get overwritten)
+	thread->magic = TCB_MAGIC_DEAD;
+	thread->next = (tcb *)0xDEADDEAD;
+	thread->process = NULL;
+
+	info("Destroyed thread with TID=%ld\n", thread->tid);
+	kfree(thread);
 }

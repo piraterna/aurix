@@ -26,7 +26,22 @@
 struct pcb;
 struct tcb;
 
+#define TCB_MAGIC_ALIVE 0x544352414C495645ULL // "TCRALIVE"
+#define TCB_MAGIC_DEAD 0x544352444541444ULL // "TCRDEAD"
+
+// ID kinds (upper bits)
+#define PID_KIND_NORMAL_PROCESS 1
+#define TID_KIND_NORMAL_THREAD 1
+
+#define ID_KIND_SHIFT 48
+#define MAKE_ID(kind, seq) \
+	((((uint64_t)(kind)) << ID_KIND_SHIFT) | ((uint64_t)(seq)))
+
+#define ID_KIND(id) ((uint16_t)((id) >> ID_KIND_SHIFT))
+#define ID_SEQ(id) ((uint64_t)((id) & ((1ULL << ID_KIND_SHIFT) - 1)))
+
 typedef struct tcb {
+	uint64_t magic;
 	uint64_t tid;
 	struct interrupt_frame frame;
 	struct pcb *process;

@@ -50,7 +50,7 @@ const char *aurix_banner =
 	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2025 Jozef Nagy";
 
 /* ======== TESTS ======== */
-#if 0
+#if 1
 typedef void (*test_func_t)(void);
 typedef unsigned int uint32_t;
 
@@ -207,7 +207,7 @@ void _start(struct aurix_parameters *params)
 	sched_init();
 	test_proc = proc_create();
 	test_thread = thread_create(test_proc, hello);
-	thread_destroy(test_thread);
+	// no need to destroy thread since it gets automatically destroyed
 	proc_destroy(test_proc);
 
 	pmm_reclaim_bootparms();
