@@ -41,7 +41,7 @@ static vctx_t *heap_ctx = NULL;
 static size_t compute_check(const block_t *b)
 {
 	return (uintptr_t)b->prev ^ (uintptr_t)b->next ^ b->size ^ b->user_size ^
-		   CHECK_MAGIC;
+		   b->alloc_size ^ CHECK_MAGIC;
 }
 
 static void set_check(block_t *b)
