@@ -29,20 +29,22 @@ struct tcb;
 #define TCB_MAGIC_ALIVE 0x544352414C495645ULL // "TCRALIVE"
 #define TCB_MAGIC_DEAD 0x544352444541444ULL // "TCRDEAD"
 
-// ID kinds (upper bits)
 #define PID_KIND_NORMAL_PROCESS 1
 #define TID_KIND_NORMAL_THREAD 1
 
-#define ID_KIND_SHIFT 48
-#define MAKE_ID(kind, seq) \
-	((((uint64_t)(kind)) << ID_KIND_SHIFT) | ((uint64_t)(seq)))
+#define ID_KIND_SHIFT 24
+#define ID_SEQ_MASK 0x00FFFFFFu
 
-#define ID_KIND(id) ((uint16_t)((id) >> ID_KIND_SHIFT))
-#define ID_SEQ(id) ((uint64_t)((id) & ((1ULL << ID_KIND_SHIFT) - 1)))
+#define MAKE_ID(kind, seq)                            \
+	((uint32_t)(((uint32_t)(kind) << ID_KIND_SHIFT) | \
+				((uint32_t)(seq) & ID_SEQ_MASK)))
+
+#define ID_KIND(id) ((uint8_t)((id) >> ID_KIND_SHIFT))
+#define ID_SEQ(id) ((uint32_t)((id) & ID_SEQ_MASK))
 
 typedef struct tcb {
 	uint64_t magic;
-	uint64_t tid;
+	uint32_t tid;
 	struct interrupt_frame frame;
 	struct pcb *process;
 	struct tcb *next;
@@ -50,7 +52,7 @@ typedef struct tcb {
 } tcb;
 
 typedef struct pcb {
-	uint64_t pid;
+	uint32_t pid;
 	pagetable *pm;
 	struct tcb *threads;
 } pcb;
@@ -62,5 +64,14 @@ void proc_destroy(pcb *proc);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
+f static inline int pid_valid(uint32_t pid)
+{
+	return ID_KIND(pid) == PID_KIND_NORMAL_PROCESS && ID_SEQ(pid) != 0;
+}
+
+static inline int tid_valid(uint32_t tid)
+{
+	return ID_KIND(tid) == TID_KIND_NORMAL_THREAD && ID_SEQ(tid) != 0;
+}
 
 #endif // _SYS_SCHED_H

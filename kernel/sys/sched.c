@@ -24,8 +24,8 @@
 
 #define SCHED_DEFAULT_SLICE 10
 
-static uint64_t next_pid = 1;
-static uint64_t next_tid = 1;
+static uint32_t next_pid = 1;
+static uint32_t next_tid = 1;
 
 void sched_init()
 {
@@ -54,7 +54,7 @@ pcb *proc_create()
 	proc->pm = create_pagemap();
 	proc->threads = NULL;
 
-	debug("Created new process PID=%lu (kind=%u, seq=%lu), pagemap=%p\n",
+	debug("Created new process PID=%u (kind=%u, seq=%u), pagemap=%p\n",
 		  proc->pid, ID_KIND(proc->pid), ID_SEQ(proc->pid), proc->pm);
 
 	return proc;
@@ -116,7 +116,7 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 		curr->next = thread;
 	}
 
-	debug("Created new thread TID=%x (kind=%u, seq=%lu), parent PID=%lu\n",
+	debug("Created new thread TID=%u (kind=%u, seq=%u), parent PID=%u\n",
 		  thread->tid, ID_KIND(thread->tid), ID_SEQ(thread->tid), proc->pid);
 
 	return thread;
