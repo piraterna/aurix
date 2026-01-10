@@ -24,8 +24,11 @@
 #define _MM_PMM_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define PAGE_SIZE 0x1000
+
+extern uint64_t bitmap_pages;
 
 void pmm_init(void);
 void pmm_reclaim_bootparms(void);

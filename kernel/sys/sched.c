@@ -27,17 +27,79 @@
 static uint32_t next_pid = 1;
 static uint32_t next_tid = 1;
 
-void sched_init()
+static struct cpu *sched_pick_best_cpu(void)
 {
-	if (cpu_get_current()->thread_count != 0) {
-		warn("tried to init scheduler when current CPU already has threads.\n");
+	if (cpu_count == 0)
+		return cpu_get_current();
+
+	struct cpu *best = &cpuinfo[0];
+
+	for (size_t i = 1; i < cpu_count; i++) {
+		if (cpuinfo[i].thread_count < best->thread_count)
+			best = &cpuinfo[i];
+	}
+
+	return best;
+}
+
+static void cpu_add_thread(struct cpu *cpu, tcb *thread)
+{
+	if (!cpu || !thread) {
+		warn("NULL cpu or thread (cpu=%p, thread=%p)\n", cpu, thread);
 		return;
 	}
 
-	// just hope that the thread list is empty :^)
-	// TODO: clear on every CPU
-	cpu_get_current()->thread_count = 0;
-	cpu_get_current()->thread_list = NULL;
+	spinlock_acquire(&cpu->sched_lock);
+
+	thread->next = cpu->thread_list;
+	cpu->thread_list = thread;
+	cpu->thread_count++;
+	thread->cpu = cpu;
+
+	debug("CPU=%u TID=%u (thread_count=%lu)\n", cpu->id, thread->tid,
+		  cpu->thread_count);
+
+	spinlock_release(&cpu->sched_lock);
+}
+
+static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
+{
+	if (!cpu || !thread) {
+		warn("NULL cpu or thread (cpu=%p, thread=%p)\n", cpu, thread);
+		return;
+	}
+
+	spinlock_acquire(&cpu->sched_lock);
+
+	tcb **link = &cpu->thread_list;
+	while (*link) {
+		if (*link == thread) {
+			*link = thread->next;
+			cpu->thread_count--;
+
+			debug("CPU=%u TID=%u (thread_count=%lu)\n", cpu->id, thread->tid,
+				  cpu->thread_count);
+
+			spinlock_release(&cpu->sched_lock);
+			return;
+		}
+		link = &(*link)->next;
+	}
+
+	spinlock_release(&cpu->sched_lock);
+
+	warn("TID=%u not found on CPU=%u\n", thread->tid, cpu->id);
+}
+
+void sched_init()
+{
+	struct cpu *cpu = cpu_get_current();
+
+	spinlock_init(&cpu->sched_lock);
+	cpu->thread_count = 0;
+	cpu->thread_list = NULL;
+
+	info("Scheduler initialized on CPU=%u\n", cpu->id);
 }
 
 pcb *proc_create()
@@ -52,6 +114,7 @@ pcb *proc_create()
 
 	proc->pid = MAKE_ID(PID_KIND_NORMAL_PROCESS, next_pid++);
 	proc->pm = create_pagemap();
+	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
 
 	debug("Created new process PID=%u (kind=%u, seq=%u), pagemap=%p\n",
@@ -72,9 +135,10 @@ void proc_destroy(pcb *proc)
 		curr = next;
 	}
 
+	vdestroy(proc->vctx);
 	destroy_pagemap(proc->pm);
 
-	info("Destroyed process with PID=%ld\n", proc->pid);
+	info("Destroyed process with PID=%u\n", proc->pid);
 	kfree(proc);
 }
 
@@ -116,6 +180,9 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 		curr->next = thread;
 	}
 
+	struct cpu *target_cpu = sched_pick_best_cpu();
+	cpu_add_thread(target_cpu, thread);
+
 	debug("Created new thread TID=%u (kind=%u, seq=%u), parent PID=%u\n",
 		  thread->tid, ID_KIND(thread->tid), ID_SEQ(thread->tid), proc->pid);
 
@@ -127,7 +194,6 @@ void thread_destroy(tcb *thread)
 	if (!thread)
 		return;
 
-	/* Check magic first — do NOT trust heap yet */
 	if (thread->magic != TCB_MAGIC_ALIVE) {
 		warn(
 			"Tried to destroy a thread that is already destroyed or corrupt (%p)\n",

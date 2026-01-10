@@ -201,10 +201,13 @@ void _start(struct aurix_parameters *params)
 	TEST_ADD(heap_test);
 	test_run(10);
 
+	sched_init();
+
 	cpu_init_mp();
 
-	sched_init();
 	test_proc = proc_create();
+	thread_create(test_proc, hello);
+	thread_create(test_proc, hello);
 	thread_create(test_proc, hello);
 
 	// no need to destroy thread(s) since it gets automatically destroyed

@@ -61,16 +61,19 @@ vctx_t *vinit(pagetable *pm, uint64_t start)
 
 void vdestroy(vctx_t *ctx)
 {
-	if (ctx->root == NULL || ctx->pagemap == NULL)
+	if (!ctx || !ctx->root || !ctx->pagemap)
 		return;
 
 	vregion_t *region = ctx->root;
-	while (region != NULL) {
+
+	while (region) {
 		vregion_t *next = region->next;
-		pfree(region, 1);
+		vfree(ctx, (void *)region->start);
+		pfree((void *)VIRT_TO_PHYS(region), 1);
 		region = next;
 	}
-	pfree(ctx, 1);
+
+	pfree((void *)VIRT_TO_PHYS(ctx), 1);
 }
 
 void *valloc(vctx_t *ctx, size_t pages, uint64_t flags)
@@ -241,43 +244,35 @@ void *vadd(vctx_t *ctx, uint64_t vaddr, uint64_t paddr, size_t pages,
 
 void vfree(vctx_t *ctx, void *ptr)
 {
-	if (ctx == NULL)
+	if (!ctx || !ptr)
 		return;
 
 	vregion_t *region = ctx->root;
-	while (region != NULL) {
-		if (region->start == (uint64_t)ptr) {
+	while (region) {
+		if (region->start == (uint64_t)ptr)
 			break;
-		}
 		region = region->next;
 	}
 
-	if (region == NULL)
+	if (!region)
 		return;
 
-	vregion_t *prev = region->prev;
-	vregion_t *next = region->next;
-
 	for (uint64_t i = 0; i < region->pages; i++) {
-		uint64_t virt = region->start + (i * PAGE_SIZE);
-		uint64_t phys = vget_phys(kernel_pm, virt);
+		uint64_t virt = region->start + i * PAGE_SIZE;
 
-		if (phys != 0) {
-			pfree((void *)phys, 1);
+		if (vget_phys(ctx->pagemap, virt) != 0) {
 			unmap_page(ctx->pagemap, virt);
 		}
 	}
 
-	if (prev != NULL)
-		prev->next = next;
-
-	if (next != NULL)
-		next->prev = prev;
-
+	if (region->prev)
+		region->prev->next = region->next;
+	if (region->next)
+		region->next->prev = region->prev;
 	if (region == ctx->root)
-		ctx->root = next;
+		ctx->root = region->next;
 
-	pfree(region, 1);
+	pfree((void *)VIRT_TO_PHYS(region), 1);
 }
 
 vregion_t *vget(vctx_t *ctx, uint64_t vaddr)

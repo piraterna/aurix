@@ -23,7 +23,6 @@
 #ifndef _SYS_SPINLOCK_H
 #define _SYS_SPINLOCK_H
 
-#include <arch/cpu/cpu.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -39,7 +38,7 @@ static inline void spinlock_init(spinlock_t *lock)
 static inline void spinlock_acquire(spinlock_t *lock)
 {
 	while (__atomic_test_and_set(&lock->lock, __ATOMIC_ACQUIRE)) {
-		cpu_spinwait();
+		__asm__ volatile("pause" ::: "memory");
 	}
 }
 

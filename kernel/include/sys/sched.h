@@ -22,6 +22,7 @@
 #include <arch/mm/paging.h>
 #include <arch/cpu/cpu.h>
 #include <stdint.h>
+#include <mm/vmm.h>
 
 struct pcb;
 struct tcb;
@@ -49,11 +50,13 @@ typedef struct tcb {
 	struct pcb *process;
 	struct tcb *next;
 	uint32_t time_slice;
+	struct cpu *cpu;
 } tcb;
 
 typedef struct pcb {
 	uint32_t pid;
 	pagetable *pm;
+	vctx_t *vctx;
 	struct tcb *threads;
 } pcb;
 

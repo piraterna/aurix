@@ -28,6 +28,7 @@
 #include <aurix.h>
 #include <string.h>
 #include <stddef.h>
+#include <sys/sched.h>
 
 #define CPU_ID_MSR 0xC0000103
 
@@ -49,6 +50,8 @@ int cpu_early_init()
 
 void cpu_init()
 {
+	sched_init();
+
 	uint32_t eax, ebx, ecx, edx;
 
 	struct cpu *cpu = cpu_get_current();
@@ -56,12 +59,6 @@ void cpu_init()
 		error("Couldn't figure out which core I'm running on :/\n");
 		return;
 	}
-
-	// overwrite default assigned ID with a proper LAPIC ID
-	cpu->id = lapic_read(0x20);
-	wrmsr(CPU_ID_MSR, cpu->id);
-
-	memset(cpu, 0, sizeof(struct cpu));
 
 	uint32_t func;
 	cpuid(0x01, &func, (uint32_t *)(cpu->vendor_str),
@@ -100,9 +97,6 @@ void cpu_init()
 			memset(&cpu->name_ext[48 - lead], 0, lead);
 		}
 	}
-
-	cpu->thread_count = 0;
-	cpu->thread_list = NULL;
 }
 
 struct cpu *cpu_get_current()

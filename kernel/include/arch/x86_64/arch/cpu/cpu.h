@@ -24,8 +24,10 @@
 #define _ARCH_CPU_CPU_H
 
 #include <arch/cpu/smp.h>
+#include <sys/spinlock.h>
 #include <aurix.h>
 #include <stdint.h>
+#include <stddef.h>
 
 struct interrupt_frame {
 	uint64_t es;
@@ -149,7 +151,12 @@ struct cpu {
 
 	struct tcb *thread_list;
 	uint64_t thread_count;
+
+	spinlock_t sched_lock;
 };
+
+extern struct cpu cpuinfo[];
+extern size_t cpu_count;
 
 struct cpu *cpu_get_current(void);
 
