@@ -40,6 +40,7 @@ pcb *proc_create()
 	proc->threads = NULL; // dont create a thread yet
 	debug("Created new process with PID=%ld, pagemap=%p\n", proc->pid,
 		  proc->pm);
+
 	return proc;
 }
 
@@ -49,4 +50,20 @@ void proc_destroy(pcb *proc)
 	// TODO: clear up threads
 	info("Destroyed process with PID=%ld\n", proc->pid);
 	kfree(proc);
+}
+
+tcb *thread_create(pcb *proc, void (*entry)(void))
+{
+	if (!proc) {
+		warn("NULL process passed\n");
+		return NULL;
+	}
+	(void)proc;
+	(void)entry;
+	return NULL;
+}
+
+void thread_destroy(tcb *thread)
+{
+	(void)thread;
 }

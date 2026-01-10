@@ -41,7 +41,11 @@ typedef struct pcb {
 } pcb;
 
 void sched_init(void);
+
 pcb *proc_create(void);
 void proc_destroy(pcb *proc);
+
+tcb *thread_create(pcb *proc, void (*entry)(void));
+void thread_destroy(tcb *thread);
 
 #endif // _SYS_SCHED_H

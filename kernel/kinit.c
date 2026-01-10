@@ -152,6 +152,7 @@ void hello(void)
 rtc_time_t time;
 rtc_error_t rtc_err;
 pcb *test_proc;
+tcb *test_thread;
 
 void _start(struct aurix_parameters *params)
 {
@@ -205,6 +206,8 @@ void _start(struct aurix_parameters *params)
 
 	sched_init();
 	test_proc = proc_create();
+	test_thread = thread_create(test_proc, hello);
+	thread_destroy(test_thread);
 	proc_destroy(test_proc);
 
 	pmm_reclaim_bootparms();
