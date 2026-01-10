@@ -33,6 +33,7 @@ typedef struct block {
 	size_t size;
 	size_t user_size;
 	size_t check;
+	size_t alloc_size;
 } block_t;
 
 #endif /* _HEAP_FF_H */

@@ -29,5 +29,6 @@
 void heap_init(vctx_t *ctx);
 void *kmalloc(size_t size);
 void kfree(void *ptr);
+void heap_switch_ctx(vctx_t *ctx);
 
 #endif /* _MM_HEAP_H */

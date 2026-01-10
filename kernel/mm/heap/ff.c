@@ -35,6 +35,9 @@ static void *pool = NULL;
 static size_t pool_pages = 0;
 static block_t *freelist = NULL;
 
+// current heap ctx
+static vctx_t *heap_ctx = NULL;
+
 static size_t compute_check(const block_t *b)
 {
 	return (uintptr_t)b->prev ^ (uintptr_t)b->next ^ b->size ^ b->user_size ^
@@ -62,8 +65,8 @@ static uint64_t *leading_canary_ptr(const block_t *b)
 
 static uint64_t *trailing_canary_ptr(const block_t *b)
 {
-	return (uint64_t *)((uint8_t *)b + sizeof(block_t) +
-						ALIGN_UP(b->user_size, ALIGNMENT));
+	return (uint64_t *)((uint8_t *)b + sizeof(block_t) + b->alloc_size -
+						CANARY_SIZE);
 }
 
 static void write_canaries(block_t *b)
@@ -138,6 +141,7 @@ static int grow_heap(vctx_t *ctx, size_t needed_pages)
 
 void heap_init(vctx_t *ctx)
 {
+	heap_ctx = ctx;
 	const size_t initial_pages = FF_POOL_SIZE;
 	pool = valloc(ctx, initial_pages, VALLOC_RW);
 	if (!pool) {
@@ -189,7 +193,7 @@ void *kmalloc(size_t size)
 		size_t needed =
 			(effective + sizeof(block_t) + ALIGNMENT - 1) / PAGE_SIZE + 1;
 
-		if (!grow_heap(NULL, needed))
+		if (!grow_heap(heap_ctx, needed))
 			return NULL;
 
 		return kmalloc(size);
@@ -236,6 +240,8 @@ void *kmalloc(size_t size)
 	chosen->prev = NULL;
 	chosen->next = NULL;
 	chosen->user_size = user_sz;
+	chosen->alloc_size = effective;
+	chosen->size = effective;
 	set_check(chosen);
 	write_canaries(chosen);
 
@@ -315,4 +321,13 @@ void kfree(void *ptr)
 			set_check(b->next);
 		}
 	}
+}
+
+void heap_switch_ctx(vctx_t *ctx)
+{
+	if (!ctx) {
+		warn("NULL vctx passed!\n");
+		return;
+	}
+	heap_ctx = ctx;
 }
