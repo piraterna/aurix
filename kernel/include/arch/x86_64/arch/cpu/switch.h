@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  aurix.h */
+/* Module Name:  switch.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,21 +20,11 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _AURIX_H
-#define _AURIX_H
+#ifndef _ARCH_CPU_SWITCH_H
+#define _ARCH_CPU_SWITCH_H
 
-#include <debug/log.h>
 #include <stdint.h>
-#include <mm/vmm.h>
 
-extern uintptr_t hhdm_offset;
-extern vctx_t *kvctx;
+extern void switch_task(uint64_t *rsp, uint64_t cr3);
 
-#define PHYS_TO_VIRT(addr) ((uintptr_t)(addr) + hhdm_offset)
-#define VIRT_TO_PHYS(addr) ((uintptr_t)(addr) - hhdm_offset)
-
-#ifndef UNREACHABLE
-#define UNREACHABLE() __builtin_unreachable()
-#endif
-
-#endif /* _AURIX_H */
+#endif // _ARCH_CPU_SWITCH_H

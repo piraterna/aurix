@@ -41,7 +41,8 @@ typedef struct tcb {
 	struct pcb *process;
 	struct cpu *cpu;
 
-	uint64_t *stack_base;
+	uint64_t *rsp;
+	void *stack_base;
 
 	struct tcb *proc_next;
 	struct tcb *cpu_next;

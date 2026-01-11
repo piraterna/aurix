@@ -23,6 +23,8 @@
 #include <string.h>
 #include <arch/sys/irqlock.h>
 #include <lib/align.h>
+#include <arch/cpu/switch.h>
+#include <aurix.h>
 
 #define SCHED_DEFAULT_SLICE 10
 
@@ -152,6 +154,7 @@ void sched_yield(void)
 		debug("CPU=%u TID=%u: only one thread, no switch needed\n", cpu->id,
 			  current->tid);
 		irqlock_release(&cpu->sched_lock);
+		switch_task(next->rsp, VIRT_TO_PHYS(next->process->pm));
 		return;
 	}
 
@@ -176,8 +179,7 @@ void sched_yield(void)
 	}
 
 	irqlock_release(&cpu->sched_lock);
-
-	trace("TODO: arch-specific context switch\n");
+	switch_task(next->rsp, VIRT_TO_PHYS(next->process->pm));
 }
 
 void sched_init(void)
@@ -252,15 +254,23 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 
 	uint64_t map_flags = VMM_PRESENT | VMM_WRITABLE;
 
-	thread->stack_base = valloc(proc->vctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), map_flags);
+	thread->stack_base =
+		valloc(proc->vctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), map_flags);
 	if (!thread->stack_base) {
 		kfree(thread);
 		return NULL;
-	} 
+	}
 
-	uint64_t* rsp = (uint64_t*)thread->stack_base + STACK_SIZE;
-	*--rsp = (uint64_t)entry;
-	*--rsp = 0x202;
+	uint64_t *rsp = (uint64_t *)((uint8_t *)thread->stack_base + STACK_SIZE);
+
+	*--rsp = 0x10; // SS
+	--rsp;
+	*rsp = (uint64_t)rsp; // RSP
+	*--rsp = 0x202; // RFLAGS (IF=1)
+	*--rsp = 0x08; // CS
+	*--rsp = (uint64_t)entry; // RIP
+
+	thread->rsp = rsp;
 
 	if (!proc->threads) {
 		proc->threads = thread;

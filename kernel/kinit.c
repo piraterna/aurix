@@ -144,15 +144,15 @@ static void heap_test(void)
 
 void hello(void)
 {
-	info("Hello from thread: %d!\n", 0);
-	return;
+	__asm__ volatile("int $0x01");
 }
 
 // FIXME: local variables inside this function are behaving weird
+vctx_t *kvctx;
 rtc_time_t time;
 rtc_error_t rtc_err;
 pcb *test_proc;
-int i = 0;
+int i;
 
 void _start(struct aurix_parameters *params)
 {
@@ -198,7 +198,8 @@ void _start(struct aurix_parameters *params)
 	debug("kernel cmdline: %s\n", boot_params->cmdline);
 	parse_boot_args(boot_params->cmdline);
 
-	heap_init(vinit(kernel_pm, 0x1000));
+	kvctx = vinit(kernel_pm, 0x1000);
+	heap_init(kvctx);
 	TEST_ADD(heap_test);
 	test_run(10);
 
@@ -209,7 +210,9 @@ void _start(struct aurix_parameters *params)
 	test_proc = proc_create();
 
 	thread_create(test_proc, hello);
-	thread_create(test_proc, hello); // running tick on bp will only run first thread since the other one is on CPU 1 (example)
+	thread_create(
+		test_proc,
+		hello); // running tick on bp will only run first thread since the other one is on CPU 1 (example)
 
 	// simulate 10 clock cycles
 	for (i = 0; i < 10; i++)
