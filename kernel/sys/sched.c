@@ -66,6 +66,9 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 	cpu->thread_count++;
 	thread->cpu = cpu;
 
+	debug("Created TID=%u PID=%u CPU=%u\n", thread->tid, thread->process->pid,
+		  cpu->id);
+
 	spinlock_release(&cpu->sched_lock);
 }
 
@@ -82,14 +85,101 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 			*link = thread->cpu_next;
 			cpu->thread_count--;
 
-			// debug("TID=%u removed from CPU=%u (count=%lu)\n", thread->tid,
-			//   cpu->id, cpu->thread_count);
+			debug("TID=%u removed from CPU=%u (count=%lu)\n", thread->tid,
+				  cpu->id, cpu->thread_count);
 			break;
 		}
 		link = &(*link)->cpu_next;
 	}
 
 	spinlock_release(&cpu->sched_lock);
+}
+
+static tcb *cpu_pick_next_thread(struct cpu *cpu, tcb *current)
+{
+	if (!cpu || !cpu->thread_list)
+		return NULL;
+
+	tcb *next = current ? current->cpu_next : cpu->thread_list;
+
+	if (!next)
+		next = cpu->thread_list;
+
+	return next;
+}
+
+void sched_tick(void)
+{
+	struct cpu *cpu = cpu_get_current();
+	if (!cpu || !cpu->thread_list)
+		return;
+
+	tcb *current = cpu->thread_list;
+	if (!current)
+		return;
+
+	if (current->time_slice > 0)
+		current->time_slice--;
+
+	if (current->time_slice == 0) {
+		debug("CPU=%u, TID=%u slice expired, switching...\n", cpu->id,
+			  current->tid);
+		current->time_slice = SCHED_DEFAULT_SLICE;
+		sched_switch();
+	}
+}
+
+void sched_yield(void)
+{
+	struct cpu *cpu = cpu_get_current();
+	if (!cpu || !cpu->thread_list)
+		return;
+
+	tcb *current = cpu->thread_list;
+	if (!current)
+		return;
+
+	trace("CPU=%u, TID=%u yielding CPU\n", cpu->id, current->tid);
+
+	current->time_slice = SCHED_DEFAULT_SLICE;
+	sched_switch();
+}
+
+void sched_switch(void)
+{
+	struct cpu *cpu = cpu_get_current();
+	if (!cpu || !cpu->thread_list)
+		return;
+
+	tcb *current = cpu->thread_list;
+	tcb *next = cpu_pick_next_thread(cpu, current);
+
+	if (!next || next == current) {
+		debug("CPU=%u, no switch needed (TID=%u)\n", cpu->id, current->tid);
+		return;
+	}
+
+	tcb *prev = cpu->thread_list;
+	while (prev->cpu_next && prev->cpu_next != next)
+		prev = prev->cpu_next;
+
+	if (prev->cpu_next == next) {
+		prev->cpu_next = next->cpu_next;
+		next->cpu_next = cpu->thread_list;
+		cpu->thread_list = next;
+	}
+
+	debug("CPU=%u switching from TID=%u to TID=%u\n", cpu->id, current->tid,
+		  next->tid);
+
+	tcb *t = cpu->thread_list;
+	debug("CPU=%u thread list: \n", cpu->id);
+	while (t) {
+		debug("%u -> \n", t->tid);
+		t = t->cpu_next;
+	}
+
+	trace("TODO\n");
 }
 
 void sched_init(void)
@@ -118,7 +208,7 @@ pcb *proc_create(void)
 	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
 
-	// debug("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
+	debug("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
 
 	return proc;
 }
@@ -139,7 +229,7 @@ void proc_destroy(pcb *proc)
 	destroy_pagemap(proc->pm);
 	kfree(proc);
 
-	// debug("Destroyed process, PID=%u\n", proc->pid);
+	debug("Destroyed process, PID=%u\n", proc->pid);
 }
 
 tcb *thread_create(pcb *proc, void (*entry)(void))
@@ -175,8 +265,6 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 
 	struct cpu *cpu = sched_pick_best_cpu();
 	cpu_add_thread(cpu, thread);
-
-	// debug("Created TID=%u PID=%u CPU=%u\n", thread->tid, proc->pid, cpu->id);
 
 	return thread;
 }
