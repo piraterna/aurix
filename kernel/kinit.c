@@ -144,7 +144,8 @@ static void heap_test(void)
 
 void hello(void)
 {
-	__asm__ volatile("int $0x01");
+	debug("hello from a thread!\n");
+	return;
 }
 
 // FIXME: local variables inside this function are behaving weird
@@ -210,9 +211,6 @@ void _start(struct aurix_parameters *params)
 	test_proc = proc_create();
 
 	thread_create(test_proc, hello);
-	thread_create(
-		test_proc,
-		hello); // running tick on bp will only run first thread since the other one is on CPU 1 (example)
 
 	// simulate 10 clock cycles
 	for (i = 0; i < 10; i++)

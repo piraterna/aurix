@@ -280,10 +280,8 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	thread->process = proc;
 	thread->time_slice = SCHED_DEFAULT_SLICE;
 
-	uint64_t map_flags = VMM_PRESENT | VMM_WRITABLE;
-
-	uint64_t *stack_base =
-		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), map_flags);
+	uint64_t *stack_base = valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE),
+								  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 	if (!stack_base) {
 		kfree(thread);
 		return NULL;
@@ -293,8 +291,16 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 			 VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
-	*--rsp = (uint64_t)entry;
-	*--rsp = 0x202;
+
+	/* Initial stack for new thread to work with switch_task */
+	*--rsp = 0; // rbx
+	*--rsp = 0; // rbp
+	*--rsp = 0; // r12
+	*--rsp = 0; // r13
+	*--rsp = 0; // r14
+	*--rsp = 0; // r15
+	*--rsp = 0x202; // rflags
+	*--rsp = (uint64_t)entry; // RIP (return address)
 
 	thread->rsp = rsp;
 
