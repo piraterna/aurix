@@ -16,6 +16,7 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
+#include <boot/axprot.h>
 #include <sys/sched.h>
 #include <mm/heap.h>
 #include <mm/vmm.h>
@@ -30,6 +31,13 @@
 
 static uint32_t next_pid = 1;
 static uint32_t next_tid = 1;
+
+extern char _start_text[];
+extern char _end_text[];
+extern char _start_rodata[];
+extern char _end_rodata[];
+extern char _start_data[];
+extern char _end_data[];
 
 static struct cpu *sched_pick_best_cpu(void)
 {
@@ -208,6 +216,24 @@ pcb *proc_create(void)
 	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
 
+	uintptr_t kvirt = 0xffffffff80000000ULL;
+	uintptr_t kphys = boot_params->kernel_addr;
+
+	uint64_t text_start = ALIGN_DOWN((uintptr_t)_start_text, PAGE_SIZE);
+	uint64_t text_end = ALIGN_UP((uintptr_t)_end_text, PAGE_SIZE);
+	map_pages(proc->pm, text_start, text_start - kvirt + kphys,
+			  text_end - text_start, VMM_PRESENT);
+
+	uint64_t rodata_start = ALIGN_DOWN((uintptr_t)_start_rodata, PAGE_SIZE);
+	uint64_t rodata_end = ALIGN_UP((uintptr_t)_end_rodata, PAGE_SIZE);
+	map_pages(proc->pm, rodata_start, rodata_start - kvirt + kphys,
+			  rodata_end - rodata_start, VMM_PRESENT | VMM_NX);
+
+	uint64_t data_start = ALIGN_DOWN((uintptr_t)_start_data, PAGE_SIZE);
+	uint64_t data_end = ALIGN_UP((uintptr_t)_end_data, PAGE_SIZE);
+	map_pages(proc->pm, data_start, data_start - kvirt + kphys,
+			  data_end - data_start, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+
 	debug("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
 
 	return proc;
@@ -263,12 +289,16 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 
 	uint64_t *rsp = (uint64_t *)((uint8_t *)thread->stack_base + STACK_SIZE);
 
+	map_page(NULL, (uintptr_t)thread->stack_base, (uintptr_t)thread->stack_base, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+
 	*--rsp = 0x10; // SS
 	--rsp;
 	*rsp = (uint64_t)rsp; // RSP
 	*--rsp = 0x202; // RFLAGS (IF=1)
 	*--rsp = 0x08; // CS
 	*--rsp = (uint64_t)entry; // RIP
+
+	// unmap_page(NULL, (uintptr_t)thread->stack_base);
 
 	thread->rsp = rsp;
 
