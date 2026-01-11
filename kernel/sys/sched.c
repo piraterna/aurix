@@ -293,15 +293,14 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
 	memset(stack_base, STACK_SIZE, 0);
 
-	/* Initial stack for new thread to work with switch_task */
+	*--rsp = (uint64_t)entry; // rip
+	*--rsp = 0x202; // rflags
 	*--rsp = 0; // rbx
-	*--rsp = 0; // rbp
+	*--rsp = 0; // ebp
 	*--rsp = 0; // r12
 	*--rsp = 0; // r13
 	*--rsp = 0; // r14
 	*--rsp = 0; // r15
-	*--rsp = 0x202; // rflags
-	*--rsp = (uint64_t)entry; // RIP (return address)
 
 	thread->rsp = rsp;
 
@@ -352,4 +351,66 @@ void thread_destroy(tcb *thread)
 	thread->process = NULL;
 
 	kfree(thread);
+}
+
+void thread_exit(tcb *thread)
+{
+	if (!thread)
+		thread = thread_current();
+
+	if (!thread)
+		return;
+
+	if (thread->magic != TCB_MAGIC_ALIVE) {
+		warn("Invalid thread %p in thread_exit\n", thread);
+		return;
+	}
+
+	struct cpu *cpu = thread->cpu;
+
+	debug("Thread TID=%u exiting\n", thread->tid);
+
+	if (cpu)
+		cpu_remove_thread(cpu, thread);
+
+	if (thread->process) {
+		tcb **link = &thread->process->threads;
+		while (*link) {
+			if (*link == thread) {
+				*link = thread->proc_next;
+				break;
+			}
+			link = &(*link)->proc_next;
+		}
+		thread->process = NULL;
+	}
+
+	thread->magic = TCB_MAGIC_DEAD;
+	thread->proc_next = (tcb *)0xDEADDEAD;
+	thread->cpu_next = (tcb *)0xDEADDEAD;
+
+	tcb *next = cpu_pick_next_thread(cpu, NULL);
+
+	if (!next) {
+		debug("No threads left on CPU=%u, entering idle loop\n", cpu->id);
+
+		kfree(thread);
+
+		while (1) {
+			cpu_halt();
+		}
+	}
+
+	sched_yield();
+	__builtin_unreachable();
+}
+
+tcb *thread_current(void)
+{
+	struct cpu *cpu = cpu_get_current();
+	if (!cpu)
+		return NULL;
+
+	return cpu
+		->thread_list; // head of the CPU thread list is the current thread
 }

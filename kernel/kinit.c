@@ -144,8 +144,10 @@ static void heap_test(void)
 
 void hello(void)
 {
-	debug("hello from a thread!\n");
-	return;
+	kprintf("hello from a thread %d!\n", thread_current()->tid);
+	thread_exit(thread_current());
+	for (;;)
+		;
 }
 
 // FIXME: local variables inside this function are behaving weird
@@ -209,15 +211,7 @@ void _start(struct aurix_parameters *params)
 	cpu_init_mp();
 
 	test_proc = proc_create();
-
 	thread_create(test_proc, hello);
-
-	// simulate 10 clock cycles
-	for (i = 0; i < 10; i++)
-		sched_tick();
-
-	// no need to destroy thread(s) since it gets automatically destroyed
-	proc_destroy(test_proc);
 
 	pmm_reclaim_bootparms();
 
@@ -237,6 +231,10 @@ void _start(struct aurix_parameters *params)
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
 		 time.day, time.hours, time.minutes, time.seconds);
 	info("Kernel boot complete in ? seconds\n");
+
+	// simulate 10 clock cycles
+	for (i = 0; i < 10; i++)
+		sched_tick();
 
 	for (;;) {
 #ifdef __x86_64__
