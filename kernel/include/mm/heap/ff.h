@@ -24,7 +24,7 @@
 #include <stdint.h>
 
 #ifndef FF_POOL_SIZE
-#define FF_POOL_SIZE 512 // 2MB
+#define FF_POOL_SIZE 4096 // 16MB
 #endif // FF_POOL_SIZE
 
 typedef struct block {
