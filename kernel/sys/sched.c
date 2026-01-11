@@ -350,6 +350,8 @@ void thread_destroy(tcb *thread)
 	thread->cpu_next = (tcb *)0xDEADDEAD;
 	thread->process = NULL;
 
+	// TODO: Free the stack!
+
 	kfree(thread);
 }
 
