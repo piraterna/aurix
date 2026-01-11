@@ -46,11 +46,16 @@ struct tcb;
 typedef struct tcb {
 	uint64_t magic;
 	uint32_t tid;
+
 	struct interrupt_frame frame;
-	struct pcb *process;
-	struct tcb *next;
 	uint32_t time_slice;
+
+	struct pcb *process;
 	struct cpu *cpu;
+
+	struct tcb *proc_next;
+	struct tcb *cpu_next;
+
 } tcb;
 
 typedef struct pcb {

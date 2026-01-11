@@ -152,6 +152,7 @@ void hello(void)
 rtc_time_t time;
 rtc_error_t rtc_err;
 pcb *test_proc;
+int i = 0;
 
 void _start(struct aurix_parameters *params)
 {
@@ -206,9 +207,12 @@ void _start(struct aurix_parameters *params)
 	cpu_init_mp();
 
 	test_proc = proc_create();
-	thread_create(test_proc, hello);
-	thread_create(test_proc, hello);
-	thread_create(test_proc, hello);
+
+	for (i = 0; i < 84; i++)
+		thread_create(test_proc, hello);
+
+	kmalloc(sizeof(tcb) - 32);
+	kmalloc(1); // causes pf in heap
 
 	// no need to destroy thread(s) since it gets automatically destroyed
 	proc_destroy(test_proc);
