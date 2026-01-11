@@ -291,6 +291,7 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 			 VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
+	memset(stack_base, STACK_SIZE, 0);
 
 	/* Initial stack for new thread to work with switch_task */
 	*--rsp = 0; // rbx
