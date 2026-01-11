@@ -1,19 +1,31 @@
-[section .text]
-
+section .text
 global switch_task
+
+%define KTHREAD_RSP_OFFSET 16
+
 switch_task:
-    cli
+    test rdi, rdi
+    jz .load_next
 
-    ; RDI = new RSP
-    ; RSI = new CR3 (physical address)
+    push rbx
+    push rbp
+    push r12
+    push r13
+    push r14
+    push r15
+    pushfq
 
-    mov     cr3, rsi
-    mov     rsp, rdi
+    mov [rdi + KTHREAD_RSP_OFFSET], rsp
 
-    mov     ax, 0x10
-    mov     ds, ax
-    mov     es, ax
-    mov     fs, ax
-    mov     gs, ax
+.load_next:
+    mov rsp, [rsi + KTHREAD_RSP_OFFSET]
 
-    iretq
+    popfq
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbp
+    pop rbx
+
+    ret

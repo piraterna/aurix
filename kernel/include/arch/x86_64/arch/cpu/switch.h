@@ -25,6 +25,12 @@
 
 #include <stdint.h>
 
-extern void switch_task(uint64_t *rsp, uint64_t cr3);
+struct kthread {
+	uint64_t _pad0;
+	uint64_t _pad1;
+	uint64_t rsp;
+};
+
+extern void switch_task(struct kthread *prev, struct kthread *next);
 
 #endif // _ARCH_CPU_SWITCH_H
