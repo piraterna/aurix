@@ -210,7 +210,8 @@ void _start(struct aurix_parameters *params)
 
 	thread_create(test_proc, hello);
 
-	while (1)
+	// simulate 10 clock cycles
+	for (i = 0; i < 10; i++)
 		sched_tick();
 
 	// no need to destroy thread(s) since it gets automatically destroyed

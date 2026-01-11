@@ -24,6 +24,7 @@
 #define _ARCH_CPU_CPU_H
 
 #include <arch/cpu/smp.h>
+#include <arch/sys/irqlock.h>
 #include <sys/spinlock.h>
 #include <aurix.h>
 #include <stdint.h>
@@ -152,7 +153,7 @@ struct cpu {
 	struct tcb *thread_list;
 	uint64_t thread_count;
 
-	spinlock_t sched_lock;
+	irqlock_t sched_lock;
 };
 
 extern struct cpu cpuinfo[];

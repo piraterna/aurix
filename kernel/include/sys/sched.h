@@ -67,8 +67,7 @@ typedef struct pcb {
 
 void sched_init(void);
 void sched_tick(void);
-void sched_yeild(void);
-void sched_switch(void);
+void sched_yield(void);
 
 pcb *proc_create(void);
 void proc_destroy(pcb *proc);

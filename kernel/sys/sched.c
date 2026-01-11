@@ -17,11 +17,11 @@
 /*********************************************************************************/
 
 #include <sys/sched.h>
-#include <sys/spinlock.h>
 #include <mm/heap.h>
 #include <mm/vmm.h>
 #include <debug/log.h>
 #include <string.h>
+#include <arch/sys/irqlock.h>
 
 #define SCHED_DEFAULT_SLICE 10
 
@@ -39,9 +39,9 @@ static struct cpu *sched_pick_best_cpu(void)
 	for (size_t i = 0; i < cpu_count; i++) {
 		struct cpu *cpu = &cpuinfo[i];
 
-		spinlock_acquire(&cpu->sched_lock);
+		irqlock_acquire(&cpu->sched_lock);
 		uint64_t count = cpu->thread_count;
-		spinlock_release(&cpu->sched_lock);
+		irqlock_release(&cpu->sched_lock);
 
 		if (count < best_count) {
 			best = cpu;
@@ -59,7 +59,7 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 		return;
 	}
 
-	spinlock_acquire(&cpu->sched_lock);
+	irqlock_acquire(&cpu->sched_lock);
 
 	thread->cpu_next = cpu->thread_list;
 	cpu->thread_list = thread;
@@ -69,7 +69,7 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 	debug("Created TID=%u PID=%u CPU=%u\n", thread->tid, thread->process->pid,
 		  cpu->id);
 
-	spinlock_release(&cpu->sched_lock);
+	irqlock_release(&cpu->sched_lock);
 }
 
 static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
@@ -77,7 +77,7 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 	if (!cpu || !thread)
 		return;
 
-	spinlock_acquire(&cpu->sched_lock);
+	irqlock_acquire(&cpu->sched_lock);
 
 	tcb **link = &cpu->thread_list;
 	while (*link) {
@@ -92,7 +92,7 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 		link = &(*link)->cpu_next;
 	}
 
-	spinlock_release(&cpu->sched_lock);
+	irqlock_release(&cpu->sched_lock);
 }
 
 static tcb *cpu_pick_next_thread(struct cpu *cpu, tcb *current)
@@ -118,14 +118,16 @@ void sched_tick(void)
 	if (!current)
 		return;
 
+	debug("CPU=%u TID=%u tick: remaining slice=%u\n", cpu->id, current->tid,
+		  current->time_slice);
+
 	if (current->time_slice > 0)
 		current->time_slice--;
 
 	if (current->time_slice == 0) {
-		debug("CPU=%u, TID=%u slice expired, switching...\n", cpu->id,
+		debug("CPU=%u TID=%u slice expired, yielding CPU...\n", cpu->id,
 			  current->tid);
-		current->time_slice = SCHED_DEFAULT_SLICE;
-		sched_switch();
+		sched_yield();
 	}
 }
 
@@ -139,23 +141,16 @@ void sched_yield(void)
 	if (!current)
 		return;
 
-	trace("CPU=%u, TID=%u yielding CPU\n", cpu->id, current->tid);
-
 	current->time_slice = SCHED_DEFAULT_SLICE;
-	sched_switch();
-}
+	trace("CPU=%u TID=%u yielding CPU\n", cpu->id, current->tid);
 
-void sched_switch(void)
-{
-	struct cpu *cpu = cpu_get_current();
-	if (!cpu || !cpu->thread_list)
-		return;
+	irqlock_acquire(&cpu->sched_lock);
 
-	tcb *current = cpu->thread_list;
 	tcb *next = cpu_pick_next_thread(cpu, current);
-
 	if (!next || next == current) {
-		debug("CPU=%u, no switch needed (TID=%u)\n", cpu->id, current->tid);
+		debug("CPU=%u TID=%u: only one thread, no switch needed\n", cpu->id,
+			  current->tid);
+		irqlock_release(&cpu->sched_lock);
 		return;
 	}
 
@@ -169,7 +164,7 @@ void sched_switch(void)
 		cpu->thread_list = next;
 	}
 
-	debug("CPU=%u switching from TID=%u to TID=%u\n", cpu->id, current->tid,
+	debug("CPU=%u switched from TID=%u to TID=%u\n", cpu->id, current->tid,
 		  next->tid);
 
 	tcb *t = cpu->thread_list;
@@ -179,14 +174,16 @@ void sched_switch(void)
 		t = t->cpu_next;
 	}
 
-	trace("TODO\n");
+	irqlock_release(&cpu->sched_lock);
+
+	trace("TODO: arch-specific context switch\n");
 }
 
 void sched_init(void)
 {
 	struct cpu *cpu = cpu_get_current();
 
-	spinlock_init(&cpu->sched_lock);
+	irqlock_init(&cpu->sched_lock);
 	cpu->thread_list = NULL;
 	cpu->thread_count = 0;
 
