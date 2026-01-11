@@ -208,11 +208,8 @@ void _start(struct aurix_parameters *params)
 
 	test_proc = proc_create();
 
-	for (i = 0; i < 84; i++)
+	for (i = 0; i < 10000; i++)
 		thread_create(test_proc, hello);
-
-	kmalloc(sizeof(tcb) - 32);
-	kmalloc(1); // causes pf in heap
 
 	// no need to destroy thread(s) since it gets automatically destroyed
 	proc_destroy(test_proc);

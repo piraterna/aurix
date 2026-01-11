@@ -82,8 +82,8 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 			*link = thread->cpu_next;
 			cpu->thread_count--;
 
-			debug("TID=%u removed from CPU=%u (count=%lu)\n", thread->tid,
-				  cpu->id, cpu->thread_count);
+			// debug("TID=%u removed from CPU=%u (count=%lu)\n", thread->tid,
+			//   cpu->id, cpu->thread_count);
 			break;
 		}
 		link = &(*link)->cpu_next;
@@ -118,7 +118,7 @@ pcb *proc_create(void)
 	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
 
-	debug("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
+	// debug("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
 
 	return proc;
 }
@@ -139,7 +139,7 @@ void proc_destroy(pcb *proc)
 	destroy_pagemap(proc->pm);
 	kfree(proc);
 
-	debug("Destroyed process, PID=%u\n", proc->pid);
+	// debug("Destroyed process, PID=%u\n", proc->pid);
 }
 
 tcb *thread_create(pcb *proc, void (*entry)(void))
@@ -176,7 +176,7 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	struct cpu *cpu = sched_pick_best_cpu();
 	cpu_add_thread(cpu, thread);
 
-	debug("Created TID=%u PID=%u CPU=%u\n", thread->tid, proc->pid, cpu->id);
+	// debug("Created TID=%u PID=%u CPU=%u\n", thread->tid, proc->pid, cpu->id);
 
 	return thread;
 }
