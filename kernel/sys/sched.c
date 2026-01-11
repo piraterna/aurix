@@ -150,11 +150,12 @@ void sched_yield(void)
 	irqlock_acquire(&cpu->sched_lock);
 
 	tcb *next = cpu_pick_next_thread(cpu, current);
+	struct kthread next_kthread = (struct kthread){ 0, 0, (uint64_t)next->rsp };
 	if (!next || next == current) {
 		debug("CPU=%u TID=%u: only one thread, no switch needed\n", cpu->id,
 			  current->tid);
 		irqlock_release(&cpu->sched_lock);
-		switch_task(next->rsp, VIRT_TO_PHYS(next->process->pm));
+		switch_task(NULL, &next_kthread);
 		return;
 	}
 
@@ -179,7 +180,8 @@ void sched_yield(void)
 	}
 
 	irqlock_release(&cpu->sched_lock);
-	switch_task(next->rsp, VIRT_TO_PHYS(next->process->pm));
+	struct kthread prev_kthread = (struct kthread){ 0, 0, (uint64_t)prev->rsp };
+	switch_task(&prev_kthread, &next_kthread);
 }
 
 void sched_init(void)
@@ -254,21 +256,18 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 
 	uint64_t map_flags = VMM_PRESENT | VMM_WRITABLE;
 
-	thread->stack_base =
-		valloc(proc->vctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), map_flags);
-	if (!thread->stack_base) {
+	uint64_t *stack_base =
+		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), map_flags);
+	if (!stack_base) {
 		kfree(thread);
 		return NULL;
 	}
+	map_page(NULL, (uintptr_t)stack_base, (uintptr_t)stack_base,
+			 VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
-	uint64_t *rsp = (uint64_t *)((uint8_t *)thread->stack_base + STACK_SIZE);
-
-	*--rsp = 0x10; // SS
-	--rsp;
-	*rsp = (uint64_t)rsp; // RSP
-	*--rsp = 0x202; // RFLAGS (IF=1)
-	*--rsp = 0x08; // CS
-	*--rsp = (uint64_t)entry; // RIP
+	uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
+	*--rsp = (uint64_t)entry;
+	*--rsp = 0x202;
 
 	thread->rsp = rsp;
 
