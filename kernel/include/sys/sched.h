@@ -31,7 +31,6 @@ struct tcb;
 #define TCB_MAGIC_DEAD 0x544352444541444ULL // "TCRDEAD"
 
 #define PID_KIND_NORMAL_PROCESS 1
-#define TID_KIND_NORMAL_THREAD 1
 
 #define ID_KIND_SHIFT 24
 #define ID_SEQ_MASK 0x00FFFFFFu
@@ -42,6 +41,9 @@ struct tcb;
 
 #define ID_KIND(id) ((uint8_t)((id) >> ID_KIND_SHIFT))
 #define ID_SEQ(id) ((uint32_t)((id) & ID_SEQ_MASK))
+
+#define THREAD_FLAGS_KERNEL 0x01
+#define THREAD_FLAGS_USER 0x02
 
 typedef struct tcb {
 	uint64_t magic;
@@ -72,7 +74,7 @@ void sched_yield(void);
 pcb *proc_create(void);
 void proc_destroy(pcb *proc);
 
-tcb *thread_create(pcb *proc, void (*entry)(void));
+tcb *thread_create(pcb *proc, void (*entry)(void), uint16_t flags);
 void thread_destroy(tcb *thread);
 
 static inline int pid_valid(uint32_t pid)
@@ -80,9 +82,10 @@ static inline int pid_valid(uint32_t pid)
 	return ID_KIND(pid) == PID_KIND_NORMAL_PROCESS && ID_SEQ(pid) != 0;
 }
 
+// NOTE: For TID's ID_KIND its the flag
 static inline int tid_valid(uint32_t tid)
 {
-	return ID_KIND(tid) == TID_KIND_NORMAL_THREAD && ID_SEQ(tid) != 0;
+	return ID_SEQ(tid) != 0;
 }
 
 #endif // _SYS_SCHED_H

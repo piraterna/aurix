@@ -229,7 +229,7 @@ void proc_destroy(pcb *proc)
 	debug("Destroyed process, PID=%u\n", proc->pid);
 }
 
-tcb *thread_create(pcb *proc, void (*entry)(void))
+tcb *thread_create(pcb *proc, void (*entry)(void), uint16_t flags)
 {
 	if (!proc) {
 		warn("NULL process\n");
@@ -245,11 +245,32 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	memset(thread, 0, sizeof(tcb));
 
 	thread->magic = TCB_MAGIC_ALIVE;
-	thread->tid = MAKE_ID(TID_KIND_NORMAL_THREAD, next_tid++);
+	thread->tid = MAKE_ID(flags, next_tid++);
 	thread->process = proc;
 	thread->time_slice = SCHED_DEFAULT_SLICE;
-	thread->frame = (struct interrupt_frame){ 0 };
 	thread->frame.rip = (uint64_t)entry;
+
+	uint64_t stack_size = 4; // 4 pages ~16KB
+	uint64_t map_flags = VMM_PRESENT | VMM_WRITABLE;
+
+	if (flags |= THREAD_FLAGS_KERNEL) {
+		thread->frame.cs = 0x08;
+		thread->frame.ss = 0x10;
+		debug("TID=%u is a kernel proccess.\n", thread->tid);
+	} else if (flags |= THREAD_FLAGS_USER) {
+		thread->frame.cs = 0x1B;
+		thread->frame.ss = 0x23;
+		debug("TID=%u is a user proccess.\n", thread->tid);
+	}
+
+	void *stack = valloc(proc->vctx, stack_size, map_flags);
+	if (!stack) {
+		kfree(thread);
+		return NULL;
+	}
+
+	thread->frame.rsp = (uint64_t)stack + (PAGE_SIZE * stack_size);
+	thread->frame.rflags = 0x202;
 
 	if (!proc->threads) {
 		proc->threads = thread;
