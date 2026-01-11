@@ -22,6 +22,7 @@
 #include <debug/log.h>
 #include <string.h>
 #include <arch/sys/irqlock.h>
+#include <lib/align.h>
 
 #define SCHED_DEFAULT_SLICE 10
 
@@ -200,7 +201,7 @@ pcb *proc_create(void)
 
 	memset(proc, 0, sizeof(pcb));
 
-	proc->pid = MAKE_ID(PID_KIND_NORMAL_PROCESS, next_pid++);
+	proc->pid = next_pid++;
 	proc->pm = create_pagemap();
 	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
@@ -229,7 +230,7 @@ void proc_destroy(pcb *proc)
 	debug("Destroyed process, PID=%u\n", proc->pid);
 }
 
-tcb *thread_create(pcb *proc, void (*entry)(void), uint16_t flags)
+tcb *thread_create(pcb *proc, void (*entry)(void))
 {
 	if (!proc) {
 		warn("NULL process\n");
@@ -245,32 +246,21 @@ tcb *thread_create(pcb *proc, void (*entry)(void), uint16_t flags)
 	memset(thread, 0, sizeof(tcb));
 
 	thread->magic = TCB_MAGIC_ALIVE;
-	thread->tid = MAKE_ID(flags, next_tid++);
+	thread->tid = next_tid++;
 	thread->process = proc;
 	thread->time_slice = SCHED_DEFAULT_SLICE;
-	thread->frame.rip = (uint64_t)entry;
 
-	uint64_t stack_size = 4; // 4 pages ~16KB
 	uint64_t map_flags = VMM_PRESENT | VMM_WRITABLE;
 
-	if (flags |= THREAD_FLAGS_KERNEL) {
-		thread->frame.cs = 0x08;
-		thread->frame.ss = 0x10;
-		debug("TID=%u is a kernel proccess.\n", thread->tid);
-	} else if (flags |= THREAD_FLAGS_USER) {
-		thread->frame.cs = 0x1B;
-		thread->frame.ss = 0x23;
-		debug("TID=%u is a user proccess.\n", thread->tid);
-	}
-
-	void *stack = valloc(proc->vctx, stack_size, map_flags);
-	if (!stack) {
+	thread->stack_base = valloc(proc->vctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), map_flags);
+	if (!thread->stack_base) {
 		kfree(thread);
 		return NULL;
-	}
+	} 
 
-	thread->frame.rsp = (uint64_t)stack + (PAGE_SIZE * stack_size);
-	thread->frame.rflags = 0x202;
+	uint64_t* rsp = (uint64_t*)thread->stack_base + STACK_SIZE;
+	*--rsp = (uint64_t)entry;
+	*--rsp = 0x202;
 
 	if (!proc->threads) {
 		proc->threads = thread;

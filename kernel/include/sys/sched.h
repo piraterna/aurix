@@ -24,36 +24,24 @@
 #include <stdint.h>
 #include <mm/vmm.h>
 
+#define STACK_SIZE 4096 * 4 // ~16KB
+
 struct pcb;
 struct tcb;
 
 #define TCB_MAGIC_ALIVE 0x544352414C495645ULL // "TCRALIVE"
 #define TCB_MAGIC_DEAD 0x544352444541444ULL // "TCRDEAD"
 
-#define PID_KIND_NORMAL_PROCESS 1
-
-#define ID_KIND_SHIFT 24
-#define ID_SEQ_MASK 0x00FFFFFFu
-
-#define MAKE_ID(kind, seq)                            \
-	((uint32_t)(((uint32_t)(kind) << ID_KIND_SHIFT) | \
-				((uint32_t)(seq) & ID_SEQ_MASK)))
-
-#define ID_KIND(id) ((uint8_t)((id) >> ID_KIND_SHIFT))
-#define ID_SEQ(id) ((uint32_t)((id) & ID_SEQ_MASK))
-
-#define THREAD_FLAGS_KERNEL 0x01
-#define THREAD_FLAGS_USER 0x02
-
 typedef struct tcb {
 	uint64_t magic;
 	uint32_t tid;
 
-	struct interrupt_frame frame;
 	uint32_t time_slice;
 
 	struct pcb *process;
 	struct cpu *cpu;
+
+	uint64_t *stack_base;
 
 	struct tcb *proc_next;
 	struct tcb *cpu_next;
@@ -74,18 +62,7 @@ void sched_yield(void);
 pcb *proc_create(void);
 void proc_destroy(pcb *proc);
 
-tcb *thread_create(pcb *proc, void (*entry)(void), uint16_t flags);
+tcb *thread_create(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
-
-static inline int pid_valid(uint32_t pid)
-{
-	return ID_KIND(pid) == PID_KIND_NORMAL_PROCESS && ID_SEQ(pid) != 0;
-}
-
-// NOTE: For TID's ID_KIND its the flag
-static inline int tid_valid(uint32_t tid)
-{
-	return ID_SEQ(tid) != 0;
-}
 
 #endif // _SYS_SCHED_H
