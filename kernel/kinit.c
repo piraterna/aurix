@@ -211,7 +211,8 @@ void _start(struct aurix_parameters *params)
 	cpu_init_mp();
 
 	test_proc = proc_create();
-	thread_create(test_proc, hello);
+	for (i = 0; i < 8; i++)
+		thread_create(test_proc, hello);
 
 	pmm_reclaim_bootparms();
 

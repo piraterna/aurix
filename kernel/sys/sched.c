@@ -95,9 +95,6 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 		if (*link == thread) {
 			*link = thread->cpu_next;
 			cpu->thread_count--;
-
-			debug("TID=%u removed from CPU=%u (count=%lu)\n", thread->tid,
-				  cpu->id, cpu->thread_count);
 			break;
 		}
 		link = &(*link)->cpu_next;
@@ -129,15 +126,10 @@ void sched_tick(void)
 	if (!current)
 		return;
 
-	debug("CPU=%u TID=%u tick: remaining slice=%u\n", cpu->id, current->tid,
-		  current->time_slice);
-
 	if (current->time_slice > 0)
 		current->time_slice--;
 
 	if (current->time_slice == 0) {
-		debug("CPU=%u TID=%u slice expired, yielding CPU...\n", cpu->id,
-			  current->tid);
 		sched_yield();
 	}
 }
@@ -153,15 +145,11 @@ void sched_yield(void)
 		return;
 
 	current->time_slice = SCHED_DEFAULT_SLICE;
-	trace("CPU=%u TID=%u yielding CPU\n", cpu->id, current->tid);
-
 	irqlock_acquire(&cpu->sched_lock);
 
 	tcb *next = cpu_pick_next_thread(cpu, current);
 	struct kthread next_kthread = (struct kthread){ 0, 0, (uint64_t)next->rsp };
 	if (!next || next == current) {
-		debug("CPU=%u TID=%u: only one thread, no switch needed\n", cpu->id,
-			  current->tid);
 		irqlock_release(&cpu->sched_lock);
 		switch_task(NULL, &next_kthread);
 		return;
@@ -177,13 +165,10 @@ void sched_yield(void)
 		cpu->thread_list = next;
 	}
 
-	debug("CPU=%u switched from TID=%u to TID=%u\n", cpu->id, current->tid,
-		  next->tid);
-
 	tcb *t = cpu->thread_list;
 	debug("CPU=%u thread list: \n", cpu->id);
 	while (t) {
-		debug("%u -> \n", t->tid);
+		debug(" TID=%u\n", t->tid);
 		t = t->cpu_next;
 	}
 
@@ -370,7 +355,7 @@ void thread_exit(tcb *thread)
 
 	struct cpu *cpu = thread->cpu;
 
-	debug("Thread TID=%u exiting\n", thread->tid);
+	info("Thread TID=%u exiting\n", thread->tid);
 
 	if (cpu)
 		cpu_remove_thread(cpu, thread);
