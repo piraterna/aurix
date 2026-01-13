@@ -27,6 +27,10 @@
 #include <arch/cpu/switch.h>
 #include <aurix.h>
 
+#ifdef __x86_64__
+#include <platform/time/pit.h>
+#endif
+
 #define SCHED_DEFAULT_SLICE 10
 
 static uint32_t next_pid = 1;
@@ -195,6 +199,12 @@ void sched_yield(void)
 void sched_init(void)
 {
 	struct cpu *cpu = cpu_get_current();
+
+#ifdef __x86_64__
+	pit_init(1000);
+#else
+#warning No clock implemented, the scheduler will not fire!
+#endif
 
 	irqlock_init(&cpu->sched_lock);
 	cpu->thread_list = NULL;

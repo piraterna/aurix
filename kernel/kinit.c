@@ -145,6 +145,7 @@ static void heap_test(void)
 void hello(void)
 {
 	debug("hello from a thread!\n");
+	while (1);
 	return;
 }
 
