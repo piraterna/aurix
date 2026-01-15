@@ -99,9 +99,6 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 		if (*link == thread) {
 			*link = thread->cpu_next;
 			cpu->thread_count--;
-
-			debug("TID=%u removed from CPU=%u (count=%lu)\n", thread->tid,
-				  cpu->id, cpu->thread_count);
 			break;
 		}
 		link = &(*link)->cpu_next;
@@ -133,15 +130,10 @@ void sched_tick(void)
 	if (!current)
 		return;
 
-	debug("CPU=%u TID=%u tick: remaining slice=%u\n", cpu->id, current->tid,
-		  current->time_slice);
-
 	if (current->time_slice > 0)
 		current->time_slice--;
 
 	if (current->time_slice == 0) {
-		debug("CPU=%u TID=%u slice expired, yielding CPU...\n", cpu->id,
-			  current->tid);
 		sched_yield();
 	}
 }
@@ -157,15 +149,11 @@ void sched_yield(void)
 		return;
 
 	current->time_slice = SCHED_DEFAULT_SLICE;
-	trace("CPU=%u TID=%u yielding CPU\n", cpu->id, current->tid);
-
 	irqlock_acquire(&cpu->sched_lock);
 
 	tcb *next = cpu_pick_next_thread(cpu, current);
 	struct kthread next_kthread = (struct kthread){ 0, 0, (uint64_t)next->rsp };
 	if (!next || next == current) {
-		debug("CPU=%u TID=%u: only one thread, no switch needed\n", cpu->id,
-			  current->tid);
 		irqlock_release(&cpu->sched_lock);
 		switch_task(NULL, &next_kthread);
 		return;
@@ -181,13 +169,10 @@ void sched_yield(void)
 		cpu->thread_list = next;
 	}
 
-	debug("CPU=%u switched from TID=%u to TID=%u\n", cpu->id, current->tid,
-		  next->tid);
-
 	tcb *t = cpu->thread_list;
 	debug("CPU=%u thread list: \n", cpu->id);
 	while (t) {
-		debug("%u -> \n", t->tid);
+		debug(" TID=%u\n", t->tid);
 		t = t->cpu_next;
 	}
 
@@ -295,16 +280,16 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 			 VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
+	memset(stack_base, STACK_SIZE, 0);
 
-	/* Initial stack for new thread to work with switch_task */
+	*--rsp = (uint64_t)entry; // rip
+	*--rsp = 0x202; // rflags
 	*--rsp = 0; // rbx
-	*--rsp = 0; // rbp
+	*--rsp = 0; // ebp
 	*--rsp = 0; // r12
 	*--rsp = 0; // r13
 	*--rsp = 0; // r14
 	*--rsp = 0; // r15
-	*--rsp = 0x202; // rflags
-	*--rsp = (uint64_t)entry; // RIP (return address)
 
 	thread->rsp = rsp;
 
@@ -354,5 +339,69 @@ void thread_destroy(tcb *thread)
 	thread->cpu_next = (tcb *)0xDEADDEAD;
 	thread->process = NULL;
 
+	// TODO: Free the stack!
+
 	kfree(thread);
+}
+
+void thread_exit(tcb *thread)
+{
+	if (!thread)
+		thread = thread_current();
+
+	if (!thread)
+		return;
+
+	if (thread->magic != TCB_MAGIC_ALIVE) {
+		warn("Invalid thread %p in thread_exit\n", thread);
+		return;
+	}
+
+	struct cpu *cpu = thread->cpu;
+
+	info("Thread TID=%u exiting\n", thread->tid);
+
+	if (cpu)
+		cpu_remove_thread(cpu, thread);
+
+	if (thread->process) {
+		tcb **link = &thread->process->threads;
+		while (*link) {
+			if (*link == thread) {
+				*link = thread->proc_next;
+				break;
+			}
+			link = &(*link)->proc_next;
+		}
+		thread->process = NULL;
+	}
+
+	thread->magic = TCB_MAGIC_DEAD;
+	thread->proc_next = (tcb *)0xDEADDEAD;
+	thread->cpu_next = (tcb *)0xDEADDEAD;
+
+	tcb *next = cpu_pick_next_thread(cpu, NULL);
+
+	if (!next) {
+		debug("No threads left on CPU=%u, entering idle loop\n", cpu->id);
+
+		kfree(thread);
+
+		while (1) {
+			cpu_halt();
+		}
+	}
+
+	sched_yield();
+	__builtin_unreachable();
+}
+
+tcb *thread_current(void)
+{
+	struct cpu *cpu = cpu_get_current();
+	if (!cpu)
+		return NULL;
+
+	return cpu
+		->thread_list; // head of the CPU thread list is the current thread
 }

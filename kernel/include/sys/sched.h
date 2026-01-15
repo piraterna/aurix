@@ -64,5 +64,7 @@ void proc_destroy(pcb *proc);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
+void thread_exit(tcb *thread);
+tcb *thread_current(void);
 
 #endif // _SYS_SCHED_H
