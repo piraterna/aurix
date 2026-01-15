@@ -200,12 +200,6 @@ void sched_init(void)
 {
 	struct cpu *cpu = cpu_get_current();
 
-#ifdef __x86_64__
-	pit_init(1000);
-#else
-#warning No clock implemented, the scheduler will not fire!
-#endif
-
 	irqlock_init(&cpu->sched_lock);
 	cpu->thread_list = NULL;
 	cpu->thread_count = 0;

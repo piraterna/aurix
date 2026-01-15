@@ -31,6 +31,7 @@
 #include <smbios/smbios.h>
 #include <lib/string.h>
 #include <aurix.h>
+#include <platform/time/pit.h>
 #include <platform/time/rtc.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
@@ -204,6 +205,12 @@ void _start(struct aurix_parameters *params)
 	heap_init(kvctx);
 	TEST_ADD(heap_test);
 	test_run(10);
+
+#ifdef __x86_64__
+	pit_init(50);
+#else
+#warning No clock implemented, the scheduler will not fire!
+#endif
 
 	sched_init();
 

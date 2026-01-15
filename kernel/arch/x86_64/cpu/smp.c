@@ -76,7 +76,7 @@ void smp_init()
 		return;
 	}
 
-	// cpu_disable_interrupts();
+	cpu_disable_interrupts();
 
 	uint8_t bsp_id = cpu_get_current()->id;
 	debug("Bootstrap CPU ID: %u\n", bsp_id);
@@ -142,7 +142,6 @@ void smp_init()
 __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 {
 	cpu_early_init();
-	cpu_enable_interrupts();
 	cpu_init();
 
 	// set up own stack
@@ -156,6 +155,8 @@ __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	__asm__ volatile("mov %0, %%rsp" ::"r"(stack + (16 * 1024)));
+
+	cpu_enable_interrupts();
 
 	// we rollin' in parallel now
 	atomic_store(&cpu_ready, true);
