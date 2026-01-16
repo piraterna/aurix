@@ -56,7 +56,7 @@ void lapic_write(uint16_t reg, uint32_t val)
 
 void apic_send_eoi()
 {
-	lapic_write(APIC_EOI, 12);
+	lapic_write(APIC_EOI, 0);
 }
 
 void ioapic_write_red(uint32_t gsi, uint8_t vec, uint8_t delivery_mode,
@@ -140,7 +140,7 @@ void apic_init()
 	// initialize ioapic
 	for (size_t i = 0; i < ioapic_count; i++) {
 		info("Mapping I/O APIC #%u (0x%llx -> 0x%llx)...\n", i,
-			  ioapics[i]->addr, PHYS_TO_VIRT(ioapics[i]->addr));
+			 ioapics[i]->addr, PHYS_TO_VIRT(ioapics[i]->addr));
 		map_page(NULL, PHYS_TO_VIRT(ioapics[i]->addr), ioapics[i]->addr,
 				 VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH |
 					 VMM_CACHE_DISABLE);
@@ -149,8 +149,8 @@ void apic_init()
 		uint8_t maxreds =
 			(ioapic_read(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICVER) >> 16) &
 			0xFF;
-		info("Initializing %u masked interrupts for I/O APIC #%u...\n",
-			  maxreds, i);
+		info("Initializing %u masked interrupts for I/O APIC #%u...\n", maxreds,
+			 i);
 
 		for (int n = 0; n < maxreds; n++) {
 			ioapic_write(PHYS_TO_VIRT(ioapics[i]->addr), IOAPICREDTBLL(n),
