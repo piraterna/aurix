@@ -275,6 +275,11 @@ static inline void outb(uint16_t port, uint8_t val)
 	__asm__ volatile("outb %b0, %w1" ::"a"(val), "Nd"(port) : "memory");
 }
 
+static inline void io_wait(void)
+{
+	__asm__ volatile("outb %b0, %w1" : : "a"(0), "Nd"(0x80));
+}
+
 static inline void invlpg(void *addr)
 {
 	__asm__ volatile("invlpg (%0)" ::"b"(addr) : "memory");

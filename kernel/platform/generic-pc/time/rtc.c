@@ -17,9 +17,10 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#include <platform/time/rtc.h>
-#include <arch/util/io.h>
+#include <arch/cpu/cpu.h>
+#include <platform/time/time.h>
 #include <lib/string.h>
+#include <time/time.h>
 #include <aurix.h>
 #include <stdbool.h>
 
@@ -49,46 +50,10 @@ static uint8_t bin_to_bcd(uint8_t bin)
 	return ((bin / 10) << 4) | (bin % 10);
 }
 
-static bool is_valid_time(const rtc_time_t *time)
-{
-	if (!time) {
-		error("RTC: Null time pointer\n");
-		return false;
-	}
-	if (time->seconds > 59) {
-		warn("RTC: Invalid seconds: %d\n", time->seconds);
-		return false;
-	}
-	if (time->minutes > 59) {
-		warn("RTC: Invalid minutes: %d\n", time->minutes);
-		return false;
-	}
-	if (time->hours > 23) {
-		warn("RTC: Invalid hours: %d\n", time->hours);
-		return false;
-	}
-	if (time->day < 1 || time->day > 31) {
-		warn("RTC: Invalid day: %d", time->day);
-		return false;
-	}
-	if (time->month < 1 || time->month > 12) {
-		warn("RTC: Invalid month: %d\n", time->month);
-		return false;
-	}
-	if (time->year < 1970) {
-		warn("RTC: Invalid year: %d\n", time->year);
-		return false;
-	}
-	if (time->weekday > 7) {
-		warn("RTC: Invalid weekday: %d\n", time->weekday);
-		return false;
-	}
-	return true;
-}
-
+#define UPDATE_RETRY_AMOUNT 5
 static bool wait_for_update(void)
 {
-	int retries = 3;
+	int retries = UPDATE_RETRY_AMOUNT;
 	while (retries--) {
 		int timeout = 100000;
 		while (timeout--) {
@@ -99,124 +64,116 @@ static bool wait_for_update(void)
 		}
 		io_wait();
 	}
-	error("RTC: Update timeout after retries\n");
+	error("RTC: Update timeout after %u retries\n", UPDATE_RETRY_AMOUNT);
 	return false;
 }
 
-rtc_error_t rtc_init(void)
+static inline uint8_t get_time(uint16_t time_port)
 {
+	if (!rtc_initialized) {
+		error("RTC not initialized\n");
+		return UINT8_MAX;
+	}
+
+	if (!wait_for_update()) {
+		return UINT8_MAX;
+	}
+
+	outb(CMOS_INDEX_PORT, time_port);
+	return bcd_to_bin(inb(CMOS_DATA_PORT));
+}
+
+static inline uint8_t get_hour(void)
+{
+	return get_time(RTC_HOURS);
+}
+
+static inline uint8_t get_minute(void)
+{
+	return get_time(RTC_MINUTES);
+}
+
+static inline uint8_t get_second(void)
+{
+	return get_time(RTC_SECONDS);
+}
+
+static inline uint8_t get_day(void)
+{
+	return get_time(RTC_DAY);
+}
+
+static inline uint8_t get_month(void)
+{
+	return get_time(RTC_MONTH);
+}
+
+static inline uint16_t get_year(void)
+{
+	return (get_time(RTC_CENTURY) * 100) + get_time(RTC_HOURS);
+}
+
+static inline uint8_t get_weekday(void)
+{
+	return (uint8_t)get_time(RTC_WEEKDAY);
+}
+
+void platform_timekeeper_init(void)
+{
+	cpu_disable_interrupts();
+
 	outb(CMOS_INDEX_PORT, RTC_STATUS_B);
 	uint8_t status_b = inb(CMOS_DATA_PORT);
 	status_b |= 0x02; /* 24-hour mode */
 	status_b &= ~0x01; /* Disable daylight saving */
+
 	/* Use BCD mode */
 	outb(CMOS_INDEX_PORT, RTC_STATUS_B);
 	outb(CMOS_DATA_PORT, status_b);
 	io_wait();
 
+	cpu_enable_interrupts();
+
+	info("Initialized RTC (24-hour mode, no daylight saving)\n");
 	rtc_initialized = true;
-	return RTC_OK;
+
+	struct timekeeper_funcs funcs = { .get_hour = get_hour,
+									  .get_minute = get_minute,
+									  .get_second = get_second,
+									  .get_day = get_day,
+									  .get_month = get_month,
+									  .get_year = get_year,
+									  .get_weekday = get_weekday };
+
+	time_register(funcs);
 }
 
-rtc_error_t rtc_get_time(rtc_time_t *time)
-{
-	if (!time)
-		return RTC_ERR_INVALID;
-
-	memset(time, 0, sizeof(rtc_time_t));
-	if (!rtc_initialized) {
-		error("RTC: Not initialized\n");
-		return RTC_ERR_NOT_INIT;
-	}
-	if (!time) {
-		error("RTC: Null time pointer\n");
-		return RTC_ERR_INVALID;
-	}
-
-	if (!wait_for_update()) {
-		return RTC_ERR_HW;
-	}
-
-	outb(CMOS_INDEX_PORT, RTC_SECONDS);
-	time->seconds = inb(CMOS_DATA_PORT);
-	outb(CMOS_INDEX_PORT, RTC_MINUTES);
-	time->minutes = inb(CMOS_DATA_PORT);
-	outb(CMOS_INDEX_PORT, RTC_HOURS);
-	time->hours = inb(CMOS_DATA_PORT);
-	outb(CMOS_INDEX_PORT, RTC_DAY);
-	time->day = inb(CMOS_DATA_PORT);
-	outb(CMOS_INDEX_PORT, RTC_MONTH);
-	time->month = inb(CMOS_DATA_PORT);
-	outb(CMOS_INDEX_PORT, RTC_YEAR);
-	time->year = inb(CMOS_DATA_PORT);
-	outb(CMOS_INDEX_PORT, RTC_WEEKDAY);
-	time->weekday = inb(CMOS_DATA_PORT);
-
-	time->seconds = bcd_to_bin(time->seconds);
-	time->minutes = bcd_to_bin(time->minutes);
-	time->hours = bcd_to_bin(time->hours);
-	time->day = bcd_to_bin(time->day);
-	time->month = bcd_to_bin(time->month);
-	time->weekday = bcd_to_bin(time->weekday);
-
-	uint8_t year_low = bcd_to_bin(time->year);
-	uint16_t century = 20;
-	outb(CMOS_INDEX_PORT, RTC_CENTURY);
-	uint8_t century_bcd = inb(CMOS_DATA_PORT);
-	if (century_bcd != 0xFF && century_bcd != 0x00) {
-		century = bcd_to_bin(century_bcd);
-	} else {
-		error("RTC: Invalid century byte: 0x%02x\n", century_bcd);
-	}
-	time->year = century * 100 + year_low;
-
-	if (!is_valid_time(time)) {
-		return RTC_ERR_INVALID;
-	}
-
-	return RTC_OK;
-}
-
-rtc_error_t rtc_set_time(const rtc_time_t *time)
+void platform_set_time(const struct time time)
 {
 	if (!rtc_initialized) {
 		error("RTC: Not initialized\n");
-		return RTC_ERR_NOT_INIT;
-	}
-	if (!is_valid_time(time)) {
-		return RTC_ERR_INVALID;
+		return;
 	}
 
 	if (!wait_for_update()) {
-		return RTC_ERR_HW;
+		return;
 	}
 
-	uint8_t seconds = bin_to_bcd(time->seconds);
-	uint8_t minutes = bin_to_bcd(time->minutes);
-	uint8_t hours = bin_to_bcd(time->hours);
-	uint8_t day = bin_to_bcd(time->day);
-	uint8_t month = bin_to_bcd(time->month);
-	uint8_t weekday = bin_to_bcd(time->weekday);
-	uint8_t year = bin_to_bcd(time->year % 100);
-	uint8_t century = bin_to_bcd(time->year / 100);
-
 	outb(CMOS_INDEX_PORT, RTC_SECONDS);
-	outb(CMOS_DATA_PORT, seconds);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.second));
 	outb(CMOS_INDEX_PORT, RTC_MINUTES);
-	outb(CMOS_DATA_PORT, minutes);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.minute));
 	outb(CMOS_INDEX_PORT, RTC_HOURS);
-	outb(CMOS_DATA_PORT, hours);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.hour));
 	outb(CMOS_INDEX_PORT, RTC_DAY);
-	outb(CMOS_DATA_PORT, day);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.day));
 	outb(CMOS_INDEX_PORT, RTC_MONTH);
-	outb(CMOS_DATA_PORT, month);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.month));
 	outb(CMOS_INDEX_PORT, RTC_YEAR);
-	outb(CMOS_DATA_PORT, year);
-	outb(CMOS_INDEX_PORT, RTC_WEEKDAY);
-	outb(CMOS_DATA_PORT, weekday);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.year % 100));
 	outb(CMOS_INDEX_PORT, RTC_CENTURY);
-	outb(CMOS_DATA_PORT, century);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.year / 100));
+	outb(CMOS_INDEX_PORT, RTC_WEEKDAY);
+	outb(CMOS_DATA_PORT, bin_to_bcd(time.weekday));
 	io_wait();
-
-	return RTC_OK;
 }

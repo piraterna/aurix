@@ -29,10 +29,11 @@
 #include <mm/vmm.h>
 #include <mm/heap.h>
 #include <smbios/smbios.h>
+#include <time/time.h>
 #include <lib/string.h>
 #include <aurix.h>
 #include <platform/time/pit.h>
-#include <platform/time/rtc.h>
+#include <platform/time/time.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
 #include <stddef.h>
@@ -153,8 +154,6 @@ void hello(void)
 
 // FIXME: local variables inside this function are behaving weird
 vctx_t *kvctx;
-rtc_time_t time;
-rtc_error_t rtc_err;
 pcb *test_proc;
 int i;
 
@@ -227,18 +226,11 @@ void _start(struct aurix_parameters *params)
 	// finished with init, now just display fancy stuff
 	kprintf("--------------------------------------------------\n");
 
-	rtc_err = rtc_init();
-	if (rtc_err != RTC_OK) {
-		error("RTC init failed: %d\n", rtc_err);
-	}
+	platform_timekeeper_init();
 
-	rtc_err = rtc_get_time(&time);
-	if (rtc_err != RTC_OK) {
-		error("RTC get time failed: %d\n", rtc_err);
-	}
-
-	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time.year, time.month,
-		 time.day, time.hours, time.minutes, time.seconds);
+	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
+		 time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),
+		 time_get_second());
 	info("Kernel boot complete in ? seconds\n");
 
 	// simulate 10 clock cycles

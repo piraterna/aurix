@@ -17,30 +17,14 @@
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
-#ifndef _DRIVERS_RTC_H
-#define _DRIVERS_RTC_H
+#ifndef _PLATFORM_TIME_TIME_H
+#define _PLATFORM_TIME_TIME_H
 
+#include <time/time.h>
 #include <stdint.h>
 
-typedef struct {
-	uint8_t seconds;
-	uint8_t minutes;
-	uint8_t hours;
-	uint8_t day;
-	uint8_t month;
-	uint16_t year;
-	uint8_t weekday;
-} rtc_time_t;
+void platform_timekeeper_init(void);
 
-typedef enum {
-	RTC_OK = 0,
-	RTC_ERR_INVALID = 1, /* Invalid time/date */
-	RTC_ERR_HW = 2, /* Hardware failure */
-	RTC_ERR_NOT_INIT = 3 /* RTC not initialized */
-} rtc_error_t;
+void platform_set_time(const struct time time);
 
-rtc_error_t rtc_init(void);
-rtc_error_t rtc_get_time(rtc_time_t *time);
-rtc_error_t rtc_set_time(const rtc_time_t *time);
-
-#endif /* _DRIVERS_RTC_H */
+#endif /* _PLATFORM_TIME_TIME_H */
