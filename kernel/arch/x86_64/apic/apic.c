@@ -56,7 +56,7 @@ void lapic_write(uint16_t reg, uint32_t val)
 
 void apic_send_eoi()
 {
-	lapic_write(APIC_EOI, 12);
+	lapic_write(APIC_EOI, 0);
 }
 
 void ioapic_write_red(uint32_t gsi, uint8_t vec, uint8_t delivery_mode,
