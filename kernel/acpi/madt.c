@@ -116,8 +116,8 @@ void acpi_madt_init()
 			}
 			lapics[lapic_count++] = lapic;
 			info("Registered LAPIC for processor #%u with _UID %u (%s)\n",
-				  lapic->id, lapic->uid,
-				  (lapic->flags & 1) ? "enabled" : "disabled");
+				 lapic->id, lapic->uid,
+				 (lapic->flags & 1) ? "enabled" : "disabled");
 			break;
 		}
 		case MADT_IOAPIC: {
@@ -131,7 +131,7 @@ void acpi_madt_init()
 			}
 			ioapics[ioapic_count++] = ioapic;
 			info("Registered IOAPIC #%u located at 0x%llx (gsi base=%llx)\n",
-				  ioapic->id, ioapic->addr, ioapic->gsi_base);
+				 ioapic->id, ioapic->addr, ioapic->gsi_base);
 			break;
 		}
 		case MADT_ISO: {
@@ -148,7 +148,7 @@ void acpi_madt_init()
 				(struct madt_lapic_nmi *)(madt->structures + i);
 			nmis[nmi_count++] = nmi;
 			info("NMI for LINT#%u on processor with _UID %u, flags %x\n",
-				  nmi->LINTn, nmi->acpi_uid, nmi->flags);
+				 nmi->LINTn, nmi->acpi_uid, nmi->flags);
 			break;
 		}
 		case MADT_LAPIC_OVERRIDE: {
@@ -170,7 +170,7 @@ void acpi_madt_init()
 #endif
 		default:
 			warn("Unhandled MADT Entry with type %u (%s)\n", mhdr->type,
-				  madt_type_to_str(mhdr->type));
+				 madt_type_to_str(mhdr->type));
 			break;
 		}
 

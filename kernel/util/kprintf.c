@@ -37,13 +37,23 @@
 #include <stdint.h>
 
 #include <boot/axprot.h>
+#include <sys/spinlock.h>
 
 int32_t _fltused = 0;
 int32_t __eqdf2 = 0;
 int32_t __ltdf2 = 0;
 
+static spinlock_t log_lock;
+
+void log_init()
+{
+	spinlock_init(&log_lock);
+}
+
 int kprintf(const char *fmt, ...)
 {
+	spinlock_acquire(&log_lock);
+
 	va_list args;
 	va_start(args, fmt);
 	char buffer[1024];
@@ -56,5 +66,7 @@ int kprintf(const char *fmt, ...)
 	}
 
 	va_end(args);
+
+	spinlock_release(&log_lock);
 	return length;
 }

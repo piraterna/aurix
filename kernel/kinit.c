@@ -162,6 +162,7 @@ void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
 	hhdm_offset = params->hhdm_offset;
+	log_init();
 	serial_init();
 
 	if (params->revision != AURIX_PROTOCOL_REVISION) {
@@ -208,13 +209,13 @@ void _start(struct aurix_parameters *params)
 	test_run(10);
 
 #ifdef __x86_64__
+	// TODO: Use HPET instead?
 	pit_init(50);
 #else
 #warning No clock implemented, the scheduler will not fire!
 #endif
 
 	sched_init();
-
 	cpu_init_mp();
 
 	test_proc = proc_create();

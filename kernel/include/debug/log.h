@@ -89,6 +89,8 @@
 #define trace(fmt, ...) ((void)0)
 #endif
 
+void log_init(void);
+
 static inline __attribute__((
 	deprecated("klog is deprecated, use specific log macros instead"))) void
 klog(const char *fmt, ...)

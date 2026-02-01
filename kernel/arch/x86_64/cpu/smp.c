@@ -31,6 +31,7 @@
 #include <cpu/cpu.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
+#include <sys/sched.h>
 #include <aurix.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -127,6 +128,8 @@ void smp_init()
 		if (!atomic_load(&cpu_ready)) {
 			error("Core %u didn't start up in time, skipping.\n", i);
 		}
+
+		atomic_store(&cpu_ready, false);
 	}
 
 	// remove trampoline
@@ -161,7 +164,11 @@ __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 	// we rollin' in parallel now
 	atomic_store(&cpu_ready, true);
 
-	// TODO: hook CPU to a scheduler
-	cpu_halt();
+	debug("cpu%u: s=0x%llx, l=%u\n", cpu, stack, 16 * 1024);
+
+	// sched_init();
+	for (;;) {
+		__asm__ volatile("hlt");
+	}
 	UNREACHABLE();
 }

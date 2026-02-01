@@ -28,7 +28,6 @@
 #include <aurix.h>
 #include <string.h>
 #include <stddef.h>
-#include <sys/sched.h>
 
 #define CPU_ID_MSR 0xC0000103
 
@@ -50,8 +49,6 @@ int cpu_early_init()
 
 void cpu_init()
 {
-	sched_init();
-
 	uint32_t eax, ebx, ecx, edx;
 
 	struct cpu *cpu = cpu_get_current();
