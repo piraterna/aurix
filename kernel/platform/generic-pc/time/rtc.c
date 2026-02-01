@@ -110,7 +110,7 @@ static inline uint8_t get_month(void)
 
 static inline uint16_t get_year(void)
 {
-	return (get_time(RTC_CENTURY) * 100) + get_time(RTC_HOURS);
+	return ((get_time(RTC_CENTURY) * 100) + get_time(RTC_YEAR));
 }
 
 static inline uint8_t get_weekday(void)
