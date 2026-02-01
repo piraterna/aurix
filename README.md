@@ -32,8 +32,8 @@
 - [Contributing](#contributing)
 - [Authors & contributors](#authors--contributors)
 - [Security](#security)
+- [Screenshots](#screenshots)
 - [License](#license)
-- [Acknowledgements](#acknowledgements)
 
 </details>
 
@@ -126,6 +126,13 @@ AurixOS follows good practices of security, but 100% security cannot be assured.
 AurixOS is provided **"as is"** without any **warranty**. Use at your own risk.
 
 _For more information and to report security issues, please refer to our [security documentation](docs/SECURITY.md)._
+
+## Screenshots
+
+### (Current state) February 1st, 2026  
+<div align="center">
+    <img src="docs/images/screenshots/01022026.png" alt="Current state February 1st, 2026" width="500px">
+</div>
 
 ## License
 
