@@ -31,12 +31,12 @@
 #include <smbios/smbios.h>
 #include <time/time.h>
 #include <lib/string.h>
-#include <aurix.h>
 #include <platform/time/pit.h>
 #include <platform/time/time.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
-#include <stddef.h>
+#include <test/test.h>
+#include <aurix.h>
 #include <sys/sched.h>
 
 struct aurix_parameters *boot_params = NULL;
@@ -51,99 +51,6 @@ const char *aurix_banner =
 	" / ___ \\ |_| | |  | |>  <| |_| |___) |\n"
 	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2025 Jozef Nagy";
 
-/* ======== TESTS ======== */
-#if 1
-typedef void (*test_func_t)(void);
-typedef unsigned int uint32_t;
-
-typedef struct {
-	const char *name;
-	test_func_t func;
-	uint32_t pass_count;
-	uint32_t fail_count;
-	uint32_t current;
-} test_case_t;
-
-#define TEST_MAX 3
-static test_case_t test_suite[TEST_MAX];
-static uint32_t test_count = 0;
-
-#define TEST_ADD(fn)                                                        \
-	do {                                                                    \
-		if (test_count < TEST_MAX) {                                        \
-			test_suite[test_count].name = #fn;                              \
-			test_suite[test_count].func = fn;                               \
-			test_suite[test_count].pass_count = 0;                          \
-			test_suite[test_count].fail_count = 0;                          \
-			test_suite[test_count].current = 0;                             \
-			test_count++;                                                   \
-		} else {                                                            \
-			warn("Test suite overflow: cannot add %s, max %d tests\n", #fn, \
-				 TEST_MAX);                                                 \
-		}                                                                   \
-	} while (0)
-
-#define TEST_EXPECT(condition)                      \
-	do {                                            \
-		if (!(condition)) {                         \
-			test_suite[test_count - 1].current = 1; \
-		}                                           \
-	} while (0)
-
-static void test_run(uint32_t loop_count)
-{
-	debug("Starting test suite with %u loops, %u tests registered\n",
-		  loop_count, test_count);
-	if (test_count == 0) {
-		warn("No tests registered to run\n");
-		return;
-	}
-	for (uint32_t i = 0; i < test_count; i++) {
-		test_suite[i].pass_count = 0;
-		test_suite[i].fail_count = 0;
-		test("Running test: %s\n", test_suite[i].name);
-		for (uint32_t j = 0; j < loop_count; j++) {
-			test_suite[i].current = 0;
-			test_suite[i].func();
-			if (test_suite[i].current == 0) {
-				test_suite[i].pass_count++;
-				success("Test %s (run %u): Passed\n", test_suite[i].name,
-						j + 1);
-			} else {
-				test_suite[i].fail_count++;
-				error("Test %s (run %u): Failed\n", test_suite[i].name, j + 1);
-			}
-		}
-		test("Test %s: %u passes, %u fails\n", test_suite[i].name,
-			 test_suite[i].pass_count, test_suite[i].fail_count);
-	}
-	test_count = 0;
-	debug("Test suite completed and cleared\n");
-}
-
-static void pmm_test(void)
-{
-	char *test = palloc(1);
-	TEST_EXPECT(test != NULL);
-	if (test)
-		pfree(test, 1);
-}
-
-static void heap_test(void)
-{
-	char *test = kmalloc(1024);
-	TEST_EXPECT(test != NULL);
-	if (test) {
-		*test = 'a';
-		kfree(test);
-	}
-}
-#else
-#define TEST_ADD(x)
-#define test_run(x)
-#endif
-/* ====================== */
-
 void hello(void)
 {
 	kprintf("hello from a thread %d!\n", thread_current()->tid);
@@ -154,7 +61,6 @@ void hello(void)
 
 // FIXME: local variables inside this function are behaving weird
 vctx_t *kvctx;
-pcb *test_proc;
 int i;
 
 void _start(struct aurix_parameters *params)
@@ -187,8 +93,6 @@ void _start(struct aurix_parameters *params)
 	cpu_early_init();
 
 	pmm_init();
-	TEST_ADD(pmm_test);
-	test_run(10);
 
 	paging_init();
 
@@ -204,8 +108,11 @@ void _start(struct aurix_parameters *params)
 
 	kvctx = vinit(kernel_pm, 0x1000);
 	heap_init(kvctx);
-	TEST_ADD(heap_test);
-	test_run(10);
+
+	// TODO: Add kernel cmdline parsing
+	if (1) {
+		test_run(10);
+	}
 
 #ifdef __x86_64__
 	// TODO: Use HPET instead?
@@ -216,10 +123,6 @@ void _start(struct aurix_parameters *params)
 
 	sched_init();
 	cpu_init_mp();
-
-	test_proc = proc_create();
-	for (i = 0; i < 8; i++)
-		thread_create(test_proc, hello);
 
 	pmm_reclaim_bootparms();
 
@@ -233,10 +136,6 @@ void _start(struct aurix_parameters *params)
 		 time_get_second());
 	info("Kernel boot complete in ? seconds\n");
 
-	// simulate 10 clock cycles
-	for (i = 0; i < 10; i++)
-		sched_tick();
-
 	for (;;) {
 #ifdef __x86_64__
 		__asm__ volatile("cli;hlt");
@@ -244,4 +143,6 @@ void _start(struct aurix_parameters *params)
 		__asm__ volatile("wfe");
 #endif
 	}
+
+	UNREACHABLE();
 }

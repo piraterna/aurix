@@ -22,9 +22,12 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <lib/align.h>
+#include <debug/log.h>
+#include <test/heap_test.h>
+#include <test/test.h>
+#include <config.h>
 #include <aurix.h>
 #include <string.h>
-#include <debug/log.h>
 
 #define ALIGNMENT PAGE_SIZE
 #define CANARY_SIZE sizeof(uint64_t)
@@ -209,6 +212,11 @@ void heap_init(vctx_t *ctx)
 	set_check(b);
 
 	freelist = b;
+
+	// Register tests
+#if CONFIG_BUILD_TESTS
+	TEST_ADD(heap_test);
+#endif
 }
 
 void *kmalloc(size_t size)

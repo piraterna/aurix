@@ -11,3 +11,13 @@ config IRQ_MAX_CALLBACKS
 source "kernel/arch/$(ARCH)/Kconfig"
 
 endmenu
+
+menu "Kernel hacking"
+
+config BUILD_TESTS
+    bool "Build tests"
+    default false
+    help
+    This includes a test suite for internal kernel components in the build. To run these tests, see the documentation.
+
+endmenu

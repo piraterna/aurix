@@ -23,6 +23,7 @@
 #ifndef _AURIX_H
 #define _AURIX_H
 
+#include <config.h>
 #include <debug/log.h>
 #include <stdint.h>
 #include <mm/vmm.h>

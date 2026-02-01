@@ -167,11 +167,13 @@ run-uefi: livecd nvram
 
 .PHONY: genconfig
 genconfig: .config
+	@printf "  GEN\tconfig.h\n"
 	@python3 utils/kconfiglib/genconfig.py --header-path $(ROOT_DIR)/kernel/include/config.h
 
 .PHONY: menuconfig
 menuconfig:
 	@python3 utils/kconfiglib/menuconfig.py
+	@$(MAKE) genconfig
 
 .PHONY: format
 format:

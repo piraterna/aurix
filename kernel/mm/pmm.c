@@ -27,6 +27,8 @@
 #include <lib/align.h>
 #include <lib/string.h>
 #include <sys/spinlock.h>
+#include <test/pmm_test.h>
+#include <test/test.h>
 #include <aurix.h>
 
 #define PAGE_CACHE_SIZE 1024
@@ -126,6 +128,11 @@ void pmm_init(void)
 
 	// NULL should be reserved
 	bitmap_set(bitmap, 0);
+
+	// Register tests
+#ifdef CONFIG_BUILD_TESTS
+	TEST_ADD(pmm_test);
+#endif
 }
 
 void pmm_reclaim_bootparms()
