@@ -110,7 +110,7 @@ bool paging_init(void)
 	}
 
 	uint64_t stack = ALIGN_DOWN(boot_params->stack_addr, PAGE_SIZE);
-	map_pages(NULL, stack, stack, 32 * 1024,
+	map_pages(NULL, stack, stack, 16 * 1024,
 			  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 	uintptr_t kvirt = 0xffffffff80000000ULL;

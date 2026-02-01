@@ -36,7 +36,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define AURIX_STACK_SIZE 32 * 1024
+#define AURIX_STACK_SIZE 16 * 1024
 
 void aurix_load(char *kernel_path);
 
