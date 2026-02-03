@@ -124,18 +124,21 @@ void _start(struct aurix_parameters *params)
 	sched_init();
 	cpu_init_mp();
 
-	pmm_reclaim_bootparms();
-
 	// finished with init, now just display fancy stuff
 	kprintf("--------------------------------------------------\n");
 
 	platform_timekeeper_init();
 
-	info("Loading module '%s'...\n", boot_params->modules[0].filename);
+	for (uint32_t m = 0; m < boot_params->module_count; m++) {
+		info("Loading module '%s'...\n", boot_params->modules[m].filename);
+		// TODO: Actually load the module
+	}
 
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
 		 time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),
 		 time_get_second());
+
+	pmm_reclaim_bootparms();
 	info("Kernel boot complete in ? seconds\n");
 
 	for (;;) {
