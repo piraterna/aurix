@@ -23,6 +23,8 @@
 #ifndef _CONFIG_CONFIG_H
 #define _CONFIG_CONFIG_H
 
+#include <stdint.h>
+
 enum { UI_TEXT = 0, UI_MODERN = 1 };
 
 struct axboot_cfg {
@@ -33,6 +35,7 @@ struct axboot_cfg {
 
 	int entry_count;
 	char *bootlog_filename;
+	char *modules[];
 };
 
 struct axboot_entry {
@@ -49,5 +52,6 @@ int config_get_default();
 int config_get_entry_count();
 struct axboot_entry *config_get_entries();
 int config_get_ui_mode();
+char **config_get_modules(uint32_t *count);
 
 #endif /* _CONFIG_CONFIG_H */

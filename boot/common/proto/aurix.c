@@ -23,6 +23,7 @@
 #include <acpi/acpi.h>
 #include <aurix_logo.h>
 #include <axboot.h>
+#include <config/config.h>
 #include <lib/string.h>
 #include <loader/elf.h>
 #include <mm/memmap.h>
@@ -296,6 +297,19 @@ bool aurix_get_framebuffer(struct aurix_parameters *params)
 	return true;
 }
 
+inline char *trim_str(char *s, char d)
+{
+	char *p = s;
+	while (*s) {
+		if (*s == d) {
+			p = s;
+		}
+		s++;
+	}
+
+	return ++p;
+}
+
 void aurix_load(char *kernel_path)
 {
 	char *kbuf = NULL;
@@ -392,12 +406,20 @@ void aurix_load(char *kernel_path)
 	parameters.smbios_addr = platform_get_smbios();
 #endif
 
-	// load init ramdisk
-	char *ramdisk = NULL;
-	size_t ramdisk_size = 0;
-	vfs_read("\\System\\ramdisk", &ramdisk, &ramdisk_size);
-	parameters.ramdisk.addr = (void *)(ramdisk + parameters.hhdm_offset);
-	parameters.ramdisk.size = ramdisk_size;
+	// preload kernel modules
+	char **premod_filenames = config_get_modules(&parameters.module_count);
+	parameters.modules = (struct aurix_module *)mem_alloc(
+		sizeof(struct aurix_module) * parameters.module_count);
+	for (uint32_t i = 0; i < parameters.module_count; i++) {
+		char *trimmed_name = trim_str(premod_filenames[i], '\\');
+		strncpy((char *)&parameters.modules[i].filename, trimmed_name, 32);
+
+		debug("aurix_load(): Preloaded module '%s'\n",
+			  parameters.modules[i].filename);
+
+		vfs_read(premod_filenames[i], (char **)&parameters.modules[i].addr,
+				 &parameters.modules[i].size);
+	}
 
 	debug(
 		"aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n",

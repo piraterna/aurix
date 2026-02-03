@@ -52,7 +52,8 @@ struct axboot_cfg cfg = { .default_entry = DEFAULT_ENTRY,
 
 						  //.entry_count = 0,
 						  .entry_count = 2,
-						  .bootlog_filename = NULL };
+						  .bootlog_filename = NULL,
+						  .modules = { "\\System\\support\\dummy.sys", NULL } };
 
 struct axboot_entry entries[2] = {
 	{ .name = "AurixOS",
@@ -128,4 +129,16 @@ struct axboot_entry *config_get_entries()
 int config_get_ui_mode()
 {
 	return cfg.ui_mode;
+}
+
+char **config_get_modules(uint32_t *count)
+{
+	if (count) {
+		*count = 0;
+		while (cfg.modules[*count]) {
+			*count += 1;
+		}
+	}
+
+	return cfg.modules;
 }

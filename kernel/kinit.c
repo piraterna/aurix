@@ -131,6 +131,8 @@ void _start(struct aurix_parameters *params)
 
 	platform_timekeeper_init();
 
+	info("Loading module '%s'...\n", boot_params->modules[0].filename);
+
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
 		 time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),
 		 time_get_second());

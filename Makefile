@@ -123,10 +123,6 @@ endif
 endif
 	@$(MAKE) -C kernel install
 	@$(MAKE) -C kernel/modules install
-	@printf "  GEN ramdisk\n"
-	@mkdir -p $(SYSROOT_DIR)/ramdisk/modules
-	@cp $(SYSROOT_DIR)/System/support/dummy.sys $(SYSROOT_DIR)/ramdisk/
-	@utils/genramdisk.sh $(SYSROOT_DIR)/System/ramdisk
 
 .PHONY: livecd
 livecd: install

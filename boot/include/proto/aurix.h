@@ -60,8 +60,9 @@ struct aurix_framebuffer {
 	int format;
 };
 
-struct aurix_ramdisk {
-	void *addr;
+struct aurix_module {
+	char filename[32];
+	uint8_t *addr;
 	size_t size;
 };
 
@@ -85,7 +86,8 @@ struct aurix_parameters {
 	uintptr_t smbios_addr;
 
 	// initram
-	struct aurix_ramdisk ramdisk;
+	struct aurix_module *modules;
+	uint32_t module_count;
 
 	// FRAMEBUFFER
 	struct aurix_framebuffer framebuffer;
