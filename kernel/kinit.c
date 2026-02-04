@@ -20,14 +20,15 @@
 #include <boot/axprot.h>
 #include <arch/cpu/cpu.h>
 #include <arch/apic/apic.h>
+#include <arch/cpu/irq.h>
 #include <acpi/acpi.h>
 #include <boot/args.h>
 #include <cpu/cpu.h>
 #include <debug/uart.h>
-#include <arch/cpu/irq.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <mm/heap.h>
+#include <loader/module.h>
 #include <smbios/smbios.h>
 #include <time/time.h>
 #include <lib/string.h>
@@ -127,11 +128,16 @@ void _start(struct aurix_parameters *params)
 	// finished with init, now just display fancy stuff
 	kprintf("--------------------------------------------------\n");
 
+	info("got here\n");
 	platform_timekeeper_init();
 
 	for (uint32_t m = 0; m < boot_params->module_count; m++) {
 		info("Loading module '%s'...\n", boot_params->modules[m].filename);
-		// TODO: Actually load the module
+		if (!module_load(boot_params->modules[m].addr,
+						 boot_params->modules[m].size)) {
+			error("Driver '%s' failed to load");
+			cpu_halt();
+		}
 	}
 
 	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
@@ -143,7 +149,7 @@ void _start(struct aurix_parameters *params)
 
 	for (;;) {
 #ifdef __x86_64__
-		__asm__ volatile("cli;hlt");
+		__asm__ volatile("hlt");
 #elif __aarch64__
 		__asm__ volatile("wfe");
 #endif

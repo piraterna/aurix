@@ -20,10 +20,10 @@ void tick(void *ctx)
 
 void pit_init(uint16_t freq)
 {
-	// if (is_initialized) {
-	// info("returning early\n");
-	// return;
-	// }
+	if (is_initialized) {
+		info("PIT is already initialized\n");
+		return;
+	}
 
 	uint16_t div = PIT_CLOCK / freq;
 

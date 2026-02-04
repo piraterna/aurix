@@ -33,6 +33,13 @@ __attribute__((unused)) static const struct axmod_info modinfo = {
 	.mod_exit = mod_exit,
 };
 
+// temporary
+void _start()
+{
+	while (1)
+		;
+}
+
 int mod_init()
 {
 	return 0;

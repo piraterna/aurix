@@ -260,6 +260,8 @@ void *kmalloc(size_t size)
 	if (chosen->size >= effective + min_remain) {
 		block_t *rem =
 			(block_t *)((uint8_t *)chosen + sizeof(block_t) + effective);
+		map_page(NULL, (uintptr_t)rem, (uintptr_t)rem,
+				 VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
 		rem->size =
 			ALIGN_DOWN(chosen->size - effective - sizeof(block_t), ALIGNMENT);
