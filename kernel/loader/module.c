@@ -43,6 +43,12 @@ bool module_load(void *addr, uint32_t size)
 		if (modinfo->author) {
 			info("  Author: %s\n", modinfo->author);
 		}
+		if (modinfo->mod_init) {
+			info("  Init function: %p\n", modinfo->mod_init);
+		}
+		if (modinfo->mod_exit) {
+			info("  Exit function: %p\n", modinfo->mod_exit);
+		}
 	} else {
 		warn("No 'modinfo' symbol found in module\n");
 	}
