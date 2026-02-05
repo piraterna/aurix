@@ -53,7 +53,8 @@ struct axboot_cfg cfg = { .default_entry = DEFAULT_ENTRY,
 						  //.entry_count = 0,
 						  .entry_count = 2,
 						  .bootlog_filename = NULL,
-						  .modules = { "\\System\\support\\dummy.sys", NULL } };
+						  .modules = { "\\System\\support\\dummy.sys",
+									   "\\System\\support\\test.sys", NULL } };
 
 struct axboot_entry entries[2] = {
 	{ .name = "AurixOS",
