@@ -34,7 +34,6 @@
 #define SCHED_DEFAULT_SLICE 10
 
 static uint32_t next_pid = 1;
-static uint32_t next_tid = 1;
 
 extern char _start_text[];
 extern char _end_text[];
@@ -206,6 +205,7 @@ pcb *proc_create(void)
 	proc->pm = create_pagemap();
 	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
+	proc->next_tid = 0;
 
 	uintptr_t kvirt = 0xffffffff80000000ULL;
 	uintptr_t kphys = boot_params->kernel_addr;
@@ -265,7 +265,7 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	memset(thread, 0, sizeof(tcb));
 
 	thread->magic = TCB_MAGIC_ALIVE;
-	thread->tid = next_tid++;
+	thread->tid = proc->next_tid++;
 	thread->process = proc;
 	thread->time_slice = SCHED_DEFAULT_SLICE;
 

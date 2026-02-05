@@ -53,6 +53,7 @@ typedef struct pcb {
 	pagetable *pm;
 	vctx_t *vctx;
 	struct tcb *threads;
+	uint32_t next_tid;
 } pcb;
 
 void sched_init(void);
