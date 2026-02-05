@@ -23,8 +23,7 @@
 #include <sys/aurix/mod.h>
 #include <dummy.h>
 
-__attribute__((section(".aurix.mod")))
-__attribute__((unused)) static const struct axmod_info modinfo = {
+__attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.name = "Dummy Module",
 	.desc = "Dummy module for AurixOS",
 	.author = "Jozef Nagy",

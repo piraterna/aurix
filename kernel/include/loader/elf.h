@@ -10,13 +10,10 @@
 /*                                                                               */
 /* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
 /* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
 /* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
 /* SOFTWARE. */
 /*********************************************************************************/
 
@@ -129,6 +126,9 @@ typedef struct {
 	Elf64_Half e_shstrndx;
 } __attribute__((packed)) Elf64_Ehdr;
 
+///
+// Program Headers
+
 typedef struct {
 	Elf32_Word p_type;
 	Elf32_Off p_offset;
@@ -164,7 +164,51 @@ typedef struct {
 #define PF_W 0x2
 #define PF_R 0x4
 
+///
+// Section Headers
+
+typedef struct {
+	Elf64_Word sh_name;
+	Elf64_Word sh_type;
+	Elf64_Xword sh_flags;
+	Elf64_Addr sh_addr;
+	Elf64_Off sh_offset;
+	Elf64_Xword sh_size;
+	Elf64_Word sh_link;
+	Elf64_Word sh_info;
+	Elf64_Xword sh_addralign;
+	Elf64_Xword sh_entsize;
+} __attribute__((packed)) Elf64_Shdr;
+
+#define SHT_NULL 0
+#define SHT_SYMTAB 2
+#define SHT_STRTAB 3
+
+///
+// Symbol Table
+
+typedef struct {
+	Elf64_Word st_name;
+	unsigned char st_info;
+	unsigned char st_other;
+	Elf64_Half st_shndx;
+	Elf64_Addr st_value;
+	Elf64_Xword st_size;
+} __attribute__((packed)) Elf64_Sym;
+
+#define STB_LOCAL 0
+#define STB_GLOBAL 1
+#define STB_WEAK 2
+
+#define ELF64_ST_BIND(info) ((info) >> 4)
+#define ELF64_ST_TYPE(info) ((info) & 0x0f)
+
+#define SHN_UNDEF 0
+#define SHN_ABS 0xfff1
+#define SHN_COMMON 0xfff2
+
 uintptr_t elf_load(char *data, uintptr_t *addr, size_t *size,
 				   pagetable *pagemap);
+uintptr_t elf_lookup_symbol(char *elf_data, const char *symbol_name);
 
 #endif /* _LOADER_ELF_H */

@@ -140,3 +140,80 @@ uintptr_t elf_load(char *data, uintptr_t *addr, size_t *size,
 	error("elf_load(): Unsupported ELF machine: %u", header->e_machine);
 	return 0;
 }
+
+static Elf64_Shdr *elf64_find_section(Elf64_Ehdr *ehdr, const char *name)
+{
+	Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)ehdr + ehdr->e_shoff);
+	Elf64_Shdr *shstrtab = &shdr[ehdr->e_shstrndx];
+	const char *shstrtab_data = (const char *)ehdr + shstrtab->sh_offset;
+
+	for (uint16_t i = 0; i < ehdr->e_shnum; i++) {
+		const char *sec_name = shstrtab_data + shdr[i].sh_name;
+		if (strcmp(sec_name, name) == 0) {
+			return &shdr[i];
+		}
+	}
+	return NULL;
+}
+
+static bool elf64_get_symtab(Elf64_Ehdr *ehdr, Elf64_Sym **symtab_out,
+							 size_t *nsyms_out, const char **strtab_out)
+{
+	Elf64_Shdr *symtab_sh = elf64_find_section(ehdr, ".symtab");
+	if (!symtab_sh || symtab_sh->sh_type != SHT_SYMTAB) {
+		return false;
+	}
+
+	Elf64_Shdr *strtab_sh = elf64_find_section(ehdr, ".strtab");
+	if (!strtab_sh || strtab_sh->sh_type != SHT_STRTAB) {
+		return false;
+	}
+
+	*symtab_out = (Elf64_Sym *)((uint8_t *)ehdr + symtab_sh->sh_offset);
+	*nsyms_out = symtab_sh->sh_size / sizeof(Elf64_Sym);
+	*strtab_out = (const char *)ehdr + strtab_sh->sh_offset;
+
+	return true;
+}
+
+uintptr_t elf_lookup_symbol(char *elf_data, const char *symbol_name)
+{
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf_data;
+
+	if (ehdr->e_ident[EI_MAG0] != ELFMAG0 ||
+		ehdr->e_ident[EI_CLASS] != ELFCLASS64 || ehdr->e_machine != EM_AMD64) {
+		error("Invalid ELF header\n");
+		return 0;
+	}
+
+	Elf64_Sym *symtab = NULL;
+	size_t nsyms = 0;
+	const char *strtab = NULL;
+
+	if (!elf64_get_symtab(ehdr, &symtab, &nsyms, &strtab)) {
+		debug("No .symtab or .strtab found\n");
+		return 0;
+	}
+
+	for (size_t i = 0; i < nsyms; i++) {
+		Elf64_Sym *sym = &symtab[i];
+
+		if (sym->st_name == 0)
+			continue;
+
+		const char *name = strtab + sym->st_name;
+		if (strcmp(name, symbol_name) != 0)
+			continue;
+
+		if (ELF64_ST_BIND(sym->st_info) != STB_GLOBAL ||
+			sym->st_shndx == SHN_UNDEF || sym->st_shndx == SHN_ABS) {
+			continue;
+		}
+
+		debug("Found \"%s\" at %p\n", symbol_name, (uintptr_t)sym->st_value);
+		return (uintptr_t)sym->st_value;
+	}
+
+	debug("Symbol '%s' not found\n", symbol_name);
+	return 0;
+}
