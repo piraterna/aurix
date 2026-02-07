@@ -128,7 +128,6 @@ void _start(struct aurix_parameters *params)
 	// finished with init, now just display fancy stuff
 	kprintf("--------------------------------------------------\n");
 
-	info("got here\n");
 	platform_timekeeper_init();
 
 	for (uint32_t m = 0; m < boot_params->module_count; m++) {
