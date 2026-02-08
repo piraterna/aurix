@@ -166,7 +166,7 @@ __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 
 	debug("cpu%u: s=0x%llx, l=%u\n", cpu, stack, 16 * 1024);
 
-	// sched_init();
+	sched_init();
 	for (;;) {
 		__asm__ volatile("hlt");
 	}

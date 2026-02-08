@@ -32,15 +32,11 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.mod_exit = mod_exit,
 };
 
-// temporary
-void _start()
-{
-	while (1)
-		;
-}
-
 int mod_init()
 {
+	while (1) {
+		__asm__ volatile("hlt");
+	}
 	return 0;
 }
 

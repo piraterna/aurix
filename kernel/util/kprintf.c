@@ -70,3 +70,8 @@ int kprintf(const char *fmt, ...)
 	spinlock_release(&log_lock);
 	return length;
 }
+
+void _log_force_unlock()
+{
+	spinlock_release(&log_lock);
+}

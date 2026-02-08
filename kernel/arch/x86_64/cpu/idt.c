@@ -105,6 +105,8 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 void isr_common_handler(struct interrupt_frame frame)
 {
 	if (frame.vector < 0x20) {
+		_log_force_unlock();
+
 		// signal other CPUs to immediately stop everything
 		uint8_t this_cpu = cpu_get_current()->id;
 		for (size_t i = 0; i < cpu_count; i++) {

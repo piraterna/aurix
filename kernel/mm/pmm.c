@@ -166,6 +166,7 @@ void *palloc(size_t pages)
 
 	spinlock_acquire(&pmm_lock);
 
+	void *addr = NULL;
 	uint64_t word_count =
 		(bitmap_pages + BITMAP_WORD_SIZE - 1) / BITMAP_WORD_SIZE;
 	uint64_t *bitmap_words = (uint64_t *)bitmap;
@@ -184,12 +185,12 @@ void *palloc(size_t pages)
 						}
 						free_pages -= pages;
 
-						void *addr =
+						addr =
 							(void *)((start_bit + j - pages + 1) * PAGE_SIZE);
 						memset((void *)PHYS_TO_VIRT(addr), 0,
 							   pages * PAGE_SIZE);
-						spinlock_release(&pmm_lock);
-						return addr;
+
+						goto end;
 					}
 				} else {
 					consecutive = 0;
@@ -198,8 +199,9 @@ void *palloc(size_t pages)
 		}
 	}
 
+end:
 	spinlock_release(&pmm_lock);
-	return NULL;
+	return addr;
 }
 
 void pfree(void *ptr, size_t pages)
@@ -214,8 +216,7 @@ void pfree(void *ptr, size_t pages)
 	if (start + pages > bitmap_size * 8) {
 		error("early return pfree (start + pages = %u, bitmap_size = %u)\n",
 			  start + pages, bitmap_size);
-		spinlock_release(&pmm_lock);
-		return;
+		goto end;
 	}
 
 	for (size_t i = 0; i < pages; i++) {
@@ -229,5 +230,6 @@ void pfree(void *ptr, size_t pages)
 		}
 	}
 
+end:
 	spinlock_release(&pmm_lock);
 }

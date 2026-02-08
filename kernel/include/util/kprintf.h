@@ -25,4 +25,6 @@
 
 int kprintf(const char *fmt, ...);
 
+void _log_force_unlock(void);
+
 #endif /* _UTIL_PRINT_H */

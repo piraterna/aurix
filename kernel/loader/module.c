@@ -53,7 +53,7 @@ bool module_load(void *addr, uint32_t size)
 		warn("No 'modinfo' symbol found in module\n");
 	}
 
-	thread_create(mod, (void (*)())entry_point);
+	thread_create(mod, (void (*)())(void *)modinfo->mod_init);
 
 	info("Module loaded at physical 0x%lx, entry point 0x%lx\n", loaded_at,
 		 entry_point);
