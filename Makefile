@@ -44,6 +44,8 @@ export RELEASE_DIR ?= $(ROOT_DIR)/release
 
 export NOUEFI ?= n
 
+export MODULE_DIR ?= $(ROOT_DIR)/modules
+
 ##
 # Image generation and running
 #
@@ -105,7 +107,7 @@ kernel:
 
 .PHONY: kmodules
 kmodules:
-	@$(MAKE) -C kernel/modules
+	@$(MAKE) -C $(MODULE_DIR)
 
 .PHONY: install
 install: boot kernel kmodules
@@ -122,7 +124,7 @@ ifeq ($(NOUEFI),n)
 endif
 endif
 	@$(MAKE) -C kernel install
-	@$(MAKE) -C kernel/modules install
+	@$(MAKE) -C $(MODULE_DIR) install
 
 .PHONY: livecd
 livecd: install
@@ -178,6 +180,7 @@ format:
 .PHONY: clean
 clean:
 	@$(MAKE) -C boot clean
+	@$(MAKE) -C $(MODULE_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean
