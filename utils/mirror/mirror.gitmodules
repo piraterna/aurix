@@ -1,9 +1,0 @@
-[submodule "boot/platform/uefi/libefi"]
-	path = boot/platform/uefi/libefi
-	url = https://github.com/piraterna/libsefi
-[submodule "ovmf"]
-	path = ovmf
-	url = https://github.com/piraterna/ovmf-bins
-[submodule "utils/kconfiglib"]
-	path = utils/kconfiglib
-	url = https://github.com/zephyrproject-rtos/Kconfiglib.git
