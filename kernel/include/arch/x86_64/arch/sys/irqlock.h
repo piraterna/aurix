@@ -24,7 +24,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <arch/cpu/cpu.h>
 
 typedef struct {
 	uint8_t lock;

@@ -23,7 +23,7 @@ MOD_DIRS = $(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v))
 export BUILD_DIR := $(BUILD_DIR)/kernel/mod
 export MOD_INSTALL_DIR := $(SYSROOT_DIR)/System/support
 
-export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fno-pic -fno-pie -I$(abspath ../include/aurix)
+export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fno-pic -fno-pie -I$(abspath ../kernel/include/aurix)
 export MOD_LDFLAGS := -nostdlib -static
 export MOD_DEFINES := __$(ARCH)__
 

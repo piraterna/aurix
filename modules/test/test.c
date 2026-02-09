@@ -34,8 +34,9 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 
 int mod_init()
 {
+	void (*kprintf)(char *) = (void *)0xffffffff800047b9;
 	while (1) {
-		__asm__ volatile("hlt");
+		kprintf("Hello from test module!\n");
 	}
 	return 0;
 }

@@ -125,9 +125,6 @@ void _start(struct aurix_parameters *params)
 	sched_init();
 	cpu_init_mp();
 
-	// finished with init, now just display fancy stuff
-	kprintf("--------------------------------------------------\n");
-
 	platform_timekeeper_init();
 
 	for (uint32_t m = 0; m < boot_params->module_count; m++) {
