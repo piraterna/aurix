@@ -50,7 +50,7 @@ void irq_install(uint8_t irq, irq_callback callback, void *ctx)
 		ioapic_write_red(irq, 0x20 + irq, 0, 0, 0, 0xFF);
 	else
 		ioapic_write_red(irq, 0x20 + irq, 0, 0, 0,
-					 (uint8_t)(1u << cpu_get_current()->id));
+						 (uint8_t)(1u << cpu_get_current()->id));
 
 	debug("Installed IRQ handler 0x%llx for IRQ%u.\n", callback, irq);
 }

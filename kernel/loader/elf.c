@@ -94,7 +94,8 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 
 		map_pages(pagemap, aligned_vaddr, phys, (uint64_t)ph[i].p_memsz, flags);
 		memset((void *)PHYS_TO_VIRT(virt), 0, ph[i].p_memsz);
-		memcpy((void *)PHYS_TO_VIRT(virt), data + ph[i].p_offset, ph[i].p_filesz);
+		memcpy((void *)PHYS_TO_VIRT(virt), data + ph[i].p_offset,
+			   ph[i].p_filesz);
 
 		if (ph[i].p_filesz < ph[i].p_memsz) {
 			memset((void *)PHYS_TO_VIRT(virt + ph[i].p_filesz), 0,

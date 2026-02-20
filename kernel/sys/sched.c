@@ -333,7 +333,7 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	thread->time_slice = SCHED_DEFAULT_SLICE;
 
 	uint64_t *stack_base = valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE),
-							  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+								  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 	if (!stack_base) {
 		kfree(thread);
 		return NULL;

@@ -14,7 +14,8 @@ pcb **loaded_modules = (pcb **)NULL;
 static void *elf64_vaddr_to_file_ptr(char *elf, uintptr_t vaddr)
 {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
-	if (ehdr->e_ident[EI_MAG0] != ELFMAG0 || ehdr->e_ident[EI_MAG1] != ELFMAG1 ||
+	if (ehdr->e_ident[EI_MAG0] != ELFMAG0 ||
+		ehdr->e_ident[EI_MAG1] != ELFMAG1 ||
 		ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3)
 		return NULL;
 	if (ehdr->e_ident[EI_CLASS] != ELFCLASS64)
@@ -68,9 +69,18 @@ bool module_load(void *addr, uint32_t size)
 			struct axmod_info mi;
 			memcpy(&mi, mi_ptr, sizeof(mi));
 
-			const char *name = mi.name ? elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.name) : NULL;
-			const char *desc = mi.desc ? elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.desc) : NULL;
-			const char *author = mi.author ? elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.author) : NULL;
+			const char *name =
+				mi.name ?
+					elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.name) :
+					NULL;
+			const char *desc =
+				mi.desc ?
+					elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.desc) :
+					NULL;
+			const char *author =
+				mi.author ?
+					elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.author) :
+					NULL;
 
 			info("Loaded module: %s\n", name ? name : "(no name)");
 			if (desc)

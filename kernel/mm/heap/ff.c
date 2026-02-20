@@ -257,12 +257,12 @@ void *kmalloc(size_t size)
 
 	const size_t min_remain = sizeof(block_t) + ALIGNMENT;
 
-		if (chosen->size >= effective + min_remain) {
-			block_t *rem =
-				(block_t *)((uint8_t *)chosen + sizeof(block_t) + effective);
+	if (chosen->size >= effective + min_remain) {
+		block_t *rem =
+			(block_t *)((uint8_t *)chosen + sizeof(block_t) + effective);
 
-			rem->size =
-				ALIGN_DOWN(chosen->size - effective - sizeof(block_t), ALIGNMENT);
+		rem->size =
+			ALIGN_DOWN(chosen->size - effective - sizeof(block_t), ALIGNMENT);
 		rem->user_size = 0;
 		rem->alloc_size = 0;
 		rem->prev = rem->next = NULL;
