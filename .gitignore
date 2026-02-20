@@ -2,6 +2,7 @@ build/
 release/
 sysroot/
 .vscode/
+.idea/
 
 .DS_Store
 Brewfile.lock.json
