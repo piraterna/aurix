@@ -107,7 +107,7 @@ void _start(struct aurix_parameters *params)
 	debug("kernel cmdline: %s\n", boot_params->cmdline);
 	parse_boot_args(boot_params->cmdline);
 
-	kvctx = vinit(kernel_pm, 0x1000);
+	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
 
 	// TODO: Add kernel cmdline parsing
@@ -142,6 +142,8 @@ void _start(struct aurix_parameters *params)
 
 	pmm_reclaim_bootparms();
 	info("Kernel boot complete in ? seconds\n");
+
+	sched_enable();
 
 	for (;;) {
 #ifdef __x86_64__

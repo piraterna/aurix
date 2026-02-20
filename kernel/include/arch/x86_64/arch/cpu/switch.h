@@ -26,8 +26,8 @@
 #include <stdint.h>
 
 struct kthread {
+	uint64_t cr3;
 	uint64_t _pad0;
-	uint64_t _pad1;
 	uint64_t rsp;
 };
 

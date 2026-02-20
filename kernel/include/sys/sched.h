@@ -21,6 +21,8 @@
 
 #include <arch/mm/paging.h>
 #include <arch/cpu/cpu.h>
+#include <arch/cpu/switch.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <mm/vmm.h>
 
@@ -41,7 +43,7 @@ typedef struct tcb {
 	struct pcb *process;
 	struct cpu *cpu;
 
-	uint64_t *rsp;
+	struct kthread kthread;
 
 	struct tcb *proc_next;
 	struct tcb *cpu_next;
@@ -59,6 +61,8 @@ typedef struct pcb {
 void sched_init(void);
 void sched_tick(void);
 void sched_yield(void);
+void sched_enable(void);
+bool sched_is_enabled(void);
 
 pcb *proc_create(void);
 void proc_destroy(pcb *proc);

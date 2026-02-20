@@ -25,6 +25,13 @@
 
 #include <stdint.h>
 
+#define AXMOD_EXPORTS_VADDR 0x500000
+
+struct axmod_exports {
+	int (*kprintf)(const char *fmt, ...);
+	void (*sched_yield)(void);
+} __attribute__((packed));
+
 struct axmod_info {
 	char *name;
 	char *desc;

@@ -159,6 +159,7 @@ __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 
 	__asm__ volatile("mov %0, %%rsp" ::"r"(stack + (16 * 1024)));
 
+	apic_cpu_init(cpu_get_current()->id);
 	cpu_enable_interrupts();
 
 	// we rollin' in parallel now

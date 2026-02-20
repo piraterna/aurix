@@ -23,7 +23,7 @@
 #include <lib/align.h>
 #include <lib/string.h>
 #include <loader/elf.h>
-#include <mm/heap.h>
+#include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <aurix.h>
 
@@ -65,14 +65,15 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 	if (size != NULL)
 		*size = exec_size;
 
-	uint64_t phys =
-		(uint64_t)kmalloc(ALIGN_UP(exec_size, PAGE_SIZE) + PAGE_SIZE) & ~0xFFF;
+	size_t pages = ALIGN_UP(exec_size, PAGE_SIZE) / PAGE_SIZE;
+	uintptr_t phys = (uintptr_t)palloc(pages);
 	if (!phys) {
 		error("Failed to allocate memory for executable!\n");
 		return 0;
 	}
 
-	*addr = phys;
+	*addr = (uintptr_t)phys;
+	uintptr_t cur_phys = phys;
 
 	for (uint16_t i = 0; i < header->e_phnum; i++) {
 		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
@@ -86,23 +87,22 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		if (!(ph[i].p_flags & PF_X))
 			flags |= VMM_NX;
 
-		uint64_t virt = (uint64_t)(phys + (ph[i].p_vaddr - aligned_vaddr));
+		uintptr_t virt = cur_phys + (ph[i].p_vaddr - aligned_vaddr);
 
 		debug("phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n", phys,
 			  ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_memsz);
 
-		map_pages(NULL, aligned_vaddr, phys, (uint64_t)ph[i].p_memsz, flags);
 		map_pages(pagemap, aligned_vaddr, phys, (uint64_t)ph[i].p_memsz, flags);
-		memset((void *)virt, 0, ph[i].p_memsz);
-		memcpy((void *)virt, data + ph[i].p_offset, ph[i].p_filesz);
+		memset((void *)PHYS_TO_VIRT(virt), 0, ph[i].p_memsz);
+		memcpy((void *)PHYS_TO_VIRT(virt), data + ph[i].p_offset, ph[i].p_filesz);
 
 		if (ph[i].p_filesz < ph[i].p_memsz) {
-			memset((void *)(virt + ph[i].p_filesz), 0,
+			memset((void *)PHYS_TO_VIRT(virt + ph[i].p_filesz), 0,
 				   ph[i].p_memsz - ph[i].p_filesz);
 		}
 
-		phys += ph[i].p_memsz;
-		phys = ALIGN_UP(phys, PAGE_SIZE);
+		cur_phys += ph[i].p_memsz;
+		cur_phys = ALIGN_UP(cur_phys, PAGE_SIZE);
 	}
 
 	info("ELF loaded successfully, entry point: 0x%llx\n", header->e_entry);

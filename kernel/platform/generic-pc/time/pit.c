@@ -1,7 +1,6 @@
 #include <arch/cpu/irq.h>
 #include <arch/cpu/cpu.h>
 #include <platform/time/pit.h>
-#include <sys/sched.h>
 #include <aurix.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -13,9 +12,6 @@ void tick(void *ctx)
 {
 	(void)ctx;
 	ticks++;
-
-	// TODO: Make a better system to manage callbacks every X ticks?
-	sched_tick();
 }
 
 void pit_init(uint16_t freq)

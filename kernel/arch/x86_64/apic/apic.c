@@ -65,6 +65,7 @@ void ioapic_write_red(uint32_t gsi, uint8_t vec, uint8_t delivery_mode,
 	union ioapic_redirect_entry redent = { 0 };
 	redent.vec = vec;
 	redent.delivery_mode = delivery_mode;
+	redent.destination_mode = IOAPIC_LOGICAL_DESTINATION;
 	redent.delivery_status = 0;
 	redent.pin_polarity = polarity;
 	redent.remote_irr = 0;
@@ -116,17 +117,16 @@ void ioapic_write_red(uint32_t gsi, uint8_t vec, uint8_t delivery_mode,
 		  vec, gsi, redent.bytes.high, redent.bytes.low);
 }
 
-void apic_init()
+void apic_cpu_init(uint8_t cpu_id)
 {
-	// initialize lapic
-	map_page(NULL, PHYS_TO_VIRT(lapic_base), lapic_base,
-			 VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH | VMM_CACHE_DISABLE);
-	lapic_base = PHYS_TO_VIRT(lapic_base);
-
 	uint64_t lapicMsr = rdmsr(0x1b);
 	wrmsr(0x1b, (lapicMsr | 0x800) & ~0x100);
 
-	lapic_write(0xf0, lapic_read(0xf0) | 0x100);
+	lapic_write(APIC_SPURIOUS_IVR, lapic_read(APIC_SPURIOUS_IVR) | 0x100);
+
+	lapic_write(0xE0, 0xFFFFFFFF);
+	uint8_t lid = (cpu_id < 8) ? (uint8_t)(1u << cpu_id) : 1;
+	lapic_write(0xD0, (uint32_t)lid << 24);
 
 	lapic_write(0x320, 0x10000);
 	lapic_write(0x330, (1 << 16));
@@ -136,6 +136,16 @@ void apic_init()
 	lapic_write(0x370, (1 << 16));
 
 	lapic_write(0x80, 0);
+}
+
+void apic_init()
+{
+	// initialize lapic
+	map_page(NULL, PHYS_TO_VIRT(lapic_base), lapic_base,
+			 VMM_PRESENT | VMM_WRITABLE | VMM_WRITETHROUGH | VMM_CACHE_DISABLE);
+	lapic_base = PHYS_TO_VIRT(lapic_base);
+
+	apic_cpu_init(cpu_get_current()->id);
 
 	// initialize ioapic
 	for (size_t i = 0; i < ioapic_count; i++) {

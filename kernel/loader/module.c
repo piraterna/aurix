@@ -6,8 +6,39 @@
 #include <stdint.h>
 #include <debug/log.h>
 #include <sys/aurix/mod.h>
+#include <string.h>
+#include <mm/pmm.h>
 
 pcb **loaded_modules = (pcb **)NULL;
+
+static void *elf64_vaddr_to_file_ptr(char *elf, uintptr_t vaddr)
+{
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
+	if (ehdr->e_ident[EI_MAG0] != ELFMAG0 || ehdr->e_ident[EI_MAG1] != ELFMAG1 ||
+		ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3)
+		return NULL;
+	if (ehdr->e_ident[EI_CLASS] != ELFCLASS64)
+		return NULL;
+
+	Elf64_Phdr *ph = (Elf64_Phdr *)(elf + ehdr->e_phoff);
+	for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
+		if (ph[i].p_type != PT_LOAD)
+			continue;
+		uintptr_t start = (uintptr_t)ph[i].p_vaddr;
+		uintptr_t end = start + (uintptr_t)ph[i].p_filesz;
+		if (vaddr >= start && vaddr < end) {
+			uintptr_t off = (uintptr_t)ph[i].p_offset + (vaddr - start);
+			return elf + off;
+		}
+	}
+
+	return NULL;
+}
+
+static const char *elf64_vaddr_to_file_cstr(char *elf, uintptr_t vaddr)
+{
+	return (const char *)elf64_vaddr_to_file_ptr(elf, vaddr);
+}
 
 bool module_load(void *addr, uint32_t size)
 {
@@ -29,31 +60,50 @@ bool module_load(void *addr, uint32_t size)
 	}
 
 	uintptr_t modinfo_addr = elf_lookup_symbol(virt_data, "modinfo");
-
-	struct axmod_info *modinfo = NULL;
+	uintptr_t init_vaddr = entry_point;
 
 	if (modinfo_addr != 0) {
-		modinfo = (struct axmod_info *)modinfo_addr;
+		void *mi_ptr = elf64_vaddr_to_file_ptr(virt_data, modinfo_addr);
+		if (mi_ptr) {
+			struct axmod_info mi;
+			memcpy(&mi, mi_ptr, sizeof(mi));
 
-		info("Loaded module: %s\n",
-			 modinfo->name ? modinfo->name : "(no name)");
-		if (modinfo->desc) {
-			info("  Description: %s\n", modinfo->desc);
-		}
-		if (modinfo->author) {
-			info("  Author: %s\n", modinfo->author);
-		}
-		if (modinfo->mod_init) {
-			info("  Init function: %p\n", modinfo->mod_init);
-		}
-		if (modinfo->mod_exit) {
-			info("  Exit function: %p\n", modinfo->mod_exit);
+			const char *name = mi.name ? elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.name) : NULL;
+			const char *desc = mi.desc ? elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.desc) : NULL;
+			const char *author = mi.author ? elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.author) : NULL;
+
+			info("Loaded module: %s\n", name ? name : "(no name)");
+			if (desc)
+				info("  Description: %s\n", desc);
+			if (author)
+				info("  Author: %s\n", author);
+			if (mi.mod_init) {
+				init_vaddr = (uintptr_t)mi.mod_init;
+				info("  Init function: %p\n", mi.mod_init);
+			}
+			if (mi.mod_exit)
+				info("  Exit function: %p\n", mi.mod_exit);
+		} else {
+			warn("'modinfo' not in any loadable segment\n");
 		}
 	} else {
 		warn("No 'modinfo' symbol found in module\n");
 	}
 
-	thread_create(mod, (void (*)())(void *)modinfo->mod_init);
+	void *exports_phys = palloc(1);
+	if (!exports_phys) {
+		error("Failed to allocate module exports page\n");
+		return false;
+	}
+	map_page(mod->pm, AXMOD_EXPORTS_VADDR, (uintptr_t)exports_phys,
+			 VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	struct axmod_exports *exports =
+		(struct axmod_exports *)PHYS_TO_VIRT(exports_phys);
+	memset(exports, 0, sizeof(*exports));
+	exports->kprintf = kprintf;
+	exports->sched_yield = sched_yield;
+
+	thread_create(mod, (void (*)())(void *)init_vaddr);
 
 	info("Module loaded at physical 0x%lx, entry point 0x%lx\n", loaded_at,
 		 entry_point);

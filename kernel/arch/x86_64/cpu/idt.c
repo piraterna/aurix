@@ -25,6 +25,7 @@
 #include <arch/cpu/idt.h>
 #include <arch/cpu/irq.h>
 #include <cpu/trace.h>
+#include <sys/sched.h>
 #include <aurix.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -147,8 +148,15 @@ void isr_common_handler(struct interrupt_frame frame)
 
 		cpu_halt();
 	} else if (frame.vector < 0x80) {
-		irq_dispatch(frame.vector - 0x20);
+		uint8_t irq = frame.vector - 0x20;
+		irq_dispatch(irq);
 		apic_send_eoi();
+		if (irq == 0) {
+			sched_tick();
+		}
+	} else if (frame.vector == 0xfe) {
+		apic_send_eoi();
+		sched_yield();
 	} else if (frame.vector == 0xff) {
 		// shutdown
 		cpu_halt();

@@ -34,9 +34,11 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 
 int mod_init()
 {
-	void (*kprintf)(char *) = (void *)0xffffffff800047b9;
 	while (1) {
-		kprintf("Hello from test module!\n");
+		volatile struct axmod_exports *exports =
+			(volatile struct axmod_exports *)AXMOD_EXPORTS_VADDR;
+		exports->kprintf("Hello from test module!\n");
+		exports->sched_yield();
 	}
 	return 0;
 }
