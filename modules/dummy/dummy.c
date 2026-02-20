@@ -20,9 +20,9 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <sys/aurix/mod.h>
 #include <aurix/axapi.h>
 #include <dummy.h>
+#include <sys/aurix/mod.h>
 
 __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.name = "Dummy Module",
@@ -33,15 +33,14 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.mod_exit = mod_exit,
 };
 
-int mod_init()
+int mod_init(void)
 {
-	while (1) {
-		kprintf("Hello from dummy module! cpu=%u\n", cpu_get_current_id());
+	for (;;) {
+		kprintf("Hello from dummy module!\n");
 		sched_yield();
 	}
-	return 0;
 }
 
-void mod_exit()
+void mod_exit(void)
 {
 }
