@@ -48,38 +48,52 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 	Elf64_Ehdr *header = (Elf64_Ehdr *)data;
 	Elf64_Phdr *ph = (Elf64_Phdr *)((uint8_t *)data + header->e_phoff);
 
-	uint64_t max_align = 0;
-	uint64_t exec_size = 0;
-
-	for (uint16_t i = 0; i < header->e_phnum; i++) {
-		if (ph[i].p_type != PT_LOAD)
-			continue;
-
-		if (ph[i].p_align > max_align) {
-			max_align = ph[i].p_align;
-		}
-
-		exec_size += ph[i].p_memsz;
-	}
-
-	if (size != NULL)
-		*size = exec_size;
-
-	size_t pages = ALIGN_UP(exec_size, PAGE_SIZE) / PAGE_SIZE;
-	uintptr_t phys = (uintptr_t)palloc(pages);
-	if (!phys) {
-		error("Failed to allocate memory for executable!\n");
-		return 0;
-	}
-
-	*addr = (uintptr_t)phys;
-	uintptr_t cur_phys = phys;
+	uintptr_t base_vaddr = (uintptr_t)-1;
+	uintptr_t end_vaddr = 0;
 
 	for (uint16_t i = 0; i < header->e_phnum; i++) {
 		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
 			continue;
 
-		uint64_t aligned_vaddr = ph[i].p_vaddr & ~(ph[i].p_align - 1);
+		uintptr_t seg_start = ALIGN_DOWN((uintptr_t)ph[i].p_vaddr, PAGE_SIZE);
+		uintptr_t seg_end = ALIGN_UP(
+			(uintptr_t)ph[i].p_vaddr + (uintptr_t)ph[i].p_memsz, PAGE_SIZE);
+
+		if (seg_start < base_vaddr)
+			base_vaddr = seg_start;
+		if (seg_end > end_vaddr)
+			end_vaddr = seg_end;
+	}
+
+	if (base_vaddr == (uintptr_t)-1 || end_vaddr <= base_vaddr) {
+		error("elf64_load(): No loadable segments\n");
+		return 0;
+	}
+
+	uintptr_t exec_size = end_vaddr - base_vaddr;
+
+	if (size != NULL)
+		*size = exec_size;
+
+	size_t pages = exec_size / PAGE_SIZE;
+	uintptr_t phys_base = (uintptr_t)palloc(pages);
+	if (!phys_base) {
+		error("Failed to allocate memory for executable!\n");
+		return 0;
+	}
+
+	*addr = (uintptr_t)phys_base;
+	memset((void *)PHYS_TO_VIRT(phys_base), 0, exec_size);
+
+	for (uint16_t i = 0; i < header->e_phnum; i++) {
+		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
+			continue;
+
+		uintptr_t aligned_vaddr =
+			ALIGN_DOWN((uintptr_t)ph[i].p_vaddr, PAGE_SIZE);
+		uintptr_t seg_off = (uintptr_t)ph[i].p_vaddr - aligned_vaddr;
+		uintptr_t seg_size = seg_off + (uintptr_t)ph[i].p_memsz;
+		uintptr_t seg_phys = phys_base + (aligned_vaddr - base_vaddr);
 
 		uint64_t flags = VMM_PRESENT;
 		if (ph[i].p_flags & PF_W)
@@ -87,23 +101,18 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		if (!(ph[i].p_flags & PF_X))
 			flags |= VMM_NX;
 
-		uintptr_t virt = cur_phys + (ph[i].p_vaddr - aligned_vaddr);
+		debug("phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n",
+			  (uint64_t)(seg_phys + seg_off), ph[i].p_vaddr, ph[i].p_filesz,
+			  ph[i].p_memsz);
 
-		debug("phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n", phys,
-			  ph[i].p_vaddr, ph[i].p_filesz, ph[i].p_memsz);
-
-		map_pages(pagemap, aligned_vaddr, phys, (uint64_t)ph[i].p_memsz, flags);
-		memset((void *)PHYS_TO_VIRT(virt), 0, ph[i].p_memsz);
-		memcpy((void *)PHYS_TO_VIRT(virt), data + ph[i].p_offset,
+		map_pages(pagemap, aligned_vaddr, seg_phys, seg_size, flags);
+		memcpy((void *)PHYS_TO_VIRT(seg_phys + seg_off), data + ph[i].p_offset,
 			   ph[i].p_filesz);
 
 		if (ph[i].p_filesz < ph[i].p_memsz) {
-			memset((void *)PHYS_TO_VIRT(virt + ph[i].p_filesz), 0,
+			memset((void *)PHYS_TO_VIRT(seg_phys + seg_off + ph[i].p_filesz), 0,
 				   ph[i].p_memsz - ph[i].p_filesz);
 		}
-
-		cur_phys += ph[i].p_memsz;
-		cur_phys = ALIGN_UP(cur_phys, PAGE_SIZE);
 	}
 
 	info("ELF loaded successfully, entry point: 0x%llx\n", header->e_entry);
