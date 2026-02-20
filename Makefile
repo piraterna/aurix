@@ -28,6 +28,8 @@ export AURIXBUILD
 export KCONFIG_CONFIG := .config
 export MENUCONFIG_STYLE := aquatic
 
+-include $(ROOT_DIR)/$(KCONFIG_CONFIG)
+
 ##
 # Build configuration
 #
@@ -45,6 +47,12 @@ export RELEASE_DIR ?= $(ROOT_DIR)/release
 export NOUEFI ?= n
 
 export MODULE_DIR ?= $(ROOT_DIR)/modules
+
+ifeq ($(CONFIG_USE_HOSTTOOLCHAIN),y)
+export USE_HOST_TOOLCHAIN := y
+else
+export USE_HOST_TOOLCHAIN := y
+endif
 
 ##
 # Image generation and running

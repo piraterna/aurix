@@ -1,3 +1,9 @@
 mainmenu "AurixOS Kconfig configuration"
 
+menu "Build"
+    config USE_HOSTTOOLCHAIN
+        bool "Use host toolchain"
+        default n
+endmenu
+
 source "kernel/Kconfig"
