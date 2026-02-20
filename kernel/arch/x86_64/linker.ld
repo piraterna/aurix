@@ -46,8 +46,12 @@ SECTIONS
 
 	.rodata : {
 		*(.rodata .rodata.*)
+		. = ALIGN(16);
+		__axapi_exports_start = .;
+		KEEP(*(.axapi.exports))
+		__axapi_exports_end = .;
 	} :rodata
-	
+
 	_end_rodata = .;
 
 	. = ALIGN(CONSTANT(MAXPAGESIZE));

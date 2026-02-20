@@ -30,7 +30,7 @@ MOD_CFLAGS += $(foreach d, $(MOD_INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(MOD_DEFINES), -D$d)
 MOD_LDFLAGS +=
 
-MOD_CFILES := $(shell find . -name '*.c')
+MOD_CFILES := $(shell find . -name '*.c') ../common/axapi.c
 MOD_OBJ := $(MOD_CFILES:%.c=$(BUILD_DIR)/%.c.o)
 
 .PHONY: all

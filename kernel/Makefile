@@ -59,6 +59,7 @@ KERNEL_NASMFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 KERNEL_CFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d) \
 				-D__$(ARCH) \
+				-D__KERNEL__ \
 				-std=c99 \
 				-Wall \
 				-Wextra \

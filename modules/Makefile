@@ -1,3 +1,4 @@
+
 ###################################################################################
 ## Module Name:  Makefile                                                        ##
 ## Project:      AurixOS                                                         ##
@@ -18,12 +19,12 @@
 ###################################################################################
 
 MAKE_TARGETS := all install clean
-MOD_DIRS = $(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v))
+MOD_DIRS = $(filter-out common/.,$(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v)))
 
 export BUILD_DIR := $(BUILD_DIR)/kernel/mod
 export MOD_INSTALL_DIR := $(SYSROOT_DIR)/System/support
 
-export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fno-pic -fno-pie -I$(abspath ../kernel/include/aurix)
+export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fno-pic -fno-pie -I$(abspath ../kernel/include) -I$(abspath ../kernel/include/aurix)
 export MOD_LDFLAGS := -nostdlib -static
 export MOD_DEFINES := __$(ARCH)__
 
@@ -54,3 +55,19 @@ endif
 	@$(MAKE) -C $@ $(MAKECMDGOALS)
 
 .PHONY: $(MAKE_TARGETS) $(MOD_DIRS)
+		- ld export MOD_OBJCOPY : = $(ARCH) - elf -
+									objcopy endif
+
+									ifeq($(BUILD_TYPE), debug) export MOD_CFLAGS
+								  += -O0 - g3 - D_DEBUG else export MOD_CFLAGS
+								  += -O2 endif
+
+									 $(MAKE_TARGETS)
+	: $(MOD_DIRS)
+
+		  $(MOD_DIRS)
+	: ifeq($(MAKECMDGOALS), ) @printf
+	">>> Building module '$(patsubst %/,%,$(dir $(@)))'...\n" endif
+	@$(MAKE) - C $ @$(MAKECMDGOALS)
+
+										 .PHONY : $(MAKE_TARGETS) $(MOD_DIRS)

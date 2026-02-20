@@ -107,3 +107,9 @@ struct cpu *cpu_get_current()
 
 	return cpu;
 }
+
+uint8_t cpu_get_current_id(void)
+{
+	struct cpu *c = cpu_get_current();
+	return c ? c->id : 0;
+}

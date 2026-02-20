@@ -31,6 +31,10 @@ SECTIONS
     .rodata : {
 		*(.rodata .rodata.*)
 		*(.gnu.linkonce.r*)
+		. = ALIGN(16);
+		__axapi_exports_start = .;
+		KEEP(*(.axapi.exports))
+		__axapi_exports_end = .;
 	}
 
     PROVIDE(_data = .);

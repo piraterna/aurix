@@ -6,8 +6,11 @@
 #include <stdint.h>
 #include <debug/log.h>
 #include <sys/aurix/mod.h>
+#include <sys/axapi.h>
+#include <aurix/axapi.h>
 #include <string.h>
 #include <mm/pmm.h>
+#include <mm/vmm.h>
 #include <arch/cpu/cpu.h>
 
 pcb **loaded_modules = (pcb **)NULL;
@@ -40,6 +43,53 @@ static void *elf64_vaddr_to_file_ptr(char *elf, uintptr_t vaddr)
 static const char *elf64_vaddr_to_file_cstr(char *elf, uintptr_t vaddr)
 {
 	return (const char *)elf64_vaddr_to_file_ptr(elf, vaddr);
+}
+
+static Elf64_Shdr *elf64_find_section(Elf64_Ehdr *ehdr, const char *name)
+{
+	Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)ehdr + ehdr->e_shoff);
+	Elf64_Shdr *shstrtab = &shdr[ehdr->e_shstrndx];
+	const char *shstrtab_data = (const char *)ehdr + shstrtab->sh_offset;
+
+	for (uint16_t i = 0; i < ehdr->e_shnum; i++) {
+		const char *sec_name = shstrtab_data + shdr[i].sh_name;
+		if (strcmp(sec_name, name) == 0)
+			return &shdr[i];
+	}
+
+	return NULL;
+}
+
+static void axapi_patch_imports(pcb *proc, char *elf)
+{
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
+	Elf64_Shdr *imports = elf64_find_section(ehdr, ".axapi.imports");
+	if (!imports || imports->sh_size == 0)
+		return;
+
+	size_t count = imports->sh_size / sizeof(struct axapi_import);
+	struct axapi_import *imp =
+		(struct axapi_import *)(elf + imports->sh_offset);
+
+	for (size_t i = 0; i < count; i++) {
+		const char *name =
+			elf64_vaddr_to_file_cstr(elf, (uintptr_t)imp[i].name);
+		uintptr_t addr = axapi_resolve(name);
+		if (!addr) {
+			error("Unresolved AXAPI import: %s\n", name ? name : "(null)");
+			continue;
+		}
+
+		uintptr_t target_vaddr = (uintptr_t)imp[i].target;
+		uintptr_t target_phys = vget_phys(proc->pm, target_vaddr);
+		if (!target_phys) {
+			error("AXAPI import target not mapped: %s @ %p\n",
+				  name ? name : "(null)", (void *)target_vaddr);
+			continue;
+		}
+
+		*(uintptr_t *)PHYS_TO_VIRT(target_phys) = addr;
+	}
 }
 
 static int axmod_get_current_cpuid(void)
@@ -107,19 +157,7 @@ bool module_load(void *addr, uint32_t size)
 		warn("No 'modinfo' symbol found in module\n");
 	}
 
-	void *exports_phys = palloc(1);
-	if (!exports_phys) {
-		error("Failed to allocate module exports page\n");
-		return false;
-	}
-	map_page(mod->pm, AXMOD_EXPORTS_VADDR, (uintptr_t)exports_phys,
-			 VMM_PRESENT | VMM_WRITABLE | VMM_NX);
-	struct axmod_exports *exports =
-		(struct axmod_exports *)PHYS_TO_VIRT(exports_phys);
-	memset(exports, 0, sizeof(*exports));
-	exports->kprintf = kprintf;
-	exports->sched_yield = sched_yield;
-	exports->get_current_cpuid = axmod_get_current_cpuid;
+	axapi_patch_imports(mod, virt_data);
 
 	thread_create(mod, (void (*)())(void *)init_vaddr);
 

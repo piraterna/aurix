@@ -21,6 +21,7 @@
 /*********************************************************************************/
 
 #include <sys/aurix/mod.h>
+#include <aurix/axapi.h>
 #include <dummy.h>
 
 __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
@@ -35,10 +36,8 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 int mod_init()
 {
 	while (1) {
-		volatile struct axmod_exports *exports =
-			(volatile struct axmod_exports *)AXMOD_EXPORTS_VADDR;
-		exports->kprintf("Hello from dummy module! cpu=%d\n",
-						 exports->get_current_cpuid());
+		kprintf("Hello from dummy module! cpu=%u\n", cpu_get_current_id());
+		sched_yield();
 	}
 	return 0;
 }
