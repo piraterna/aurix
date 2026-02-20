@@ -25,6 +25,9 @@ BUILD_DIR ?= build
 SYSROOT_DIR ?= sysroot
 
 KERNEL_FILE := $(BUILD_DIR)/axkrnl
+KERNEL_PRE_FILE := $(BUILD_DIR)/axkrnl.pre
+KERNEL_KSYMS_C := $(BUILD_DIR)/kernel/ksyms_gen.c
+KERNEL_KSYMS_O := $(BUILD_DIR)/kernel/ksyms_gen.c.o
 
 INCLUDE_DIRS := include \
 				include/aurix \
@@ -92,18 +95,36 @@ KERNEL_PLATFORM_CFILES := $(shell find platform/$(PLATFORM) -name '*.c')
 KERNEL_PLATFORM_ASFILES := $(shell find platform/$(PLATFORM) -name '*.S')
 KERNEL_PLATFORM_NASMFILES := $(shell find platform/$(PLATFORM) -name '*.asm')
 
-KERNEL_OBJ := $(KERNEL_CFILES:%.c=$(BUILD_DIR)/kernel/%.c.o) \
+KERNEL_OBJ_BASE := $(KERNEL_CFILES:%.c=$(BUILD_DIR)/kernel/%.c.o) \
 			$(KERNEL_ARCH_CFILES:arch/$(ARCH)/%.c=$(BUILD_DIR)/kernel/arch/%.c.o) \
 			$(KERNEL_ARCH_ASFILES:arch/$(ARCH)/%.S=$(BUILD_DIR)/kernel/arch/%.S.o) \
 			$(KERNEL_ARCH_NASMFILES:arch/$(ARCH)/%.asm=$(BUILD_DIR)/kernel/arch/%.asm.o) \
 			$(KERNEL_PLATFORM_CFILES:platform/$(PLATFORM)/%.c=$(BUILD_DIR)/kernel/platform/%.c.o) \
 			$(KERNEL_PLATFORM_NASMFILES:platform/$(PLATFORM)/%.asm=$(BUILD_DIR)/kernel/platform/%.asm.o)
 
+KERNEL_OBJ := $(KERNEL_OBJ_BASE) $(KERNEL_KSYMS_O)
+
 -include arch/$(ARCH)/config.mk
 
 -include $(wildcard $(BUILD_DIR)/kernel/*.d)
 
-$(KERNEL_FILE): $(KERNEL_OBJ)
+
+$(KERNEL_PRE_FILE): $(KERNEL_OBJ_BASE)
+	@mkdir -p $(@D)
+	@printf "  LD\t$(notdir $@)\n"
+	@$(KERNEL_LD) $(KERNEL_LDFLAGS) $^ -o $@
+
+$(KERNEL_KSYMS_C): $(KERNEL_PRE_FILE) ../utils/gen_ksyms.py
+	@mkdir -p $(@D)
+	@printf "  GEN\t$(notdir $@)\n"
+	@python3 ../utils/gen_ksyms.py $(KERNEL_PRE_FILE) $(KERNEL_KSYMS_C)
+
+$(KERNEL_KSYMS_O): $(KERNEL_KSYMS_C)
+	@mkdir -p $(@D)
+	@printf "  CC\t$(notdir $<)\n"
+	@$(KERNEL_CC) $(KERNEL_CFLAGS) -c $< -o $@
+
+$(KERNEL_FILE): $(KERNEL_OBJ_BASE) $(KERNEL_KSYMS_O)
 	@mkdir -p $(@D)
 	@printf "  LD\t$(notdir $@)\n"
 	@$(KERNEL_LD) $(KERNEL_LDFLAGS) $^ -o $@
