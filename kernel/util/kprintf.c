@@ -39,6 +39,8 @@
 #include <boot/axprot.h>
 #include <sys/spinlock.h>
 
+#include <arch/cpu/cpu.h>
+
 int32_t _fltused = 0;
 int32_t __eqdf2 = 0;
 int32_t __ltdf2 = 0;
@@ -52,6 +54,9 @@ void log_init()
 
 int kprintf(const char *fmt, ...)
 {
+	uint8_t irq_state = save_if();
+	cpu_disable_interrupts();
+
 	spinlock_acquire(&log_lock);
 
 	va_list args;
@@ -68,6 +73,7 @@ int kprintf(const char *fmt, ...)
 	va_end(args);
 
 	spinlock_release(&log_lock);
+	restore_if(irq_state);
 	return length;
 }
 
