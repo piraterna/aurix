@@ -35,18 +35,17 @@ INCLUDE_DIRS := include \
 DEFINES := __$(ARCH)__
 
 KERNEL_NASM := nasm
-KERNEL_HOSTTOOLCHAIN ?= 0
 
-ifeq ($(KERNEL_HOSTTOOLCHAIN),0)
-KERNEL_AS      := $(ARCH)-elf-gcc
-KERNEL_CC      := $(ARCH)-elf-gcc
-KERNEL_LD      := $(ARCH)-elf-ld
-KERNEL_OBJCOPY := $(ARCH)-elf-objcopy
-else
+ifeq ($(USE_HOST_TOOLCHAIN),y)
 KERNEL_AS      := gcc
 KERNEL_CC      := gcc
 KERNEL_LD      := ld
 KERNEL_OBJCOPY := objcopy
+else
+KERNEL_AS      := $(ARCH)-elf-gcc
+KERNEL_CC      := $(ARCH)-elf-gcc
+KERNEL_LD      := $(ARCH)-elf-ld
+KERNEL_OBJCOPY := $(ARCH)-elf-objcopy
 endif
 
 KERNEL_ASFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \

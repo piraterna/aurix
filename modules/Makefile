@@ -27,18 +27,16 @@ export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fno-pic -fno-pie -I$(abspath 
 export MOD_LDFLAGS := -nostdlib -static
 export MOD_DEFINES := __$(ARCH)__
 
-MODS_HOSTTOOLCHAIN ?= 0
-
-ifeq ($(MODS_HOSTTOOLCHAIN),0)
-export MOD_AS := $(ARCH)-elf-gcc
-export MOD_CC := $(ARCH)-elf-gcc
-export MOD_LD := $(ARCH)-elf-ld
-export MOD_OBJCOPY := $(ARCH)-elf-objcopy
-else
+ifeq ($(USE_HOST_TOOLCHAIN),y)
 export MOD_AS := gcc
 export MOD_CC := gcc
 export MOD_LD := ld
 export MOD_OBJCOPY := objcopy
+else
+export MOD_AS := $(ARCH)-elf-gcc
+export MOD_CC := $(ARCH)-elf-gcc
+export MOD_LD := $(ARCH)-elf-ld
+export MOD_OBJCOPY := $(ARCH)-elf-objcopy
 endif
 
 ifeq ($(BUILD_TYPE),debug)
