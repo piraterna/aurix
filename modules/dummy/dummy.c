@@ -39,7 +39,6 @@ int mod_init()
 			(volatile struct axmod_exports *)AXMOD_EXPORTS_VADDR;
 		exports->kprintf("Hello from dummy module! cpu=%d\n",
 						 exports->get_current_cpuid());
-		exports->sched_yield();
 	}
 	return 0;
 }
