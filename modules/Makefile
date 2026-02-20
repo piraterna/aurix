@@ -19,7 +19,7 @@
 ###################################################################################
 
 MAKE_TARGETS := all install clean
-MOD_DIRS = $(filter-out common/.,$(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v)))
+MOD_DIRS = $(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v))
 
 export BUILD_DIR := $(BUILD_DIR)/kernel/mod
 export MOD_INSTALL_DIR := $(SYSROOT_DIR)/System/support
@@ -32,11 +32,13 @@ ifeq ($(USE_HOST_TOOLCHAIN),y)
 export MOD_AS := gcc
 export MOD_CC := gcc
 export MOD_LD := ld
+export MOD_AR := ar
 export MOD_OBJCOPY := objcopy
 else
 export MOD_AS := $(ARCH)-elf-gcc
 export MOD_CC := $(ARCH)-elf-gcc
 export MOD_LD := $(ARCH)-elf-ld
+export MOD_AR := $(ARCH)-elf-ar
 export MOD_OBJCOPY := $(ARCH)-elf-objcopy
 endif
 
@@ -46,7 +48,7 @@ else
 export MOD_CFLAGS += -O2
 endif
 
-$(MAKE_TARGETS): $(MOD_DIRS)
+$(MAKE_TARGETS): common/. $(filter-out common/.,$(MOD_DIRS))
 
 $(MOD_DIRS):
 ifeq ($(MAKECMDGOALS),)

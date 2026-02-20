@@ -17,47 +17,31 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-MOD_NAME := test
+MOD_NAME := common
 
 BUILD_DIR := $(BUILD_DIR)/$(MOD_NAME)
 
-MOD_FILE := $(BUILD_DIR)/$(MOD_NAME).sys
+COMMON_LIB := $(BUILD_DIR)/libaxapi.a
 
-MOD_INCLUDE_DIRS := include
-MOD_DEFINES := __$(ARCH)__
-
-MOD_CFLAGS += $(foreach d, $(MOD_INCLUDE_DIRS), -I$d) \
-				$(foreach d, $(MOD_DEFINES), -D$d)
-MOD_LDFLAGS +=
-
-COMMON_LIB := $(dir $(BUILD_DIR))common/libaxapi.a
-
-MOD_CFILES := $(shell find . -name '*.c')
-MOD_OBJ := $(MOD_CFILES:%.c=$(BUILD_DIR)/%.c.o)
+COMMON_CFILES := axapi.c
+COMMON_OBJ := $(COMMON_CFILES:%.c=$(BUILD_DIR)/%.c.o)
 
 .PHONY: all
-all: $(MOD_FILE)
+all: $(COMMON_LIB)
 
 .PHONY: install
 install: all
-	@mkdir -p $(MOD_INSTALL_DIR)
-	@cp $(MOD_FILE) $(MOD_INSTALL_DIR)
+	@true
 
 .PHONY: clean
 clean:
-	@rm -rf $(MOD_FILE)
+	@rm -rf $(BUILD_DIR)
 
--include $(wildcard $(BUILD_DIR)/mods/$(MOD_NAME)/*.d)
-
-$(MOD_FILE): $(MOD_OBJ) $(COMMON_LIB)
+$(COMMON_LIB): $(COMMON_OBJ)
 	@mkdir -p $(@D)
-	@printf "  LD\t$(notdir $@)\n"
-	@$(MOD_LD) $(MOD_LDFLAGS) $(MOD_OBJ) $(COMMON_LIB) -o $@
-ifneq ($(BUILD_TYPE),debug)
-	@printf "  OBJCOPY m_$(MOD_NAME).sym\n"
-	@$(MOD_OBJCOPY) --only-keep-debug $@ $(BUILD_DIR)/m_$(MOD_NAME).sym
-	@$(MOD_OBJCOPY) --strip-debug --strip-unneeded $@
-endif
+	@printf "  AR\t$(notdir $@)\n"
+	@rm -f $@
+	@$(MOD_AR) rcs $@ $^
 
 $(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(@D)

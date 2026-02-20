@@ -30,7 +30,9 @@ MOD_CFLAGS += $(foreach d, $(MOD_INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(MOD_DEFINES), -D$d)
 MOD_LDFLAGS +=
 
-MOD_CFILES := $(shell find . -name '*.c') ../common/axapi.c
+COMMON_LIB := $(dir $(BUILD_DIR))common/libaxapi.a
+
+MOD_CFILES := $(shell find . -name '*.c')
 MOD_OBJ := $(MOD_CFILES:%.c=$(BUILD_DIR)/%.c.o)
 
 .PHONY: all
@@ -47,10 +49,10 @@ clean:
 
 -include $(wildcard $(BUILD_DIR)/mods/$(MOD_NAME)/*.d)
 
-$(MOD_FILE): $(MOD_OBJ)
+$(MOD_FILE): $(MOD_OBJ) $(COMMON_LIB)
 	@mkdir -p $(@D)
 	@printf "  LD\t$(notdir $@)\n"
-	@$(MOD_LD) $(MOD_LDFLAGS) $^ -o $@
+	@$(MOD_LD) $(MOD_LDFLAGS) $(MOD_OBJ) $(COMMON_LIB) -o $@
 ifneq ($(BUILD_TYPE),debug)
 	@printf "  OBJCOPY m_$(MOD_NAME).sym\n"
 	@$(MOD_OBJCOPY) --only-keep-debug $@ $(BUILD_DIR)/m_$(MOD_NAME).sym
