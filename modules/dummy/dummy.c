@@ -37,7 +37,8 @@ int mod_init()
 	while (1) {
 		volatile struct axmod_exports *exports =
 			(volatile struct axmod_exports *)AXMOD_EXPORTS_VADDR;
-		exports->kprintf("Hello from dummy module!\n");
+		exports->kprintf("Hello from dummy module! cpu=%d\n",
+						 exports->get_current_cpuid());
 		exports->sched_yield();
 	}
 	return 0;

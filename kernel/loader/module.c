@@ -8,6 +8,7 @@
 #include <sys/aurix/mod.h>
 #include <string.h>
 #include <mm/pmm.h>
+#include <arch/cpu/cpu.h>
 
 pcb **loaded_modules = (pcb **)NULL;
 
@@ -39,6 +40,12 @@ static void *elf64_vaddr_to_file_ptr(char *elf, uintptr_t vaddr)
 static const char *elf64_vaddr_to_file_cstr(char *elf, uintptr_t vaddr)
 {
 	return (const char *)elf64_vaddr_to_file_ptr(elf, vaddr);
+}
+
+static int axmod_get_current_cpuid(void)
+{
+	struct cpu *c = cpu_get_current();
+	return c ? (int)c->id : 0;
 }
 
 bool module_load(void *addr, uint32_t size)
@@ -112,6 +119,7 @@ bool module_load(void *addr, uint32_t size)
 	memset(exports, 0, sizeof(*exports));
 	exports->kprintf = kprintf;
 	exports->sched_yield = sched_yield;
+	exports->get_current_cpuid = axmod_get_current_cpuid;
 
 	thread_create(mod, (void (*)())(void *)init_vaddr);
 

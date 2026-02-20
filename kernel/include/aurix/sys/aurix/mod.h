@@ -30,6 +30,7 @@
 struct axmod_exports {
 	int (*kprintf)(const char *fmt, ...);
 	void (*sched_yield)(void);
+	int (*get_current_cpuid)(void);
 } __attribute__((packed));
 
 struct axmod_info {

@@ -340,6 +340,7 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	}
 
 	uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
+	rsp = (uint64_t *)((uintptr_t)rsp - 8);
 	memset(stack_base, 0, STACK_SIZE);
 
 	*--rsp = (uint64_t)entry; // rip
