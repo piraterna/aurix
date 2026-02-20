@@ -25,6 +25,7 @@
 #include <arch/cpu/idt.h>
 #include <arch/cpu/irq.h>
 #include <cpu/trace.h>
+#include <sys/panic.h>
 #include <sys/sched.h>
 #include <aurix.h>
 #include <stdint.h>
@@ -106,47 +107,7 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 void isr_common_handler(struct interrupt_frame frame)
 {
 	if (frame.vector < 0x20) {
-		_log_force_unlock();
-
-		// signal other CPUs to immediately stop everything
-		uint8_t this_cpu = cpu_get_current()->id;
-		for (size_t i = 0; i < cpu_count; i++) {
-			if (i == this_cpu) {
-				continue;
-			}
-
-			// send shutdown ipi
-			lapic_write(0x310, cpuinfo[i].id << 24);
-			lapic_write(0x300, 0xff);
-		}
-
-		critical(
-			"panic(cpu %u): Kernel trap at 0x%.16llx, type %u=%s, registers:\n",
-			this_cpu, frame.rip, frame.vector, exception_str[frame.vector]);
-		critical(
-			"rax: 0x%.16llx, rbx: 0x%.16llx, rcx: 0x%.16llx, rdx: 0x%.16llx\n",
-			frame.rax, frame.rbx, frame.rcx, frame.rdx);
-		critical(
-			"rbp: 0x%.16llx, rdi: 0x%.16llx, rsi: 0x%.16llx, rsp: 0x%.16llx\n",
-			frame.rbp, frame.rdi, frame.rsi, frame.rsp);
-		critical(
-			"r8:  0x%.16llx, r9:  0x%.16llx, r10: 0x%.16llx, r11: 0x%.16llx\n",
-			frame.r8, frame.r9, frame.r10, frame.r11);
-		critical(
-			"r12: 0x%.16llx, r13: 0x%.16llx, r14: 0x%.16llx, r15: 0x%.16llx\n",
-			frame.r12, frame.r13, frame.r14, frame.r15);
-		critical(
-			"cr0: 0x%.16llx, cr2: 0x%.16llx, cr3: 0x%.16llx, cr4: 0x%.16llx\n",
-			frame.cr0, frame.cr2, frame.cr3, frame.cr4);
-		critical(
-			"rfl: 0x%.16llx, rip: 0x%.16llx, cs:  0x%.16llx, ds:  0x%.16llx\n",
-			frame.rflags, frame.rip, frame.cs, frame.ds);
-		critical("err: 0x%.16llx\n", frame.err);
-
-		critical("Backtrace (cpu %u):\n", this_cpu);
-		stack_trace(16);
-
-		cpu_halt();
+		kpanic(&frame, exception_str[frame.vector]);
 	} else if (frame.vector < 0x80) {
 		uint8_t irq = frame.vector - 0x20;
 		irq_dispatch(irq);
