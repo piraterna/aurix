@@ -11,6 +11,22 @@
 #include <stddef.h>
 #include <stdatomic.h>
 
+#define KPANIC_COLOR 1
+
+#if KPANIC_COLOR
+#define KPANIC_RED "\033[1;91m"
+#define KPANIC_RED_BG "\033[1;37;41m"
+#define KPANIC_DIM "\033[2m"
+#define KPANIC_BOLD "\033[1m"
+#define KPANIC_RESET "\033[0m"
+#else
+#define KPANIC_RED ""
+#define KPANIC_RED_BG ""
+#define KPANIC_DIM ""
+#define KPANIC_BOLD ""
+#define KPANIC_RESET ""
+#endif
+
 extern struct cpu cpuinfo[];
 extern size_t cpu_count;
 
@@ -78,7 +94,8 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 	_log_force_unlock();
 
 	if (atomic_exchange(&panicking, true)) {
-		kprintf("\nKERNEL PANIC: %s\n", reason ? reason : "panic");
+		kprintf("\n" KPANIC_RED_BG " KERNEL PANIC " KPANIC_RESET " %s\n",
+				reason ? reason : "panic");
 		for (;;)
 			cpu_halt();
 	}
@@ -95,23 +112,35 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 	const char *pname = (p && p->name) ? p->name : NULL;
 	bool show_task = (p && p->pid != 0);
 
-	kprintf("\n==================== KERNEL PANIC ====================\n");
-	kprintf("reason: %s\n", reason ? reason : "panic");
+	kprintf(
+		"\n" KPANIC_RED_BG
+		"====================== KERNEL PANIC ======================" KPANIC_RESET
+		"\n");
+	kprintf(KPANIC_BOLD "reason" KPANIC_RESET ": %s\n",
+			reason ? reason : "panic");
 	if (show_task) {
-		kprintf("where : cpu=%u pid=%u tid=%u", cpu_id, pid, tid);
+		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u pid=%u tid=%u",
+				cpu_id, pid, tid);
 		if (pname)
 			kprintf(" module=%s", pname);
 		kprintf("\n");
 	} else {
-		kprintf("where : cpu=%u\n", cpu_id);
+		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u\n", cpu_id);
 	}
 
 	if (frame) {
-		kprintf("exc   : vec=%llu err=0x%llx cr2=0x%llx cr3=0x%llx\n",
+		kprintf(KPANIC_BOLD "fault " KPANIC_RESET ": ");
+		panic_print_symbol((uintptr_t)frame->rip);
+		kprintf("\n");
+
+		kprintf(KPANIC_DIM "exc" KPANIC_RESET
+						   "   : vec=%llu err=0x%llx cr2=0x%llx cr3=0x%llx\n",
 				(unsigned long long)frame->vector,
 				(unsigned long long)frame->err, (unsigned long long)frame->cr2,
 				(unsigned long long)frame->cr3);
-		kprintf("regs  : rax=%016llx rbx=%016llx rcx=%016llx rdx=%016llx\n",
+		kprintf(KPANIC_DIM
+				"regs" KPANIC_RESET
+				"  : rax=%016llx rbx=%016llx rcx=%016llx rdx=%016llx\n",
 				(unsigned long long)frame->rax, (unsigned long long)frame->rbx,
 				(unsigned long long)frame->rcx, (unsigned long long)frame->rdx);
 		kprintf("        rdi=%016llx rsi=%016llx rbp=%016llx rsp=%016llx\n",
@@ -127,17 +156,20 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 				(unsigned long long)frame->rflags,
 				(unsigned long long)frame->cs, (unsigned long long)frame->ds);
 
-		kprintf("\nbacktrace:\n");
-		kprintf("  <fault> ");
+		kprintf("\n" KPANIC_BOLD "backtrace" KPANIC_RESET ":\n");
+		kprintf("  " KPANIC_RED "<fault>" KPANIC_RESET " ");
 		panic_print_symbol((uintptr_t)frame->rip);
 		kprintf("\n");
 		panic_backtrace(frame->cr3, (uintptr_t)frame->rbp, 16);
 	} else {
-		kprintf("\nbacktrace:\n");
+		kprintf("\n" KPANIC_BOLD "backtrace" KPANIC_RESET ":\n");
 		stack_trace(16);
 	}
 
-	kprintf("======================================================\n");
+	kprintf(
+		KPANIC_RED_BG
+		"==========================================================" KPANIC_RESET
+		"\n");
 
 	for (;;)
 		cpu_halt();
