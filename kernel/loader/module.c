@@ -100,6 +100,7 @@ static int axmod_get_current_cpuid(void)
 
 bool module_load(void *addr, uint32_t size)
 {
+	uint32_t file_size = size;
 	uintptr_t entry_point = 0;
 	uintptr_t loaded_at = 0;
 	pcb *mod = proc_create();
@@ -110,6 +111,8 @@ bool module_load(void *addr, uint32_t size)
 	}
 
 	char *virt_data = (char *)PHYS_TO_VIRT(addr);
+	mod->image_elf = virt_data;
+	mod->image_size = file_size;
 
 	entry_point = elf_load(virt_data, &loaded_at, (size_t *)&size, mod->pm);
 	if (entry_point == 0) {
@@ -139,6 +142,7 @@ bool module_load(void *addr, uint32_t size)
 					elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.author) :
 					NULL;
 
+			mod->name = name;
 			info("Loaded module: %s\n", name ? name : "(no name)");
 			if (desc)
 				info("  Description: %s\n", desc);

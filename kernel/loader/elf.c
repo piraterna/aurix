@@ -227,3 +227,47 @@ uintptr_t elf_lookup_symbol(char *elf_data, const char *symbol_name)
 	debug("Symbol '%s' not found\n", symbol_name);
 	return 0;
 }
+
+bool elf_lookup_addr(char *elf_data, uintptr_t addr, const char **name_out,
+					 uintptr_t *sym_addr_out)
+{
+	if (!name_out)
+		return false;
+	*name_out = NULL;
+	if (sym_addr_out)
+		*sym_addr_out = 0;
+
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf_data;
+	if (ehdr->e_ident[EI_MAG0] != ELFMAG0 ||
+		ehdr->e_ident[EI_CLASS] != ELFCLASS64 || ehdr->e_machine != EM_AMD64) {
+		return false;
+	}
+
+	Elf64_Sym *symtab = NULL;
+	size_t nsyms = 0;
+	const char *strtab = NULL;
+	if (!elf64_get_symtab(ehdr, &symtab, &nsyms, &strtab))
+		return false;
+
+	const Elf64_Sym *best = NULL;
+	for (size_t i = 0; i < nsyms; i++) {
+		const Elf64_Sym *s = &symtab[i];
+		if (s->st_shndx == SHN_UNDEF)
+			continue;
+		if (ELF64_ST_TYPE(s->st_info) != STT_FUNC)
+			continue;
+		uintptr_t s_addr = (uintptr_t)s->st_value;
+		if (s_addr == 0 || s_addr > addr)
+			continue;
+		if (!best || s_addr > (uintptr_t)best->st_value)
+			best = s;
+	}
+
+	if (!best)
+		return false;
+
+	*name_out = strtab + best->st_name;
+	if (sym_addr_out)
+		*sym_addr_out = (uintptr_t)best->st_value;
+	return true;
+}

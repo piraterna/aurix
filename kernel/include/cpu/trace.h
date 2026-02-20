@@ -23,8 +23,12 @@
 #ifndef _CPU_TRACE_H
 #define _CPU_TRACE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
+bool trace_lookup_symbol(uintptr_t addr, const char **name_out,
+						 uintptr_t *sym_addr_out);
+void stack_trace_from(uintptr_t pm_phys, uintptr_t rbp, uint16_t max_depth);
 void stack_trace(uint16_t max_depth);
 
 #endif /* _CPU_TRACE_H */

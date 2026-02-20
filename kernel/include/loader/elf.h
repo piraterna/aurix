@@ -203,6 +203,10 @@ typedef struct {
 #define ELF64_ST_BIND(info) ((info) >> 4)
 #define ELF64_ST_TYPE(info) ((info) & 0x0f)
 
+#define STT_NOTYPE 0
+#define STT_OBJECT 1
+#define STT_FUNC 2
+
 #define SHN_UNDEF 0
 #define SHN_ABS 0xfff1
 #define SHN_COMMON 0xfff2
@@ -210,5 +214,7 @@ typedef struct {
 uintptr_t elf_load(char *data, uintptr_t *addr, size_t *size,
 				   pagetable *pagemap);
 uintptr_t elf_lookup_symbol(char *elf_data, const char *symbol_name);
+bool elf_lookup_addr(char *elf_data, uintptr_t addr, const char **name_out,
+					 uintptr_t *sym_addr_out);
 
 #endif /* _LOADER_ELF_H */

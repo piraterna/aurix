@@ -24,6 +24,7 @@
 #include <arch/cpu/switch.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <mm/vmm.h>
 
 #define STACK_SIZE 4096 * 4 // ~16KB
@@ -56,6 +57,9 @@ typedef struct pcb {
 	vctx_t *vctx;
 	struct tcb *threads;
 	uint32_t next_tid;
+	const char *name;
+	char *image_elf;
+	size_t image_size;
 } pcb;
 
 void sched_init(void);
