@@ -50,6 +50,9 @@ endif
 
 $(MAKE_TARGETS): common/. $(filter-out common/.,$(MOD_DIRS))
 
+# Ensure libaxapi is built before other modules link.
+$(filter-out common/.,$(MOD_DIRS)): common/.
+
 $(MOD_DIRS):
 ifeq ($(MAKECMDGOALS),)
 	@printf ">>> Building module '$(patsubst %/,%,$(dir $(@)))'...\n"

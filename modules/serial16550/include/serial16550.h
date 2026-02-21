@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  dummy.h */
+/* Module Name:  serial.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -20,10 +20,10 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _DUMMY_H
-#define _DUMMY_H
+#ifndef _SERIAL16550_H
+#define _SERIAL16550_H
 
 int mod_init(void);
 void mod_exit(void);
 
-#endif /* _DUMMY_H */
+#endif /* _SERIAL16550_H */

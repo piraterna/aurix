@@ -26,6 +26,9 @@ COMMON_LIB := $(BUILD_DIR)/libaxapi.a
 COMMON_CFILES := axapi.c
 COMMON_OBJ := $(COMMON_CFILES:%.c=$(BUILD_DIR)/%.c.o)
 
+AXAPI_HDRS := ../../kernel/include/aurix/axapi.h \
+			 ../../kernel/include/aurix/axapi_defs.inc
+
 .PHONY: all
 all: $(COMMON_LIB)
 
@@ -47,3 +50,5 @@ $(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(@D)
 	@printf "  CC\t$<\n"
 	@$(MOD_CC) $(MOD_CFLAGS) -c $< -o $@
+
+$(COMMON_OBJ): $(AXAPI_HDRS)

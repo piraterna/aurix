@@ -1,7 +1,12 @@
 #ifndef _AURIX_AXAPI_H
 #define _AURIX_AXAPI_H
 
+#include <stddef.h>
 #include <stdint.h>
+
+struct chrdev_ops;
+struct device;
+struct driver;
 
 struct axapi_export {
 	const char *name;

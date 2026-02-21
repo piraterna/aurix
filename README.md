@@ -28,6 +28,7 @@
   - [Prerequisites](#prerequisites)
   - [Building](#building)
 - [Running](#running)
+- [Developer Docs](#developer-docs)
 - [Support](#support)
 - [Contributing](#contributing)
 - [Authors & contributors](#authors--contributors)
@@ -102,6 +103,10 @@ All generated images reside in the `release/` directory and follow this naming s
 To run AurixOS on QEMU, run `make run` (optionally, append `ARCH=arch PLATFORM=platform` if you're building/running AurixOS on an architecture other than x86_64).
 
 Alternatively, you can boot AurixOS on a physical machine by running `dd if=release/<usb-image>.img of=/dev/<target USB drive> bs=1M` and booting off of this USB drive.
+
+## Developer Docs
+
+- Drivers and modules: [docs/kernel/DRIVERS_AND_MODULES.md](docs/kernel/DRIVERS_AND_MODULES.md)
 
 ## Support
 

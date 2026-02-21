@@ -17,7 +17,7 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-MOD_NAME := faulty
+MOD_NAME := serial16550
 
 BUILD_DIR := $(BUILD_DIR)/$(MOD_NAME)
 

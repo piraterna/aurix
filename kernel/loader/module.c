@@ -8,7 +8,7 @@
 #include <sys/aurix/mod.h>
 #include <sys/axapi.h>
 #include <aurix/axapi.h>
-#include <string.h>
+#include <lib/string.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <arch/cpu/cpu.h>
@@ -162,7 +162,6 @@ bool module_load(void *addr, uint32_t size)
 	}
 
 	axapi_patch_imports(mod, virt_data);
-
 	thread_create(mod, (void (*)())(void *)init_vaddr);
 
 	info("Module loaded at physical 0x%lx, entry point 0x%lx\n", loaded_at,
