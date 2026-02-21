@@ -41,6 +41,7 @@
 #include <test/test.h>
 #include <aurix.h>
 #include <sys/sched.h>
+#include <sys/panic.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -74,11 +75,8 @@ void _start(struct aurix_parameters *params)
 	serial_init();
 
 	if (params->revision != AURIX_PROTOCOL_REVISION) {
-		critical(
-			"Aurix Protocol revision is not compatible: expected %u, but got %u!\n",
-			AURIX_PROTOCOL_REVISION, params->revision);
-		for (;;)
-			;
+		kpanicf(NULL, "Aurix Protocol revision mismatch: expected %u, got %u",
+				AURIX_PROTOCOL_REVISION, params->revision);
 	}
 
 	ft_ctx = flanterm_fb_init(
@@ -135,8 +133,8 @@ void _start(struct aurix_parameters *params)
 		info("Loading module '%s'...\n", boot_params->modules[m].filename);
 		if (!module_load(boot_params->modules[m].addr,
 						 boot_params->modules[m].size)) {
-			error("Driver '%s' failed to load");
-			cpu_halt();
+			kpanicf(NULL, "Module '%s' failed to load",
+					boot_params->modules[m].filename);
 		}
 	}
 
@@ -150,6 +148,10 @@ void _start(struct aurix_parameters *params)
 		info("Kernel boot complete in %u.%03u seconds\n",
 			 (uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
 	}
+
+	kprintf("==================================================\n");
+	kprintf("%s\n", aurix_banner);
+	kprintf("==================================================\n\n");
 
 	sched_enable();
 

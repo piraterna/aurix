@@ -80,12 +80,12 @@ void stack_trace_from(uintptr_t pm_phys, uintptr_t rbp, uint16_t max_depth)
 		const char *name = NULL;
 		uintptr_t sym = 0;
 		if (trace_lookup_symbol(saved_rip, &name, &sym) && name) {
-			trace("[%p] 0x%.16llx <%s+0x%llx>\n", (void *)rbp,
-				  (unsigned long long)saved_rip, name,
-				  (unsigned long long)(saved_rip - sym));
+			kprintf("[%p] 0x%.16llx <%s+0x%llx>\n", (void *)rbp,
+					(unsigned long long)saved_rip, name,
+					(unsigned long long)(saved_rip - sym));
 		} else {
-			trace("[%p] 0x%.16llx\n", (void *)rbp,
-				  (unsigned long long)saved_rip);
+			kprintf("[%p] 0x%.16llx\n", (void *)rbp,
+					(unsigned long long)saved_rip);
 		}
 		uintptr_t next_rbp = rbp_ptr[0];
 		if (next_rbp == rbp || next_rbp == prev_rbp)

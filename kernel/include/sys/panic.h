@@ -25,4 +25,7 @@ struct interrupt_frame;
 __attribute__((noreturn)) void kpanic(const struct interrupt_frame *frame,
 									  const char *reason);
 
+__attribute__((noreturn)) void kpanicf(const struct interrupt_frame *frame,
+									   const char *fmt, ...);
+
 #endif

@@ -32,6 +32,7 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <sys/sched.h>
+#include <sys/panic.h>
 #include <aurix.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -150,8 +151,7 @@ __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 	// set up own stack
 	void *stack = palloc(4); // 16kib
 	if (!stack) {
-		error("Couldn't allocate stack for CPU %u, halting execution.\n", cpu);
-		cpu_halt();
+		kpanicf(NULL, "smp: couldn't allocate stack for CPU %u", cpu);
 	}
 
 	map_pages(NULL, (uintptr_t)stack, (uintptr_t)stack, 16 * 1024,

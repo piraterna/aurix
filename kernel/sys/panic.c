@@ -25,10 +25,12 @@
 #include <mm/vmm.h>
 #include <sys/sched.h>
 #include <util/kprintf.h>
+#include <nanoprintf.h>
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdatomic.h>
+#include <stdarg.h>
 
 #define KPANIC_COLOR 1
 
@@ -193,4 +195,14 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 	for (;;)
 		cpu_halt();
 	UNREACHABLE();
+}
+
+void kpanicf(const struct interrupt_frame *frame, const char *fmt, ...)
+{
+	char buf[256];
+	va_list args;
+	va_start(args, fmt);
+	(void)npf_vsnprintf(buf, sizeof(buf), fmt ? fmt : "panic", args);
+	va_end(args);
+	kpanic(frame, buf);
 }

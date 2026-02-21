@@ -23,6 +23,7 @@
 #include <mm/vmm.h>
 #include <lib/align.h>
 #include <debug/log.h>
+#include <sys/panic.h>
 #include <test/heap_test.h>
 #include <test/test.h>
 #include <config.h>
@@ -30,6 +31,7 @@
 #include <string.h>
 
 #define ALIGNMENT PAGE_SIZE
+#define USER_ALIGNMENT 16
 #define CANARY_SIZE sizeof(uint64_t)
 #define CANARY_VALUE 0xdeadbeefdeadbeefULL
 #define CHECK_MAGIC 0xfeedfacefeedfaceULL
@@ -56,14 +58,12 @@ static int validate(const block_t *b)
 		return 0;
 
 	if (b->check != compute_check(b)) {
-		critical("HEAP CORRUPTION: block header %p invalid\n", (void *)b);
-		return 0;
+		kpanicf(NULL, "HEAP CORRUPTION: block header %p invalid", (void *)b);
 	}
 
 	if ((uint8_t *)b + sizeof(block_t) + b->size >
 		(uint8_t *)pool + pool_pages * PAGE_SIZE) {
-		critical("HEAP BLOCK OUT OF BOUNDS: %p\n", (void *)b);
-		return 0;
+		kpanicf(NULL, "HEAP BLOCK OUT OF BOUNDS: %p", (void *)b);
 	}
 
 	return 1;
@@ -76,8 +76,9 @@ static uint64_t *leading_canary_ptr(const block_t *b)
 
 static uint64_t *trailing_canary_ptr(const block_t *b)
 {
-	return (uint64_t *)((uint8_t *)b + sizeof(block_t) + b->alloc_size -
-						CANARY_SIZE);
+	/* Place trailing canary right after the user region (not at alloc_size). */
+	return (uint64_t *)((uint8_t *)b + sizeof(block_t) + CANARY_SIZE +
+						b->user_size);
 }
 
 static void write_canaries(block_t *b)
@@ -88,13 +89,17 @@ static void write_canaries(block_t *b)
 
 static int check_canaries(const block_t *b)
 {
+	if (b->alloc_size < b->user_size + 2 * CANARY_SIZE) {
+		kpanicf(NULL, "HEAP CORRUPTION: invalid size fields (%p)", (void *)b);
+	}
+
 	if (*leading_canary_ptr(b) != CANARY_VALUE) {
-		critical("HEAP OVERFLOW: leading canary corrupted (%p)\n", (void *)b);
-		return 0;
+		kpanicf(NULL, "HEAP OVERFLOW: leading canary corrupted (%p)",
+				(void *)b);
 	}
 	if (*trailing_canary_ptr(b) != CANARY_VALUE) {
-		critical("HEAP OVERFLOW: trailing canary corrupted (%p)\n", (void *)b);
-		return 0;
+		kpanicf(NULL, "HEAP OVERFLOW: trailing canary corrupted (%p)",
+				(void *)b);
 	}
 	return 1;
 }
@@ -197,9 +202,7 @@ void heap_init(vctx_t *ctx)
 
 	pool = valloc(ctx, FF_POOL_SIZE, VALLOC_RW);
 	if (!pool) {
-		critical("Failed to allocate initial heap\n");
-		for (;;)
-			;
+		kpanic(NULL, "Failed to allocate initial heap");
 	}
 
 	pool_pages = FF_POOL_SIZE;
@@ -224,7 +227,7 @@ void *kmalloc(size_t size)
 	if (size == 0)
 		return NULL;
 
-	size_t user_sz = ALIGN_UP(size, ALIGNMENT);
+	size_t user_sz = ALIGN_UP(size, USER_ALIGNMENT);
 	size_t payload = user_sz + 2 * CANARY_SIZE;
 	size_t effective = ALIGN_UP(payload, ALIGNMENT);
 
