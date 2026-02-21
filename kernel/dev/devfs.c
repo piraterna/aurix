@@ -1,3 +1,22 @@
+/*********************************************************************************/
+/* Module Name:  devfs.c */
+/* Project:      AurixOS */
+/*                                                                               */
+/* Copyright (c) 2024-2025 Jozef Nagy */
+/*                                                                               */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
+/*                                                                               */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
+/* SOFTWARE. */
+/*********************************************************************************/
+
 // this is just an example "devfs" for testing device/driver system for serial UART driver.
 #include <dev/devfs.h>
 
@@ -23,7 +42,7 @@ void devfs_init(void)
 {
 	irqlock_init(&devfs_lock);
 	devfs_list = NULL;
-	info("devfs: init\n");
+	debug("devfs: init\n");
 }
 
 static struct devfs_node *devfs_find(const char *name)
@@ -84,8 +103,8 @@ int devfs_read(const char *name, void *buf, size_t len)
 	irqlock_release(&devfs_lock);
 
 	if (!ops || !ops->read) {
-		warn("devfs: read from missing/unreadable node %s\n",
-			 name ? name : "(null)");
+		debug("devfs: read from missing/unreadable node %s\n",
+			  name ? name : "(null)");
 		return -1;
 	}
 	return ops->read(ctx, buf, len);
@@ -101,8 +120,8 @@ int devfs_write(const char *name, const void *buf, size_t len)
 	irqlock_release(&devfs_lock);
 
 	if (!ops || !ops->write) {
-		warn("devfs: write to missing/unwritable node %s\n",
-			 name ? name : "(null)");
+		debug("devfs: write to missing/unwritable node %s\n",
+			  name ? name : "(null)");
 		return -1;
 	}
 

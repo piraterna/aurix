@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ksyms.c */
+/* Module Name:  log_time.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2025 Jozef Nagy */
@@ -17,46 +17,48 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <sys/ksyms.h>
+#include <debug/log.h>
 
-#include <stddef.h>
+#include <stdint.h>
 
-__attribute__((weak)) const uint32_t __ksym_count = 0;
-__attribute__((weak)) const uint64_t __ksym_addrs[1] = { 0 };
-__attribute__((weak)) const uint32_t __ksym_name_offs[1] = { 0 };
-__attribute__((weak)) const char __ksym_names[1] = { 0 };
+#if defined(__x86_64__)
+#include <acpi/hpet.h>
+#include <platform/time/pit.h>
+#endif
 
-bool ksym_lookup(uintptr_t addr, const char **name_out, uintptr_t *sym_addr_out)
+uint64_t log_uptime_ms(void)
 {
-	if (!name_out)
-		return false;
+#if defined(__x86_64__)
+	/* Prefer HPET (runs even with IRQs off), fall back to PIT ticks. */
+	static uint64_t hpet_base_ns = 0;
+	static int hpet_base_set = 0;
 
-	*name_out = NULL;
-	if (sym_addr_out)
-		*sym_addr_out = 0;
-
-	uint32_t count = __ksym_count;
-	if (count == 0)
-		return false;
-
-	uint32_t lo = 0;
-	uint32_t hi = count;
-	while (lo < hi) {
-		uint32_t mid = lo + (hi - lo) / 2;
-		uint64_t mid_addr = __ksym_addrs[mid];
-		if (mid_addr <= addr)
-			lo = mid + 1;
-		else
-			hi = mid;
+	uint64_t hpet_ns = hpet_get_ns();
+	if (hpet_ns) {
+		if (!hpet_base_set) {
+			/* Align HPET base to current PIT-derived ms so time doesn't jump. */
+			uint64_t cur_ms = 0;
+			if (pit_is_initialized()) {
+				uint16_t hz = pit_get_hz();
+				if (hz)
+					cur_ms = (pit_get_ticks() * 1000ull) / (uint64_t)hz;
+			}
+			uint64_t cur_ns = cur_ms * 1000000ull;
+			hpet_base_ns = (hpet_ns > cur_ns) ? (hpet_ns - cur_ns) : hpet_ns;
+			hpet_base_set = 1;
+		}
+		return (hpet_ns - hpet_base_ns) / 1000000ull;
 	}
 
-	if (lo == 0)
-		return false;
+	if (pit_is_initialized()) {
+		uint16_t hz = pit_get_hz();
+		if (!hz)
+			return 0;
+		return (pit_get_ticks() * 1000ull) / (uint64_t)hz;
+	}
 
-	uint32_t idx = lo - 1;
-	const char *name = __ksym_names + __ksym_name_offs[idx];
-	*name_out = name;
-	if (sym_addr_out)
-		*sym_addr_out = (uintptr_t)__ksym_addrs[idx];
-	return true;
+	return 0;
+#else
+	return 0;
+#endif
 }

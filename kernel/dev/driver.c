@@ -1,3 +1,22 @@
+/*********************************************************************************/
+/* Module Name:  driver.c */
+/* Project:      AurixOS */
+/*                                                                               */
+/* Copyright (c) 2024-2025 Jozef Nagy */
+/*                                                                               */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
+/*                                                                               */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
+/* SOFTWARE. */
+/*********************************************************************************/
+
 #include <dev/driver.h>
 
 #include <arch/sys/irqlock.h>
@@ -49,7 +68,7 @@ void driver_core_init(void)
 {
 	irqlock_init(&dev_lock);
 	irqlock_init(&drv_lock);
-	info("driver: core init\n");
+	debug("driver: core init\n");
 }
 
 int device_register(struct device *dev)
@@ -95,8 +114,8 @@ int device_register(struct device *dev)
 	dev_list = n;
 	irqlock_release(&dev_lock);
 
-	success("device: + %s class=%s\n", n->dev.name,
-			n->dev.class_name ? n->dev.class_name : "(none)");
+	debug("device: + %s class=%s\n", n->dev.name,
+		  n->dev.class_name ? n->dev.class_name : "(none)");
 
 	return 0;
 }
@@ -145,8 +164,8 @@ int driver_register(struct driver *drv)
 	drv_list = n;
 	irqlock_release(&drv_lock);
 
-	success("driver: + %s class=%s\n", n->drv.name,
-			n->drv.class_name ? n->drv.class_name : "(none)");
+	debug("driver: + %s class=%s\n", n->drv.name,
+		  n->drv.class_name ? n->drv.class_name : "(none)");
 
 	return 0;
 }
@@ -154,7 +173,7 @@ int driver_register(struct driver *drv)
 int driver_bind_all(void)
 {
 	int bound = 0;
-	info("driver: binding devices\n");
+	debug("driver: binding devices\n");
 
 	irqlock_acquire(&drv_lock);
 	struct drv_node *d = drv_list;

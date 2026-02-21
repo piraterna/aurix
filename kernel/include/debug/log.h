@@ -22,6 +22,7 @@
 
 #include <util/kprintf.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 /* TODO: Use boot args */
 #ifndef DEBUG
@@ -69,9 +70,15 @@
 #define LOG_COLOR_RESET ""
 #endif
 
-#define _log_callback(color, level, fmt, ...)                            \
-	kprintf("[0.000] %s(): " color "%s: " LOG_COLOR_RESET fmt, __func__, \
-			level, ##__VA_ARGS__)
+uint64_t log_uptime_ms(void);
+
+#define _log_callback(color, level, fmt, ...)                           \
+	do {                                                                \
+		uint64_t __ms = log_uptime_ms();                                \
+		kprintf("[%u.%03u] %s(): " color "%s: " LOG_COLOR_RESET fmt,    \
+				(uint32_t)(__ms / 1000ull), (uint32_t)(__ms % 1000ull), \
+				__func__, level, ##__VA_ARGS__);                        \
+	} while (0)
 
 #define critical(fmt, ...)                                                 \
 	do {                                                                   \

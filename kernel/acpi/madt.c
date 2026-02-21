@@ -89,6 +89,10 @@ static char *madt_type_to_str(uint8_t type)
 void acpi_madt_init()
 {
 	madt = (struct madt *)find_sdt("APIC");
+	if (!madt) {
+		error("MADT not found\n");
+		return;
+	}
 	info("MADT Address: 0x%llx\n", (void *)madt);
 
 #if defined(__x86_64__) || defined(__i686__)
@@ -115,9 +119,9 @@ void acpi_madt_init()
 				break;
 			}
 			lapics[lapic_count++] = lapic;
-			info("Registered LAPIC for processor #%u with _UID %u (%s)\n",
-				 lapic->id, lapic->uid,
-				 (lapic->flags & 1) ? "enabled" : "disabled");
+			debug("Registered LAPIC for processor #%u with _UID %u (%s)\n",
+				  lapic->id, lapic->uid,
+				  (lapic->flags & 1) ? "enabled" : "disabled");
 			break;
 		}
 		case MADT_IOAPIC: {
@@ -130,14 +134,14 @@ void acpi_madt_init()
 				break;
 			}
 			ioapics[ioapic_count++] = ioapic;
-			info("Registered IOAPIC #%u located at 0x%llx (gsi base=%llx)\n",
-				 ioapic->id, ioapic->addr, ioapic->gsi_base);
+			debug("Registered IOAPIC #%u located at 0x%llx (gsi base=%llx)\n",
+				  ioapic->id, ioapic->addr, ioapic->gsi_base);
 			break;
 		}
 		case MADT_ISO: {
 			struct madt_iso *iso = (struct madt_iso *)(madt->structures + i);
 			isos[iso_count++] = iso;
-			info(
+			debug(
 				"Interrupt source override on bus %u with source %u (gsi=%u, flags=%x)\n",
 				iso->bus, iso->src, iso->gsi, iso->flags);
 			break;
@@ -147,15 +151,15 @@ void acpi_madt_init()
 			struct madt_lapic_nmi *nmi =
 				(struct madt_lapic_nmi *)(madt->structures + i);
 			nmis[nmi_count++] = nmi;
-			info("NMI for LINT#%u on processor with _UID %u, flags %x\n",
-				 nmi->LINTn, nmi->acpi_uid, nmi->flags);
+			debug("NMI for LINT#%u on processor with _UID %u, flags %x\n",
+				  nmi->LINTn, nmi->acpi_uid, nmi->flags);
 			break;
 		}
 		case MADT_LAPIC_OVERRIDE: {
 			struct madt_lapic_override *override =
 				(struct madt_lapic_override *)(madt->structures + i);
 			lapic_base = override->addr;
-			info("Overridden LAPIC base address: 0x%llx\n", override->addr);
+			debug("Overridden LAPIC base address: 0x%llx\n", override->addr);
 			break;
 		}
 		case MADT_NMI_SRC:
@@ -176,4 +180,9 @@ void acpi_madt_init()
 
 		i += mhdr->len;
 	}
+
+#if defined(__x86_64__)
+	info("MADT summary: lapics=%zu ioapics=%zu isos=%zu nmis=%zu\n",
+		 lapic_count, ioapic_count, iso_count, nmi_count);
+#endif
 }

@@ -251,7 +251,7 @@ void sched_init(void)
 		cpu->thread_count = 0;
 	}
 
-	info("Initialized on CPU=%u\n", cpu->id);
+	debug("Initialized on CPU=%u\n", cpu->id);
 }
 
 pcb *proc_create(void)

@@ -56,6 +56,8 @@ struct hpet {
 } __attribute__((packed));
 
 void acpi_hpet_init();
+uint64_t hpet_get_ns(void);
+int hpet_is_initialized(void);
 void hpet_msleep(uint64_t ms);
 void hpet_usleep(uint64_t us);
 void hpet_nsleep(uint64_t ns);

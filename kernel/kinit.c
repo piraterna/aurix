@@ -145,7 +145,11 @@ void _start(struct aurix_parameters *params)
 		 time_get_second());
 
 	pmm_reclaim_bootparms();
-	info("Kernel boot complete in ? seconds\n");
+	{
+		uint64_t ms = log_uptime_ms();
+		info("Kernel boot complete in %u.%03u seconds\n",
+			 (uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
+	}
 
 	sched_enable();
 

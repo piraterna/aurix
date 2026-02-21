@@ -94,7 +94,7 @@ void pmm_init(void)
 			free_pages += e->size / PAGE_SIZE;
 		}
 
-		debug("Entry %u: 0x%llx, size=%llu bytes, type=%s\n", i, e->base,
+		trace("Entry %u: 0x%llx, size=%llu bytes, type=%s\n", i, e->base,
 			  e->size, type_to_str(e->type));
 	}
 
