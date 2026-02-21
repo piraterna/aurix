@@ -173,7 +173,7 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 		kprintf("        r12=%016llx r13=%016llx r14=%016llx r15=%016llx\n",
 				(unsigned long long)frame->r12, (unsigned long long)frame->r13,
 				(unsigned long long)frame->r14, (unsigned long long)frame->r15);
-		kprintf("        rfl=%016llx cs=%016llx  ds=%016llx\n",
+		kprintf("        rfl=%016llx cs =%016llx ds =%016llx\n",
 				(unsigned long long)frame->rflags,
 				(unsigned long long)frame->cs, (unsigned long long)frame->ds);
 
