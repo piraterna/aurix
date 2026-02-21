@@ -177,6 +177,8 @@ Guidelines:
 - Avoid storing pointers to module-allocated data (e.g. static buffers or module heap) inside kernel-known structures unless they are only ever dereferenced while running in the module's CR3.
 
 ## Devfs integration
+> [!NOTE]
+> devfs is just for testing rn, it wont stay like this
 
 Many drivers expose character devices via devfs:
 

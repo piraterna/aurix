@@ -42,7 +42,7 @@ void devfs_init(void)
 {
 	irqlock_init(&devfs_lock);
 	devfs_list = NULL;
-	debug("devfs: init\n");
+	debug("init\n");
 }
 
 static struct devfs_node *devfs_find(const char *name)
@@ -57,7 +57,7 @@ static struct devfs_node *devfs_find(const char *name)
 int devfs_register(const char *name, const struct chrdev_ops *ops, void *ctx)
 {
 	if (!name || !ops) {
-		warn("devfs: invalid name=%p ops=%p\n", name, ops);
+		warn("invalid name=%p ops=%p\n", name, ops);
 		return -1;
 	}
 
@@ -82,7 +82,7 @@ int devfs_register(const char *name, const struct chrdev_ops *ops, void *ctx)
 	irqlock_acquire(&devfs_lock);
 	if (devfs_find(name)) {
 		irqlock_release(&devfs_lock);
-		warn("devfs: duplicate node %s\n", name);
+		warn("duplicate node %s\n", name);
 		kfree(n->name);
 		kfree(n);
 		return -1;
@@ -103,8 +103,7 @@ int devfs_read(const char *name, void *buf, size_t len)
 	irqlock_release(&devfs_lock);
 
 	if (!ops || !ops->read) {
-		debug("devfs: read from missing/unreadable node %s\n",
-			  name ? name : "(null)");
+		debug("read from missing/unreadable node %s\n", name ? name : "(null)");
 		return -1;
 	}
 	return ops->read(ctx, buf, len);
@@ -120,8 +119,7 @@ int devfs_write(const char *name, const void *buf, size_t len)
 	irqlock_release(&devfs_lock);
 
 	if (!ops || !ops->write) {
-		debug("devfs: write to missing/unwritable node %s\n",
-			  name ? name : "(null)");
+		debug("write to missing/unwritable node %s\n", name ? name : "(null)");
 		return -1;
 	}
 
