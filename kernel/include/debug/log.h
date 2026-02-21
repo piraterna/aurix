@@ -25,10 +25,6 @@
 #include <stdint.h>
 
 /* TODO: Use boot args */
-#ifndef DEBUG
-#define DEBUG 1
-#endif
-
 #ifndef LOG_COLOR
 #define LOG_COLOR 1
 #endif
@@ -49,88 +45,119 @@
 /* end todo */
 
 #if LOG_COLOR
-#define LOG_COLOR_INFO "\033[92m" /* Green */
-#define LOG_COLOR_WARN "\033[93m" /* Yellow */
-#define LOG_COLOR_ERROR "\033[91m" /* Red */
-#define LOG_COLOR_DEBUG "\033[94m" /* Blue */
-#define LOG_COLOR_TEST "\033[96m" /* Light Cyan */
-#define LOG_COLOR_TRACE "\033[95m" /* Magenta */
-#define LOG_COLOR_CRITICAL "\033[31m" /* Bright Red */
-#define LOG_COLOR_SUCCESS "\033[32m" /* Bright Green */
-#define LOG_COLOR_RESET "\033[0m" /* Reset */
+
+#define LOG_STYLE_RESET "\033[0m"
+#define LOG_STYLE_PREFIX "\033[38;2;90;95;105m"
+
+#define LOG_BG_R 13
+#define LOG_BG_G 15
+#define LOG_BG_B 18
+
+#define LOG_TAG_INFO "\033[1;38;2;13;15;18;48;2;100;150;200m"
+#define LOG_TAG_WARN "\033[1;38;2;13;15;18;48;2;200;160;60m"
+#define LOG_TAG_ERROR "\033[1;38;2;13;15;18;48;2;190;70;70m"
+#define LOG_TAG_DEBUG "\033[1;38;2;13;15;18;48;2;140;120;170m"
+#define LOG_TAG_TEST "\033[1;38;2;13;15;18;48;2;90;160;170m"
+#define LOG_TAG_TRACE "\033[1;38;2;13;15;18;48;2;110;130;160m"
+#define LOG_TAG_CRITICAL "\033[1;38;2;13;15;18;48;2;220;50;50m"
+#define LOG_TAG_SUCCESS "\033[1;38;2;13;15;18;48;2;100;180;100m"
+
+#define LOG_LINE_INFO "\033[38;2;170;180;190m"
+#define LOG_LINE_WARN "\033[38;2;210;170;80m"
+#define LOG_LINE_ERROR "\033[38;2;210;100;100m"
+#define LOG_LINE_DEBUG "\033[38;2;150;130;180m"
+#define LOG_LINE_TEST "\033[38;2;100;170;180m"
+#define LOG_LINE_TRACE "\033[38;2;130;150;180m"
+#define LOG_LINE_CRITICAL "\033[1;38;2;255;120;120m"
+#define LOG_LINE_SUCCESS "\033[38;2;140;210;140m"
+
 #else
-#define LOG_COLOR_INFO ""
-#define LOG_COLOR_WARN ""
-#define LOG_COLOR_ERROR ""
-#define LOG_COLOR_DEBUG ""
-#define LOG_COLOR_TEST ""
-#define LOG_COLOR_TRACE ""
-#define LOG_COLOR_CRITICAL ""
-#define LOG_COLOR_SUCCESS ""
-#define LOG_COLOR_RESET ""
+#define LOG_STYLE_RESET ""
+#define LOG_STYLE_PREFIX ""
+#define LOG_TAG_INFO ""
+#define LOG_TAG_WARN ""
+#define LOG_TAG_ERROR ""
+#define LOG_TAG_DEBUG ""
+#define LOG_TAG_TEST ""
+#define LOG_TAG_TRACE ""
+#define LOG_TAG_CRITICAL ""
+#define LOG_TAG_SUCCESS ""
+#define LOG_LINE_INFO ""
+#define LOG_LINE_WARN ""
+#define LOG_LINE_ERROR ""
+#define LOG_LINE_DEBUG ""
+#define LOG_LINE_TEST ""
+#define LOG_LINE_TRACE ""
+#define LOG_LINE_CRITICAL ""
+#define LOG_LINE_SUCCESS ""
 #endif
 
 uint64_t log_uptime_ms(void);
 
-#define _log_callback(color, level, fmt, ...)                           \
-	do {                                                                \
-		uint64_t __ms = log_uptime_ms();                                \
-		kprintf("[%u.%03u] %s(): " color "%s: " LOG_COLOR_RESET fmt,    \
-				(uint32_t)(__ms / 1000ull), (uint32_t)(__ms % 1000ull), \
-				__func__, level, ##__VA_ARGS__);                        \
+#define _log_callback(tag_style, line_style, level, fmt, ...)                  \
+	do {                                                                       \
+		uint64_t __ms = log_uptime_ms();                                       \
+		kprintf(LOG_STYLE_PREFIX "[%u.%03u] " LOG_STYLE_RESET tag_style        \
+								 " %s " LOG_STYLE_RESET                        \
+								 " " line_style fmt LOG_STYLE_RESET,           \
+				(uint32_t)(__ms / 1000ull), (uint32_t)(__ms % 1000ull), level, \
+				##__VA_ARGS__);                                                \
 	} while (0)
 
-#define critical(fmt, ...)                                                 \
+#define critical(fmt, ...)                                                   \
+	do {                                                                     \
+		if (LOG_LEVEL_CRITICAL <= LOG_VERBOSITY)                             \
+			_log_callback(LOG_TAG_CRITICAL, LOG_LINE_CRITICAL, "crit ", fmt, \
+						  ##__VA_ARGS__);                                    \
+	} while (0)
+
+#define error(fmt, ...)                                                \
+	do {                                                               \
+		if (LOG_LEVEL_ERROR <= LOG_VERBOSITY)                          \
+			_log_callback(LOG_TAG_ERROR, LOG_LINE_ERROR, "error", fmt, \
+						  ##__VA_ARGS__);                              \
+	} while (0)
+
+#define warn(fmt, ...)                                               \
+	do {                                                             \
+		if (LOG_LEVEL_WARN <= LOG_VERBOSITY)                         \
+			_log_callback(LOG_TAG_WARN, LOG_LINE_WARN, "warn ", fmt, \
+						  ##__VA_ARGS__);                            \
+	} while (0)
+
+#define info(fmt, ...)                                               \
+	do {                                                             \
+		if (LOG_LEVEL_INFO <= LOG_VERBOSITY)                         \
+			_log_callback(LOG_TAG_INFO, LOG_LINE_INFO, "info ", fmt, \
+						  ##__VA_ARGS__);                            \
+	} while (0)
+
+#define debug(fmt, ...)                                                \
+	do {                                                               \
+		if (LOG_LEVEL_DEBUG <= LOG_VERBOSITY)                          \
+			_log_callback(LOG_TAG_DEBUG, LOG_LINE_DEBUG, "debug", fmt, \
+						  ##__VA_ARGS__);                              \
+	} while (0)
+
+#define trace(fmt, ...)                                                \
+	do {                                                               \
+		if (LOG_LEVEL_TRACE <= LOG_VERBOSITY)                          \
+			_log_callback(LOG_TAG_TRACE, LOG_LINE_TRACE, "trace", fmt, \
+						  ##__VA_ARGS__);                              \
+	} while (0)
+
+#define test(fmt, ...)                                              \
+	do {                                                            \
+		if (LOG_LEVEL_TEST <= LOG_VERBOSITY)                        \
+			_log_callback(LOG_TAG_TEST, LOG_LINE_TEST, "test", fmt, \
+						  ##__VA_ARGS__);                           \
+	} while (0)
+
+#define success(fmt, ...)                                                  \
 	do {                                                                   \
-		if (LOG_LEVEL_CRITICAL <= LOG_VERBOSITY)                           \
-			_log_callback(LOG_COLOR_CRITICAL, "crit", fmt, ##__VA_ARGS__); \
-	} while (0)
-
-#define error(fmt, ...)                                                  \
-	do {                                                                 \
-		if (LOG_LEVEL_ERROR <= LOG_VERBOSITY)                            \
-			_log_callback(LOG_COLOR_ERROR, "error", fmt, ##__VA_ARGS__); \
-	} while (0)
-
-#define warn(fmt, ...)                                                 \
-	do {                                                               \
-		if (LOG_LEVEL_WARN <= LOG_VERBOSITY)                           \
-			_log_callback(LOG_COLOR_WARN, "warn", fmt, ##__VA_ARGS__); \
-	} while (0)
-
-#define info(fmt, ...)                                                 \
-	do {                                                               \
-		if (LOG_LEVEL_INFO <= LOG_VERBOSITY)                           \
-			_log_callback(LOG_COLOR_INFO, "info", fmt, ##__VA_ARGS__); \
-	} while (0)
-
-#if DEBUG
-#define debug(fmt, ...)                                                  \
-	do {                                                                 \
-		if (LOG_LEVEL_DEBUG <= LOG_VERBOSITY)                            \
-			_log_callback(LOG_COLOR_DEBUG, "debug", fmt, ##__VA_ARGS__); \
-	} while (0)
-
-#define trace(fmt, ...)                                                  \
-	do {                                                                 \
-		if (LOG_LEVEL_TRACE <= LOG_VERBOSITY)                            \
-			_log_callback(LOG_COLOR_TRACE, "trace", fmt, ##__VA_ARGS__); \
-	} while (0)
-#else
-#define debug(fmt, ...)
-#define trace(fmt, ...)
-#endif
-
-#define test(fmt, ...)                                                 \
-	do {                                                               \
-		if (LOG_LEVEL_TEST <= LOG_VERBOSITY)                           \
-			_log_callback(LOG_COLOR_TEST, "test", fmt, ##__VA_ARGS__); \
-	} while (0)
-
-#define success(fmt, ...)                                               \
-	do {                                                                \
-		if (LOG_LEVEL_INFO <= LOG_VERBOSITY)                            \
-			_log_callback(LOG_COLOR_SUCCESS, "ok", fmt, ##__VA_ARGS__); \
+		if (LOG_LEVEL_INFO <= LOG_VERBOSITY)                               \
+			_log_callback(LOG_TAG_SUCCESS, LOG_LINE_SUCCESS, "ok   ", fmt, \
+						  ##__VA_ARGS__);                                  \
 	} while (0)
 
 static inline __attribute__((

@@ -94,5 +94,5 @@ void acpi_hpet_init()
 	//    freq /= 1000;
 	//}
 
-	info("Enabled HPET with frequency of %uHz\n", freq);
+	success("Enabled HPET with frequency of %uHz\n", freq);
 }

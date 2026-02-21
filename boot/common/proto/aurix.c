@@ -37,7 +37,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define AURIX_STACK_SIZE 16 * 1024
+#define AURIX_STACK_SIZE 8 * 1024
 
 void aurix_load(char *kernel_path);
 
@@ -329,8 +329,7 @@ void aurix_load(char *kernel_path)
 	map_pages(pm, (uintptr_t)pm, (uintptr_t)pm, PAGE_SIZE,
 			  VMM_PRESENT | VMM_WRITABLE);
 
-	void *stack = mem_alloc(
-		AURIX_STACK_SIZE); // 16 KiB stack should be well more than enough
+	void *stack = mem_alloc(AURIX_STACK_SIZE);
 	if (!stack) {
 		error("aurix_load(): Failed to allocate stack! Halting...\n");
 		while (1)

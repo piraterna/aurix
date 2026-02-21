@@ -46,6 +46,34 @@
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
 
+// ======= Flanterm theme, just for looks (kernel log, pre-TTY) =======
+static uint32_t ft_ansi_colours[8] = {
+	0x00101114, /* black */
+	0x008b2e2e, /* red */
+	0x003a7d44, /* green */
+	0x008b6f1f, /* yellow */
+	0x002f4f7f, /* blue */
+	0x006a3f7a, /* magenta */
+	0x002f6f73, /* cyan */
+	0x00c5c8c6, /* white */
+};
+
+static uint32_t ft_ansi_bright_colours[8] = {
+	0x00202024, /* bright black (dark gray) */
+	0x00b84a4a, /* bright red */
+	0x004fae66, /* bright green */
+	0x00b8952e, /* bright yellow */
+	0x004c78c4, /* bright blue */
+	0x008c5fbf, /* bright magenta */
+	0x004fb3b8, /* bright cyan */
+	0x00e6e6e6, /* bright white */
+};
+static uint32_t ft_default_bg = 0x000d0f12; /* near-black */
+static uint32_t ft_default_fg = 0x00d0d0d0; /* neutral light gray */
+static uint32_t ft_default_bg_bright = 0x0015151a; /* slightly lifted */
+static uint32_t ft_default_fg_bright = 0x00ffffff; /* clean white */
+// ====================================================================
+
 uintptr_t hhdm_offset = 0;
 
 const char *aurix_banner =
@@ -82,14 +110,14 @@ void _start(struct aurix_parameters *params)
 	ft_ctx = flanterm_fb_init(
 		NULL, NULL, (uint32_t *)boot_params->framebuffer.addr,
 		boot_params->framebuffer.width, boot_params->framebuffer.height,
-		boot_params->framebuffer.pitch, 8, 16, 8, 8, 8, 0, NULL, NULL, NULL,
-		NULL, NULL, NULL, NULL, NULL, 0, 0, 1, 0, 0, 0);
+		boot_params->framebuffer.pitch, 8, 16, 8, 8, 8, 0, NULL,
+		ft_ansi_colours, ft_ansi_bright_colours, &ft_default_bg, &ft_default_fg,
+		&ft_default_bg_bright, &ft_default_fg_bright, NULL, 0, 0, 1, 0, 0, 0);
 
 	if (!ft_ctx)
 		error("Failed to init flanterm\n");
 
 	kprintf("%s\n", aurix_banner);
-	info("Hello from AurixOS!\n");
 
 	cpu_early_init();
 
@@ -130,7 +158,7 @@ void _start(struct aurix_parameters *params)
 	platform_timekeeper_init();
 
 	for (uint32_t m = 0; m < boot_params->module_count; m++) {
-		info("Loading module '%s'...\n", boot_params->modules[m].filename);
+		trace("Loading module '%s'...\n", boot_params->modules[m].filename);
 		if (!module_load(boot_params->modules[m].addr,
 						 boot_params->modules[m].size)) {
 			kpanicf(NULL, "Module '%s' failed to load",
@@ -138,20 +166,16 @@ void _start(struct aurix_parameters *params)
 		}
 	}
 
-	info("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
-		 time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),
-		 time_get_second());
+	debug("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
+		  time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),
+		  time_get_second());
 
 	pmm_reclaim_bootparms();
 	{
 		uint64_t ms = log_uptime_ms();
-		info("Kernel boot complete in %u.%03u seconds\n",
-			 (uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
+		success("Kernel boot complete in %u.%03u seconds\n",
+				(uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
 	}
-
-	kprintf("==================================================\n");
-	kprintf("%s\n", aurix_banner);
-	kprintf("==================================================\n\n");
 
 	sched_enable();
 

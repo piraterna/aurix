@@ -169,10 +169,10 @@ bool module_load(void *addr, uint32_t size)
 				info("  Author: %s\n", author);
 			if (mi.mod_init) {
 				init_vaddr = (uintptr_t)mi.mod_init;
-				info("  Init function: %p\n", mi.mod_init);
+				trace("  Init function: %p\n", mi.mod_init);
 			}
 			if (mi.mod_exit)
-				info("  Exit function: %p\n", mi.mod_exit);
+				trace("  Exit function: %p\n", mi.mod_exit);
 		} else {
 			warn("'modinfo' not in any loadable segment\n");
 		}
@@ -183,7 +183,7 @@ bool module_load(void *addr, uint32_t size)
 	axapi_patch_imports(mod, virt_data);
 	thread_create(mod, (void (*)())(void *)init_vaddr);
 
-	debug("Module loaded at physical 0x%lx, entry point 0x%lx\n", loaded_at,
+	trace("Module loaded at physical 0x%lx, entry point 0x%lx\n", loaded_at,
 		  entry_point);
 
 	return true;

@@ -108,8 +108,8 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 	cpu->thread_count++;
 	thread->cpu = cpu;
 
-	debug("Created TID=%u PID=%u CPU=%u\n", thread->tid, thread->process->pid,
-		  cpu->id);
+	trace("Added TID=%u (owner pid: %u) to -> CPU%u\n", thread->tid,
+		  thread->process->pid, cpu->id);
 
 	irqlock_release(&cpu->sched_lock);
 
@@ -251,7 +251,7 @@ void sched_init(void)
 		cpu->thread_count = 0;
 	}
 
-	debug("Initialized on CPU=%u\n", cpu->id);
+	trace("Scheduler initialized on CPU=%u\n", cpu->id);
 }
 
 pcb *proc_create(void)
@@ -288,7 +288,7 @@ pcb *proc_create(void)
 	map_pages(proc->pm, data_start, data_start - kvirt + kphys,
 			  data_end - data_start, VMM_PRESENT | VMM_WRITABLE | VMM_NX);
 
-	debug("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
+	trace("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
 
 	return proc;
 }
@@ -309,7 +309,7 @@ void proc_destroy(pcb *proc)
 	destroy_pagemap(proc->pm);
 	kfree(proc);
 
-	debug("Destroyed process, PID=%u\n", proc->pid);
+	trace("Destroyed process, PID=%u\n", proc->pid);
 }
 
 tcb *thread_create(pcb *proc, void (*entry)(void))

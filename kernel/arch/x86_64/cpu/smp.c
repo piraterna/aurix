@@ -107,7 +107,7 @@ void smp_init()
 
 	atomic_init(&cpu_ready, false);
 
-	info("SMP trampoline initialized, starting up other cores...\n");
+	debug("SMP trampoline initialized, starting up other cores...\n");
 
 	// wake up! grab a brush and put a little makeup!
 	for (size_t i = 0; i < lapic_count; i++) {

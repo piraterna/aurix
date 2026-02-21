@@ -101,10 +101,6 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		if (!(ph[i].p_flags & PF_X))
 			flags |= VMM_NX;
 
-		debug("phys=0x%llx, virt=0x%llx, psize=%lu, msize=%lu\n",
-			  (uint64_t)(seg_phys + seg_off), ph[i].p_vaddr, ph[i].p_filesz,
-			  ph[i].p_memsz);
-
 		map_pages(pagemap, aligned_vaddr, seg_phys, seg_size, flags);
 		memcpy((void *)PHYS_TO_VIRT(seg_phys + seg_off), data + ph[i].p_offset,
 			   ph[i].p_filesz);
@@ -115,7 +111,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		}
 	}
 
-	info("ELF loaded successfully, entry point: 0x%llx\n", header->e_entry);
+	debug("ELF loaded successfully, entry point: 0x%llx\n", header->e_entry);
 	return (uintptr_t)header->e_entry;
 }
 

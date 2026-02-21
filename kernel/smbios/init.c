@@ -57,7 +57,7 @@ void smbios_init(void *addr)
 
 	map_page(NULL, PHYS_TO_VIRT(addr), (uintptr_t)addr, VMM_PRESENT | VMM_NX);
 
-	info("SMBIOS Entry Point: 0x%llx\n", addr);
+	trace("SMBIOS Entry Point: 0x%llx\n", addr);
 
 	char *ep_ptr = (char *)PHYS_TO_VIRT(addr);
 	if (strncmp(ep_ptr, "_SM3_", 5) == 0) {

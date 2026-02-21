@@ -42,7 +42,7 @@ void devfs_init(void)
 {
 	irqlock_init(&devfs_lock);
 	devfs_list = NULL;
-	debug("init\n");
+	debug("devfs (testing) init\n");
 }
 
 static struct devfs_node *devfs_find(const char *name)

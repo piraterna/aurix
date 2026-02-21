@@ -68,7 +68,7 @@ void driver_core_init(void)
 {
 	irqlock_init(&dev_lock);
 	irqlock_init(&drv_lock);
-	debug("core init\n");
+	debug("driver core init\n");
 }
 
 int device_register(struct device *dev)
@@ -113,7 +113,7 @@ int device_register(struct device *dev)
 	dev_list = n;
 	irqlock_release(&dev_lock);
 
-	debug("+ %s class=%s\n", n->dev.name,
+	debug("device: + %s class=%s\n", n->dev.name,
 		  n->dev.class_name ? n->dev.class_name : "(none)");
 
 	return 0;
@@ -163,7 +163,7 @@ int driver_register(struct driver *drv)
 	drv_list = n;
 	irqlock_release(&drv_lock);
 
-	debug("+ %s class=%s\n", n->drv.name,
+	debug("driver: + %s class=%s\n", n->drv.name,
 		  n->drv.class_name ? n->drv.class_name : "(none)");
 
 	return 0;
@@ -204,14 +204,13 @@ int driver_bind_all(void)
 			if (rc == 0) {
 				dev->bound_driver = drv;
 				d->bound_count++;
-				debug("bind %s -> %s (class=%s)\n", drv->name, dev->name,
-					  dev->class_name ? dev->class_name : "(none)");
+				success("bind %s -> %s (class=%s)\n", drv->name, dev->name,
+						dev->class_name ? dev->class_name : "(none)");
 				bound++;
 			}
 		}
 	}
 
-	success("bound %d pair(s)\n", bound);
 	return bound;
 }
 
