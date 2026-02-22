@@ -21,6 +21,11 @@
 #include <stdint.h>
 #include <aurix.h>
 
+#if defined(__x86_64__)
+#include <acpi/hpet.h>
+#include <platform/time/pit.h>
+#endif
+
 struct timekeeper_funcs tk;
 
 void time_register(struct timekeeper_funcs funcs)
@@ -118,4 +123,47 @@ uint8_t time_get_weekday()
 		return 0xFF;
 
 	return tk.get_weekday();
+}
+
+uint64_t get_ms(void)
+{
+#if defined(__x86_64__)
+	static uint64_t hpet_base_ns = 0;
+	static int hpet_base_set = 0;
+
+	uint64_t hpet_ns = hpet_get_ns();
+	if (hpet_ns) {
+		if (!hpet_base_set) {
+			uint64_t cur_ms = 0;
+			if (pit_is_initialized()) {
+				uint16_t hz = pit_get_hz();
+				if (hz)
+					cur_ms = (pit_get_ticks() * 1000ull) / (uint64_t)hz;
+			}
+			uint64_t cur_ns = cur_ms * 1000000ull;
+			hpet_base_ns = (hpet_ns > cur_ns) ? (hpet_ns - cur_ns) : hpet_ns;
+			hpet_base_set = 1;
+		}
+		return (hpet_ns - hpet_base_ns) / 1000000ull;
+	}
+
+	if (pit_is_initialized()) {
+		uint16_t hz = pit_get_hz();
+		if (!hz)
+			return 0;
+		return (pit_get_ticks() * 1000ull) / (uint64_t)hz;
+	}
+
+	return 0;
+#else
+	return 0;
+#endif
+}
+
+void sleep_ms(uint64_t ms)
+{
+	uint64_t start = get_ms();
+	while (get_ms() - start < ms) {
+		__asm__ volatile("pause");
+	}
 }

@@ -57,4 +57,7 @@ uint8_t time_get_month(void);
 uint16_t time_get_year(void);
 uint8_t time_get_weekday(void);
 
+uint64_t get_ms(void);
+void sleep_ms(uint64_t ms);
+
 #endif /* _TIME_TIME_H */

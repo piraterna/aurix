@@ -92,7 +92,7 @@
 #define LOG_LINE_SUCCESS ""
 #endif
 
-uint64_t get_ms(void);
+#include <time/time.h>
 
 #define _log_callback(tag_style, line_style, level, fmt, ...)                  \
 	do {                                                                       \
