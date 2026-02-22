@@ -86,10 +86,9 @@ const char *aurix_banner =
 
 void hello(void)
 {
-	kprintf("hello from a thread %d!\n", thread_current()->tid);
+	kprintf("hello from a thread %d! running on CPU=%d\n",
+			thread_current()->tid, cpu_get_current()->id);
 	thread_exit(thread_current());
-	for (;;)
-		;
 }
 
 void _start(struct aurix_parameters *params)
@@ -149,8 +148,8 @@ void _start(struct aurix_parameters *params)
 #warning No clock implemented, the scheduler will not fire!
 #endif
 
-	sched_init();
 	cpu_init_mp();
+	sched_init();
 
 	platform_timekeeper_init();
 
@@ -173,6 +172,12 @@ void _start(struct aurix_parameters *params)
 		success("Kernel boot complete in %u.%03u seconds\n",
 				(uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
 	}
+
+	pcb *t = proc_create();
+	thread_create(t, hello);
+
+	kprintf(
+		"┌─────────────────────┐\n│AurixOS (c) 2024-2025│\n└─────────────────────┘\n");
 
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();

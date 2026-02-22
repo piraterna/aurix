@@ -61,7 +61,7 @@ extern char _end_data[];
 
 static struct cpu *sched_pick_best_cpu(void)
 {
-	if (cpu_count == 0)
+	if (cpu_count == 1)
 		return cpu_get_current();
 
 	static atomic_uint rr = ATOMIC_VAR_INIT(0);
@@ -421,7 +421,7 @@ void thread_exit(tcb *thread)
 
 	struct cpu *cpu = thread->cpu;
 
-	info("Thread TID=%u exiting\n", thread->tid);
+	debug("Thread TID=%u exiting\n", thread->tid);
 
 	if (cpu)
 		cpu_remove_thread(cpu, thread);
