@@ -86,8 +86,9 @@ const char *aurix_banner =
 
 void hello(void)
 {
-	kprintf("hello from a thread %d! running on CPU=%d\n",
-			thread_current()->tid, cpu_get_current()->id);
+	kprintf("hello from a kernel proccess. (tid=%d, pid=%d, cpu=%d)\n",
+			thread_current()->tid, thread_current()->process->pid,
+			cpu_get_current()->id);
 	thread_exit(thread_current());
 }
 
