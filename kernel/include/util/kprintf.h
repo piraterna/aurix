@@ -24,6 +24,7 @@
 #define _UTIL_PRINT_H
 
 int kprintf(const char *fmt, ...);
+int serial_kprintf(const char *fmt, ...);
 
 void _log_force_unlock(void);
 

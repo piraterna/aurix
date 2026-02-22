@@ -98,13 +98,15 @@ int mod_init()
 			;
 	}
 
-	while (1) {
-		if (devfs_write) {
-			for (size_t i = 0; i < active_count; i++) {
-				devfs_write(active_ports[i], msg, msg_len);
-			}
+	if (devfs_write) {
+		for (size_t i = 0; i < active_count; i++) {
+			devfs_write(active_ports[i], msg, msg_len);
 		}
 	}
+
+	// for now just hang
+	for (;;)
+		;
 
 	return 0;
 }

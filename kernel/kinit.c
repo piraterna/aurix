@@ -176,9 +176,6 @@ void _start(struct aurix_parameters *params)
 	pcb *t = proc_create();
 	thread_create(t, hello);
 
-	kprintf(
-		"┌─────────────────────┐\n│AurixOS (c) 2024-2025│\n└─────────────────────┘\n");
-
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();
 

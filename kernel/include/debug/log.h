@@ -42,6 +42,17 @@
 #ifndef LOG_VERBOSITY
 #define LOG_VERBOSITY LOG_LEVEL_ALL
 #endif
+
+#ifndef LOG_OUTPUT_SCREEN
+#define LOG_OUTPUT_SCREEN 0
+#endif
+
+#if LOG_OUTPUT_SCREEN == 1
+#define LOG_PRINTF kprintf
+#else
+#define LOG_PRINTF serial_kprintf
+#endif
+
 /* end todo */
 
 #if LOG_COLOR
@@ -94,14 +105,14 @@
 
 #include <time/time.h>
 
-#define _log_callback(tag_style, line_style, level, fmt, ...)                  \
-	do {                                                                       \
-		uint64_t __ms = get_ms();                                              \
-		kprintf(LOG_STYLE_PREFIX "[%u.%03u] " LOG_STYLE_RESET tag_style        \
-								 " %s " LOG_STYLE_RESET                        \
-								 " " line_style fmt LOG_STYLE_RESET,           \
-				(uint32_t)(__ms / 1000ull), (uint32_t)(__ms % 1000ull), level, \
-				##__VA_ARGS__);                                                \
+#define _log_callback(tag_style, line_style, level, fmt, ...)              \
+	do {                                                                   \
+		uint64_t __ms = get_ms();                                          \
+		LOG_PRINTF(LOG_STYLE_PREFIX "[%u.%03u] " LOG_STYLE_RESET tag_style \
+									" %s " LOG_STYLE_RESET                 \
+									" " line_style fmt LOG_STYLE_RESET,    \
+				   (uint32_t)(__ms / 1000ull), (uint32_t)(__ms % 1000ull), \
+				   level, ##__VA_ARGS__);                                  \
 	} while (0)
 
 #define critical(fmt, ...)                                                   \

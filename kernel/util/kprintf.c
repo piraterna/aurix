@@ -77,6 +77,29 @@ int kprintf(const char *fmt, ...)
 	return length;
 }
 
+int serial_kprintf(const char *fmt, ...)
+{
+	uint8_t irq_state = save_if();
+	cpu_disable_interrupts();
+
+	spinlock_acquire(&log_lock);
+
+	va_list args;
+	va_start(args, fmt);
+	char buffer[1024];
+	int length = npf_vsnprintf(buffer, sizeof(buffer), fmt, args);
+
+	if (length >= 0 && length < (int)sizeof(buffer)) {
+		serial_sendstr(buffer);
+	}
+
+	va_end(args);
+
+	spinlock_release(&log_lock);
+	restore_if(irq_state);
+	return length;
+}
+
 void _log_force_unlock()
 {
 	spinlock_release(&log_lock);
