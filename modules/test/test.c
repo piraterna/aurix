@@ -49,9 +49,14 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 int mod_init()
 {
 	static const char *possible_ports[] = {
-		"/dev/ttyS0", "/dev/ttyS1", "/dev/ttyS2", "/dev/ttyS3",
-		"/dev/ttyS4", "/dev/ttyS5", "/dev/ttyS6", "/dev/ttyS7",
+		"/dev/raw/serial/com1", "/dev/raw/serial/com2", "/dev/raw/serial/com3",
+		"/dev/raw/serial/com4", "/dev/raw/serial/com5", "/dev/raw/serial/com6",
+		"/dev/raw/serial/com7", "/dev/raw/serial/com8",
 	};
+
+	const char *active_ports[8];
+	size_t active_count = 0;
+
 	const char *msg = "hello from uart test module\r\n";
 	size_t msg_len = cstrlen(msg);
 
@@ -60,35 +65,41 @@ int mod_init()
 		for (;;)
 			sched_yield();
 	}
+	kprintf("test-module: waiting for driver serial16550\n");
 
-	for (;;) {
-		if (!ax_driver_exists("serial16550")) {
-			kprintf(
-				"test-module: waiting for driver serial16550 to register\n");
-			while (!ax_driver_exists("serial16550"))
-				sched_yield();
+	while (!ax_driver_exists("serial16550") ||
+		   !ax_driver_is_ready("serial16550")) {
+		sched_yield();
+	}
+
+	kprintf("test-module: serial16550 driver ready\n");
+
+	if (devfs_exists) {
+		for (size_t i = 0;
+			 i < sizeof(possible_ports) / sizeof(possible_ports[0]); i++) {
+			if (devfs_exists(possible_ports[i])) {
+				active_ports[active_count++] = possible_ports[i];
+				kprintf("test-module: detected %s\n", possible_ports[i]);
+			}
 		}
-		if (!ax_driver_is_ready("serial16550")) {
-			kprintf("test-module: waiting for driver serial16550 to bind\n");
-			while (!ax_driver_is_ready("serial16550"))
-				sched_yield();
-		}
-		break;
+	}
+
+	if (active_count == 0) {
+		kprintf("test-module: no serial ports found\n");
+		for (;;)
+			sched_yield();
 	}
 
 	while (1) {
-		if (devfs_exists && devfs_write) {
-			for (size_t i = 0;
-				 i < (sizeof(possible_ports) / sizeof(possible_ports[0]));
-				 i++) {
-				if (!devfs_exists(possible_ports[i]))
-					continue;
-				devfs_write(possible_ports[i], msg, msg_len);
+		if (devfs_write) {
+			for (size_t i = 0; i < active_count; i++) {
+				devfs_write(active_ports[i], msg, msg_len);
 			}
 		}
 
 		sched_yield();
 	}
+
 	return 0;
 }
 

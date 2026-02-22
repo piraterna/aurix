@@ -39,15 +39,15 @@
 #define COM7 0x5E8
 #define COM8 0x4E8
 
-#define SERIAL_PORTS(X)      \
-	X(1, COM1, "/dev/ttyS0") \
-	X(2, COM2, "/dev/ttyS1") \
-	X(3, COM3, "/dev/ttyS2") \
-	X(4, COM4, "/dev/ttyS3") \
-	X(5, COM5, "/dev/ttyS4") \
-	X(6, COM6, "/dev/ttyS5") \
-	X(7, COM7, "/dev/ttyS6") \
-	X(8, COM8, "/dev/ttyS7")
+#define SERIAL_PORTS(X)                \
+	X(1, COM1, "/dev/raw/serial/com1") \
+	X(2, COM2, "/dev/raw/serial/com2") \
+	X(3, COM3, "/dev/raw/serial/com3") \
+	X(4, COM4, "/dev/raw/serial/com4") \
+	X(5, COM5, "/dev/raw/serial/com5") \
+	X(6, COM6, "/dev/raw/serial/com6") \
+	X(7, COM7, "/dev/raw/serial/com7") \
+	X(8, COM8, "/dev/raw/serial/com8")
 
 __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.name = "Serial16550",
