@@ -32,6 +32,12 @@ struct driver {
 	driver_remove_fn remove;
 };
 
+enum ax_driver_status {
+	AX_DRIVER_NOT_FOUND = 0,
+	AX_DRIVER_NOT_READY,
+	AX_DRIVER_READY
+};
+
 void driver_core_init(void);
 int driver_register(struct driver *drv);
 int driver_bind_all(void);

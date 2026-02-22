@@ -172,7 +172,7 @@ void _start(struct aurix_parameters *params)
 
 	pmm_reclaim_bootparms();
 	{
-		uint64_t ms = log_uptime_ms();
+		uint64_t ms = get_ms();
 		success("Kernel boot complete in %u.%03u seconds\n",
 				(uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
 	}

@@ -171,7 +171,8 @@ int driver_register(struct driver *drv)
 
 int driver_bind_all(void)
 {
-	int bound = 0;
+	int total_bound = 0;
+
 	debug("binding devices\n");
 
 	irqlock_acquire(&drv_lock);
@@ -180,6 +181,7 @@ int driver_bind_all(void)
 
 	for (; d; d = d->next) {
 		struct driver *drv = &d->drv;
+		int driver_bound = 0;
 
 		irqlock_acquire(&dev_lock);
 		struct dev_node *n = dev_list;
@@ -187,31 +189,43 @@ int driver_bind_all(void)
 
 		for (; n; n = n->next) {
 			struct device *dev = &n->dev;
+
 			if (dev->bound_driver)
 				continue;
+
 			if (!class_match(drv->class_name, dev->class_name))
 				continue;
 
 			uint8_t irq_state = save_if();
 			cpu_disable_interrupts();
+
 			uint64_t prev_cr3 = read_cr3();
 			if (d->owner_cr3)
 				write_cr3(d->owner_cr3);
+
 			int rc = drv->probe(dev);
+
 			write_cr3(prev_cr3);
 			restore_if(irq_state);
 
 			if (rc == 0) {
 				dev->bound_driver = drv;
 				d->bound_count++;
+				driver_bound++;
+				total_bound++;
+
 				success("bind %s -> %s (class=%s)\n", drv->name, dev->name,
 						dev->class_name ? dev->class_name : "(none)");
-				bound++;
 			}
+		}
+
+		if (driver_bound == 0) {
+			warn("driver %s: no devices bound (class=%s)\n", drv->name,
+				 drv->class_name ? drv->class_name : "(none)");
 		}
 	}
 
-	return bound;
+	return total_bound;
 }
 
 int driver_is_ready(const char *driver_name)
@@ -248,14 +262,13 @@ int driver_exists(const char *driver_name)
 	return ok;
 }
 
-int ax_driver_exists(const char *driver_name)
+enum ax_driver_status ax_driver_poll(const char *driver_name)
 {
-	return driver_exists(driver_name);
-}
-
-int ax_driver_is_ready(const char *driver_name)
-{
-	return driver_is_ready(driver_name);
+	if (!driver_exists(driver_name))
+		return AX_DRIVER_NOT_FOUND;
+	if (!driver_is_ready(driver_name))
+		return AX_DRIVER_NOT_READY;
+	return AX_DRIVER_READY;
 }
 
 int ax_device_register(struct device *dev)

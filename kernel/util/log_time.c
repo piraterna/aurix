@@ -26,7 +26,7 @@
 #include <platform/time/pit.h>
 #endif
 
-uint64_t log_uptime_ms(void)
+uint64_t get_ms(void)
 {
 #if defined(__x86_64__)
 	/* Prefer HPET (runs even with IRQs off), fall back to PIT ticks. */

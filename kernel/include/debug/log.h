@@ -92,11 +92,11 @@
 #define LOG_LINE_SUCCESS ""
 #endif
 
-uint64_t log_uptime_ms(void);
+uint64_t get_ms(void);
 
 #define _log_callback(tag_style, line_style, level, fmt, ...)                  \
 	do {                                                                       \
-		uint64_t __ms = log_uptime_ms();                                       \
+		uint64_t __ms = get_ms();                                              \
 		kprintf(LOG_STYLE_PREFIX "[%u.%03u] " LOG_STYLE_RESET tag_style        \
 								 " %s " LOG_STYLE_RESET                        \
 								 " " line_style fmt LOG_STYLE_RESET,           \

@@ -23,6 +23,7 @@
 #include <aurix/axapi.h>
 #include <sys/aurix/mod.h>
 #include <test.h>
+#include <dev/driver.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -57,18 +58,26 @@ int mod_init()
 	const char *active_ports[8];
 	size_t active_count = 0;
 
-	const char *msg = "hello from uart test module\r\n";
+	const char *msg = "Hello serial!\r\n";
 	size_t msg_len = cstrlen(msg);
 
-	if (!ax_driver_exists || !ax_driver_is_ready) {
-		kprintf("test-module: missing AXAPI driver poll funcs\n");
+	if (!ax_driver_poll) {
+		kprintf("test-module: missing AXAPI driver poll func\n");
 		for (;;)
 			sched_yield();
 	}
+
 	kprintf("test-module: waiting for driver serial16550\n");
 
-	while (!ax_driver_exists("serial16550") ||
-		   !ax_driver_is_ready("serial16550")) {
+	uint64_t start_time = get_ms();
+	uint64_t timeout_ms = 5000;
+
+	while (ax_driver_poll("serial16550") != AX_DRIVER_READY) {
+		if (get_ms() - start_time > timeout_ms) {
+			kprintf("test-module: timeout waiting for serial16550\n");
+			for (;;)
+				sched_yield();
+		}
 		sched_yield();
 	}
 
