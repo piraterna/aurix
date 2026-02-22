@@ -215,7 +215,7 @@ int mod_init(void)
 	ax_driver_bind_all();
 
 	for (;;)
-		sched_yield();
+		;
 }
 
 void mod_exit(void)

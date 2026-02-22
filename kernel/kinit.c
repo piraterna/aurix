@@ -177,6 +177,7 @@ void _start(struct aurix_parameters *params)
 				(uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
 	}
 
+	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();
 
 	for (;;) {

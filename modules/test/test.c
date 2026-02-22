@@ -64,7 +64,7 @@ int mod_init()
 	if (!ax_driver_poll) {
 		kprintf("test-module: missing AXAPI driver poll func\n");
 		for (;;)
-			sched_yield();
+			;
 	}
 
 	kprintf("test-module: waiting for driver serial16550\n");
@@ -76,9 +76,8 @@ int mod_init()
 		if (get_ms() - start_time > timeout_ms) {
 			kprintf("test-module: timeout waiting for serial16550\n");
 			for (;;)
-				sched_yield();
+				;
 		}
-		sched_yield();
 	}
 
 	kprintf("test-module: serial16550 driver ready\n");
@@ -96,7 +95,7 @@ int mod_init()
 	if (active_count == 0) {
 		kprintf("test-module: no serial ports found\n");
 		for (;;)
-			sched_yield();
+			;
 	}
 
 	while (1) {
@@ -105,8 +104,6 @@ int mod_init()
 				devfs_write(active_ports[i], msg, msg_len);
 			}
 		}
-
-		sched_yield();
 	}
 
 	return 0;

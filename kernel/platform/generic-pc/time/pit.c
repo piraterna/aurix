@@ -70,3 +70,33 @@ uint64_t pit_get_ticks(void)
 {
 	return pit_ticks;
 }
+
+void pit_reload(void)
+{
+	cpu_disable_interrupts();
+	uint16_t div = PIT_CLOCK / pit_hz;
+	outb(PIT_COMMAND, 0x36);
+	outb(PIT_COUNTER0, div & 0xFF);
+	outb(PIT_COUNTER0, div >> 8);
+	cpu_enable_interrupts();
+}
+
+void pit_set_freq(uint16_t freq)
+{
+	if (freq == 0)
+		return;
+	pit_hz = freq;
+	pit_ticks = 0;
+	pit_reload();
+	debug("PIT frequency set to %uHz\n", freq);
+}
+
+void pit_set_div(uint16_t div)
+{
+	if (div == 0)
+		return;
+	pit_hz = PIT_CLOCK / div;
+	pit_ticks = 0;
+	pit_reload();
+	debug("PIT divisor set to %u (%uHz)\n", div, pit_hz);
+}
