@@ -75,6 +75,7 @@ static uint32_t ft_default_fg_bright = 0x00ffffff; /* clean white */
 // ====================================================================
 
 uintptr_t hhdm_offset = 0;
+vctx_t *kvctx = NULL;
 
 const char *aurix_banner =
 	"    _              _       ___  ____\n"
@@ -90,10 +91,6 @@ void hello(void)
 	for (;;)
 		;
 }
-
-// FIXME: local variables inside this function are behaving weird
-vctx_t *kvctx;
-int i;
 
 void _start(struct aurix_parameters *params)
 {
