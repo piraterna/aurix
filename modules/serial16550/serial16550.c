@@ -247,6 +247,7 @@ SERIAL_PORTS(SERIAL_DEFINE_DEVICE)
 
 int mod_init(void)
 {
+	kprintf("serial16550: hello from serial module!\n");
 #define SERIAL_REGISTER_DEVICE(n, basev, path) \
 	ax_device_register(&serial_device_##n);
 	SERIAL_PORTS(SERIAL_REGISTER_DEVICE)
