@@ -138,6 +138,7 @@ int driver_register(struct driver *drv)
 	n->drv.class_name = kstrdup(drv->class_name);
 	n->drv.probe = drv->probe;
 	n->drv.remove = drv->remove;
+	n->drv.poll = drv->poll;
 	n->owner_cr3 = read_cr3();
 	if (!n->drv.name) {
 		error("name OOM\n");
@@ -228,47 +229,33 @@ int driver_bind_all(void)
 	return total_bound;
 }
 
-int driver_is_ready(const char *driver_name)
+int ax_driver_poll(const char *driver_name)
 {
 	if (!driver_name)
-		return 0;
+		return -1;
 
-	int ok = 0;
+	int status = -1;
 	irqlock_acquire(&drv_lock);
 	for (struct drv_node *n = drv_list; n; n = n->next) {
 		if (n->drv.name && strcmp(n->drv.name, driver_name) == 0) {
-			ok = (n->bound_count > 0);
+			if (n->drv.poll) {
+				uint8_t irq_state = save_if();
+				cpu_disable_interrupts();
+
+				uint64_t prev_cr3 = read_cr3();
+				if (n->owner_cr3)
+					write_cr3(n->owner_cr3);
+
+				status = n->drv.poll();
+
+				write_cr3(prev_cr3);
+				restore_if(irq_state);
+			}
 			break;
 		}
 	}
 	irqlock_release(&drv_lock);
-	return ok;
-}
-
-int driver_exists(const char *driver_name)
-{
-	if (!driver_name)
-		return 0;
-
-	int ok = 0;
-	irqlock_acquire(&drv_lock);
-	for (struct drv_node *n = drv_list; n; n = n->next) {
-		if (n->drv.name && strcmp(n->drv.name, driver_name) == 0) {
-			ok = 1;
-			break;
-		}
-	}
-	irqlock_release(&drv_lock);
-	return ok;
-}
-
-enum ax_driver_status ax_driver_poll(const char *driver_name)
-{
-	if (!driver_exists(driver_name))
-		return AX_DRIVER_NOT_FOUND;
-	if (!driver_is_ready(driver_name))
-		return AX_DRIVER_NOT_READY;
-	return AX_DRIVER_READY;
+	return status;
 }
 
 int ax_device_register(struct device *dev)

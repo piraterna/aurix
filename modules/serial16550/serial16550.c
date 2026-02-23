@@ -39,6 +39,13 @@
 #define COM7 0x5E8
 #define COM8 0x4E8
 
+#define LSR_DATA_READY 0x01
+#define LSR_THR_EMPTY 0x20
+#define LSR_TX_EMPTY 0x40
+
+static int active_ports = 0;
+static uint16_t active_bases[8];
+
 #define SERIAL_BASE_PATH "/dev/raw/serial/"
 
 #define SERIAL_PORTS(X)                 \
@@ -124,6 +131,36 @@ static int serial_port_present(uint16_t base)
 	return 1;
 }
 
+int serial16550_poll(void)
+{
+	if (active_ports == 0)
+		return SERIAL16550_NOT_PRESENT;
+
+	int ready = 0;
+
+	for (int i = 0; i < active_ports; i++) {
+		uint16_t base = active_bases[i];
+		uint8_t lsr = ax_inb((uint16_t)(base + 5));
+
+		/* Hardware absent or bus fault */
+		if (lsr == 0xFF)
+			return SERIAL16550_ERROR;
+
+		/* RX available */
+		if (lsr & LSR_DATA_READY)
+			ready = 1;
+
+		/* TX ready */
+		if (lsr & LSR_THR_EMPTY)
+			ready = 1;
+	}
+
+	if (ready)
+		return SERIAL16550_READY;
+
+	return SERIAL16550_NOT_READY;
+}
+
 static int tty_write(void *ctx, const void *buf, size_t len)
 {
 	struct serial_ctx *c = (struct serial_ctx *)ctx;
@@ -184,6 +221,7 @@ static int serial16550_probe(struct device *dev)
 		kfree(c);
 		return -1;
 	}
+	active_bases[active_ports++] = base;
 	return 0;
 }
 
@@ -192,6 +230,7 @@ static struct driver serial16550_driver = {
 	.class_name = "serial",
 	.probe = serial16550_probe,
 	.remove = 0,
+	.poll = serial16550_poll,
 };
 
 #define SERIAL_DEFINE_DEVICE(n, basev, path)   \

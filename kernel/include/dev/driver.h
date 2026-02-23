@@ -20,29 +20,23 @@
 #ifndef _DEV_DRIVER_H
 #define _DEV_DRIVER_H
 
+#include <stdint.h>
 #include <dev/device.h>
 
 typedef int (*driver_probe_fn)(struct device *dev);
 typedef void (*driver_remove_fn)(struct device *dev);
+typedef int (*driver_poll_fn)(void);
 
 struct driver {
 	const char *name;
 	const char *class_name;
 	driver_probe_fn probe;
 	driver_remove_fn remove;
-};
-
-enum ax_driver_status {
-	AX_DRIVER_NOT_FOUND = 0,
-	AX_DRIVER_NOT_READY,
-	AX_DRIVER_READY
+	driver_poll_fn poll;
 };
 
 void driver_core_init(void);
 int driver_register(struct driver *drv);
 int driver_bind_all(void);
-int driver_is_ready(const char *driver_name);
-
-int driver_exists(const char *driver_name);
 
 #endif

@@ -24,6 +24,7 @@
 #include <sys/aurix/mod.h>
 #include <test.h>
 #include <dev/driver.h>
+#include <serial16550.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -72,7 +73,7 @@ int mod_init()
 	uint64_t start_time = get_ms();
 	uint64_t timeout_ms = 5000;
 
-	while (ax_driver_poll("serial16550") != AX_DRIVER_READY) {
+	while (ax_driver_poll("serial16550") != SERIAL16550_READY) {
 		if (get_ms() - start_time > timeout_ms) {
 			kprintf("test-module: timeout waiting for serial16550\n");
 			for (;;)

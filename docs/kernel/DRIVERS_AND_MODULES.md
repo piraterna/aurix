@@ -27,6 +27,7 @@ Source:
     - `class_name`: class this driver can handle (string)
     - `probe(dev)`: called to attempt binding
     - `remove(dev)`: optional (not used by the core yet)
+    - `poll()`: driver-specific status polling function (required)
 
 ### Registration and binding
 
@@ -78,16 +79,34 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 
 If `modinfo` is present, the kernel uses `mod_init` as the module entrypoint.
 
-### Polling for driver readiness
+### Polling for driver status
 
-Modules start as soon as they're loaded. If a module wants to wait for a driver to show up or finish binding devices, it should poll via AXAPI:
+Modules can poll driver status using `ax_driver_poll()`:
 
 ```c
-while (!ax_driver_exists("serial16550"))
-  sched_yield();
-while (!ax_driver_is_ready("serial16550"))
-  sched_yield();
+#include <aurix/axapi.h>
+#include <dev/driver.h>
+
+// Include the driver's header to get driver-specific status codes
+#include <serial16550.h>
+
+int mod_init(void) {
+    // Poll driver status - returns -1 if driver not found,
+    // otherwise returns driver's own status codes
+    while (ax_driver_poll("serial16550") != SERIAL16550_READY) {
+        if (ax_driver_poll("serial16550") == -1) {
+            // Driver not registered yet
+        }
+        sched_yield();
+    }
+
+    return 0;
+}
 ```
+
+`ax_driver_poll()` returns:
+- `-1` if driver not found
+- Driver's own status codes (defined in driver's header) otherwise
 
 ### AXAPI imports/exports
 
@@ -120,8 +139,7 @@ AXAPI wrappers exist specifically for modules:
 - `ax_device_register(struct device *dev)`
 - `ax_driver_register(struct driver *drv)`
 - `ax_driver_bind_all(void)`
-- `ax_driver_exists(const char *driver_name)`
-- `ax_driver_is_ready(const char *driver_name)`
+- `ax_driver_poll(const char *driver_name)` - returns -1 if not found, otherwise driver's status codes
 
 Minimal example:
 
@@ -130,31 +148,44 @@ Minimal example:
 #include <dev/device.h>
 #include <dev/driver.h>
 
+// Driver-specific status codes (defined in driver's header)
+enum mydrv_status {
+    MYDRV_NOT_PRESENT = 0,
+    MYDRV_READY = 1,
+    MYDRV_ERROR = 2,
+};
+
 static int my_probe(struct device *dev) {
-  (void)dev;
-  /* init hardware, register devfs nodes, etc */
-  return 0;
+    (void)dev;
+    /* init hardware, register devfs nodes, etc */
+    return 0;
+}
+
+static int my_poll(void) {
+    /* Check hardware, return status */
+    return MYDRV_READY;
 }
 
 static struct driver my_driver = {
-  .name = "mydrv",
-  .class_name = "serial",
-  .probe = my_probe,
-  .remove = 0,
+    .name = "mydrv",
+    .class_name = "serial",
+    .probe = my_probe,
+    .remove = 0,
+    .poll = my_poll,
 };
 
 static struct device my_device = {
-  .name = "com1",
-  .class_name = "serial",
-  .driver_data = 0,
-  .bound_driver = 0,
+    .name = "com1",
+    .class_name = "serial",
+    .driver_data = 0,
+    .bound_driver = 0,
 };
 
 int mod_init(void) {
-  ax_device_register(&my_device);
-  ax_driver_register(&my_driver);
-  ax_driver_bind_all();
-  return 0;
+    ax_device_register(&my_device);
+    ax_driver_register(&my_driver);
+    ax_driver_bind_all();
+    return 0;
 }
 ```
 

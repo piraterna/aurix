@@ -23,6 +23,19 @@
 #ifndef _SERIAL16550_H
 #define _SERIAL16550_H
 
+#include <stdint.h>
+
+enum serial16550_status {
+	SERIAL16550_NOT_PRESENT = 0,
+	SERIAL16550_NOT_READY,
+	SERIAL16550_RX_READY,
+	SERIAL16550_TX_READY,
+	SERIAL16550_READY,
+	SERIAL16550_ERROR
+};
+
+int serial16550_poll(void);
+
 int mod_init(void);
 void mod_exit(void);
 

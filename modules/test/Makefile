@@ -23,7 +23,7 @@ BUILD_DIR := $(BUILD_DIR)/$(MOD_NAME)
 
 MOD_FILE := $(BUILD_DIR)/$(MOD_NAME).sys
 
-MOD_INCLUDE_DIRS := include
+MOD_INCLUDE_DIRS := include ../serial16550/include
 MOD_DEFINES := __$(ARCH)__
 
 MOD_CFLAGS += $(foreach d, $(MOD_INCLUDE_DIRS), -I$d) \
