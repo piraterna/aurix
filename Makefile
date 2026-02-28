@@ -51,7 +51,7 @@ export MODULE_DIR ?= $(ROOT_DIR)/modules
 ifeq ($(CONFIG_USE_HOSTTOOLCHAIN),y)
 export USE_HOST_TOOLCHAIN := y
 else
-export USE_HOST_TOOLCHAIN := y
+export USE_HOST_TOOLCHAIN := n
 endif
 
 ##
