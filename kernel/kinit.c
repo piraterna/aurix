@@ -36,6 +36,7 @@
 #include <platform/time/time.h>
 #include <dev/driver.h>
 #include <dev/devfs.h>
+#include <vfs/vfs.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
 #include <test/test.h>
@@ -134,6 +135,9 @@ void _start(struct aurix_parameters *params)
 
 	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
+
+	vfs_init();
+
 	driver_core_init();
 	devfs_init();
 
