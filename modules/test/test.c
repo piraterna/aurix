@@ -101,7 +101,10 @@ int mod_init()
 
 	if (devfs_write) {
 		for (size_t i = 0; i < active_count; i++) {
-			devfs_write(active_ports[i], msg, msg_len);
+			if (devfs_write(active_ports[i], msg, msg_len) == -1) {
+				kprintf("test-module: failed to write to %s\n",
+						active_ports[i]);
+			}
 		}
 	}
 
