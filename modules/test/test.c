@@ -89,6 +89,8 @@ int mod_init()
 			if (devfs_exists(possible_ports[i])) {
 				active_ports[active_count++] = possible_ports[i];
 				kprintf("test-module: detected %s\n", possible_ports[i]);
+			} else {
+				kprintf("test-module: %s is not active\n", possible_ports[i]);
 			}
 		}
 	}
