@@ -102,10 +102,16 @@ int devfs_read(const char *name, void *buf, size_t len)
 	void *ctx = n ? n->ctx : NULL;
 	irqlock_release(&devfs_lock);
 
-	if (!ops || !ops->read) {
-		debug("read from missing/unreadable node %s\n", name ? name : "(null)");
+	if (!ops) {
+		debug("read from missing node %s\n", name ? name : "(null)");
 		return -1;
 	}
+
+	if (!ops->read) {
+		debug("read from unreadable node %s\n", name ? name : "(null)");
+		return -1;
+	}
+
 	return ops->read(ctx, buf, len);
 }
 
@@ -118,8 +124,13 @@ int devfs_write(const char *name, const void *buf, size_t len)
 	uint64_t owner_cr3 = n ? n->owner_cr3 : 0;
 	irqlock_release(&devfs_lock);
 
-	if (!ops || !ops->write) {
-		debug("write to missing/unwritable node %s\n", name ? name : "(null)");
+	if (!ops) {
+		debug("write to missing node %s\n", name ? name : "(null)");
+		return -1;
+	}
+
+	if (!ops->write) {
+		debug("write to unwriable node %s\n", name ? name : "(null)");
 		return -1;
 	}
 
