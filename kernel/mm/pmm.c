@@ -26,6 +26,7 @@
 #include <lib/bitmap.h>
 #include <lib/align.h>
 #include <lib/string.h>
+#include <sys/panic.h>
 #include <sys/spinlock.h>
 #include <test/pmm_test.h>
 #include <test/test.h>
@@ -116,7 +117,7 @@ void pmm_init(void)
 
 	if (!bitmap) {
 		error("Failed to allocate bitmap!\n");
-		return;
+		kpanicf(NULL, "pmm: failed to allocate bitmap");
 	}
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
@@ -161,8 +162,22 @@ void pmm_reclaim_bootparms()
 
 void *palloc(size_t pages)
 {
-	if (pages == 0 || pages > free_pages)
+	if (!bitmap || bitmap_pages == 0 || bitmap_size == 0) {
+		error("pmm: bitmap not initialized (pages=%llu size=%llu)\n",
+			  bitmap_pages, bitmap_size);
+		kpanicf(NULL, "pmm: not initialized");
+	}
+
+	if (pages == 0) {
+		warn("palloc: zero pages requested\n");
 		return NULL;
+	}
+
+	if (pages > free_pages) {
+		warn("palloc: request too large (pages=%zu free=%llu)\n", pages,
+			 free_pages);
+		return NULL;
+	}
 
 	spinlock_acquire(&pmm_lock);
 
@@ -206,17 +221,35 @@ end:
 
 void pfree(void *ptr, size_t pages)
 {
-	if (!ptr || !is_aligned(ptr, MIN_ALIGN))
+	if (!bitmap || bitmap_pages == 0 || bitmap_size == 0) {
+		error("pmm: bitmap not initialized (pages=%llu size=%llu)\n",
+			  bitmap_pages, bitmap_size);
+		kpanicf(NULL, "pmm: not initialized");
+	}
+
+	if (!ptr) {
+		warn("pfree: NULL ptr\n");
 		return;
+	}
+
+	if (!is_aligned(ptr, MIN_ALIGN)) {
+		warn("pfree: unaligned ptr=%p\n", ptr);
+		return;
+	}
+
+	if (pages == 0) {
+		warn("pfree: zero pages for ptr=%p\n", ptr);
+		return;
+	}
 
 	spinlock_acquire(&pmm_lock);
 
 	uint64_t start = (uint64_t)ptr / PAGE_SIZE;
 
 	if (start + pages > bitmap_size * 8) {
-		error("early return pfree (start + pages = %u, bitmap_size = %u)\n",
-			  start + pages, bitmap_size);
-		goto end;
+		error("pfree: out of range (start=%llu pages=%zu bitmap_bits=%llu)\n",
+			  start, pages, bitmap_size * 8);
+		kpanicf(NULL, "pmm: pfree range out of bounds");
 	}
 
 	for (size_t i = 0; i < pages; i++) {
@@ -230,6 +263,5 @@ void pfree(void *ptr, size_t pages)
 		}
 	}
 
-end:
 	spinlock_release(&pmm_lock);
 }
