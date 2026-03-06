@@ -2,7 +2,7 @@
 /* Module Name:  axapi.c */
 /* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy */
+/* Copyright (c) 2024-2026 Jozef Nagy */
 /*                                                                               */
 /* This source is subject to the MIT License. */
 /* See License.txt in the root of this repository. */
@@ -30,7 +30,7 @@ extern const struct axapi_export __axapi_exports_end[];
 	__attribute__((                                                       \
 		section(".axapi.exports"),                                        \
 		used)) static const struct axapi_export __axapi_export_##name = { \
-		#name, (uintptr_t)&name                                           \
+		#name, (uintptr_t) & name                                         \
 	};
 #include <aurix/axapi_defs.inc>
 #undef AXAPI_SYM
