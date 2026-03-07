@@ -26,6 +26,7 @@
 struct chrdev_ops;
 struct device;
 struct driver;
+struct fileio;
 
 struct axapi_export {
 	const char *name;

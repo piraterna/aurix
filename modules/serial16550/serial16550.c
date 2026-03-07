@@ -22,7 +22,6 @@
 
 #include <aurix/axapi.h>
 #include <dev/device.h>
-#include <dev/chrdev.h>
 #include <dev/driver.h>
 #include <serial16550.h>
 #include <sys/aurix/mod.h>
@@ -176,10 +175,7 @@ static int tty_write(void *ctx, const void *buf, size_t len)
 	return (int)len;
 }
 
-static const struct chrdev_ops tty_ops = {
-	.read = 0,
-	.write = tty_write,
-};
+// TODO: addthe write to a devfs
 
 static int serial16550_probe(struct device *dev)
 {
@@ -216,11 +212,8 @@ static int serial16550_probe(struct device *dev)
 	dev->driver_data = c;
 
 	serial_init16550(base);
-	if (devfs_register(node, &tty_ops, c) != 0) {
-		dev->driver_data = 0;
-		kfree(c);
-		return -1;
-	}
+
+	// TODO: register the device to devfs
 	active_bases[active_ports++] = base;
 	return 0;
 }

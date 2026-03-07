@@ -18,11 +18,7 @@
 /*********************************************************************************/
 
 #include <aurix/axapi.h>
-
 #include <arch/cpu/cpu.h>
-#include <dev/chrdev.h>
-#include <dev/devfs.h>
-
 #include <stdint.h>
 
 uint8_t ax_inb(uint16_t port)

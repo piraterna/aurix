@@ -1,3 +1,25 @@
+/*********************************************************************************/
+/* Module Name:  vfs.c */
+/* Project:      AurixOS */
+/*                                                                               */
+/* Copyright (c) 2024-2026 Jozef Nagy */
+/*                                                                               */
+/* This source is subject to the MIT License. */
+/* See License.txt in the root of this repository. */
+/* All other rights reserved. */
+/*                                                                               */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
+/* SOFTWARE. */
+/*********************************************************************************/
+
+// This code was originally from https://github.com/purpleK2/kernel
+// Licensed under the MIT License.
+
 #include <vfs/vfs.h>
 #include <mm/heap.h>
 #include <sys/panic.h>
@@ -29,9 +51,9 @@ struct vfs *vfs_mount(void *fs, char *path, void *rootvn_data)
 		return NULL;
 	}
 
-	struct vfs *v = vfs_create(fs);
+	struct vfs *v = (struct vfs *)fs;
 	struct vfs *rootvfs;
-	if (!vfs_resolve_mount(path, &rootvfs)) {
+	if (vfs_resolve_mount(path, &rootvfs) != 0) {
 		rootvfs = v;
 	}
 
@@ -58,10 +80,10 @@ int vfs_append(struct vfs *vfs)
 
 struct vnode *vnode_create(struct vfs *root_vfs, char *path, void *data)
 {
-	struct vnode *vnode = kmalloc(sizeof(vnode));
+	struct vnode *vnode = kmalloc(sizeof(struct vnode));
 	memset(vnode, 0, sizeof(struct vnode));
 
-	vnode->path = kmalloc(strlen(path));
+	vnode->path = kmalloc(strlen(path) + 1);
 	strcpy(vnode->path, path);
 
 	vnode->vfs_root = root_vfs;

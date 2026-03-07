@@ -11,11 +11,6 @@ AXAPI_SYM(uint8_t, ax_inb, (uint16_t port))
 AXAPI_SYM(void, ax_outb, (uint16_t port, uint8_t val))
 AXAPI_SYM(void, ax_io_wait, (void))
 
-AXAPI_SYM(int, devfs_register,
-		  (const char *name, const struct chrdev_ops *ops, void *ctx))
-AXAPI_SYM(int, devfs_write, (const char *name, const void *buf, size_t len))
-AXAPI_SYM(int, devfs_exists, (const char *name))
-
 AXAPI_SYM(int, ax_device_register, (struct device *dev))
 AXAPI_SYM(int, ax_driver_register, (struct driver *drv))
 AXAPI_SYM(int, ax_driver_bind_all, (void))

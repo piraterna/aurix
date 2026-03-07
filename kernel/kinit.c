@@ -35,7 +35,6 @@
 #include <platform/time/pit.h>
 #include <platform/time/time.h>
 #include <dev/driver.h>
-#include <dev/devfs.h>
 #include <vfs/vfs.h>
 #include <flanterm/flanterm.h>
 #include <flanterm/backends/fb.h>
@@ -137,7 +136,6 @@ void _start(struct aurix_parameters *params)
 	heap_init(kvctx);
 
 	driver_core_init();
-	devfs_init();
 
 	// TODO: Add kernel cmdline parsing
 	if (1) {

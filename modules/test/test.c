@@ -83,31 +83,13 @@ int mod_init()
 
 	kprintf("test-module: serial16550 driver ready\n");
 
-	if (devfs_exists) {
-		for (size_t i = 0;
-			 i < sizeof(possible_ports) / sizeof(possible_ports[0]); i++) {
-			if (devfs_exists(possible_ports[i])) {
-				active_ports[active_count++] = possible_ports[i];
-				kprintf("test-module: detected %s\n", possible_ports[i]);
-			} else {
-				kprintf("test-module: %s is not active\n", possible_ports[i]);
-			}
-		}
-	}
+	kprintf(
+		"test-module: no way to write to serial16550 driver, reason= No devfs available!\n");
 
 	if (active_count == 0) {
 		kprintf("test-module: no serial ports found\n");
 		for (;;)
 			;
-	}
-
-	if (devfs_write) {
-		for (size_t i = 0; i < active_count; i++) {
-			if (devfs_write(active_ports[i], msg, msg_len) == -1) {
-				kprintf("test-module: failed to write to %s\n",
-						active_ports[i]);
-			}
-		}
 	}
 
 	// for now just hang
