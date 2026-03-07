@@ -2,7 +2,7 @@
 /* Module Name:  kinit.c */
 /* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy */
+/* Copyright (c) 2024-2026 Jozef Nagy */
 /*                                                                               */
 /* This source is subject to the MIT License. */
 /* See License.txt in the root of this repository. */
@@ -83,7 +83,7 @@ const char *aurix_banner =
 	"   / \\  _   _ _ __(_)_  __/ _ \\/ ___|\n"
 	"  / _ \\| | | | '__| \\ \\/ / | | \\___ \\\n"
 	" / ___ \\ |_| | |  | |>  <| |_| |___) |\n"
-	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2025 Jozef Nagy";
+	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2026 Jozef Nagy";
 
 void hello(void)
 {

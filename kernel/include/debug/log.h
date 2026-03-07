@@ -2,7 +2,7 @@
 /* Module Name: log.h                                                            */
 /* Project:     AurixOS                                                          */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy                                            */
+/* Copyright (c) 2024-2026 Jozef Nagy                                            */
 /*                                                                               */
 /* This source is subject to the MIT License.                                    */
 /* See License.txt in the root of this repository.                               */
@@ -44,7 +44,7 @@
 #endif
 
 #ifndef LOG_OUTPUT_SCREEN
-#define LOG_OUTPUT_SCREEN 1
+#define LOG_OUTPUT_SCREEN 0
 #endif
 
 #if LOG_OUTPUT_SCREEN == 1

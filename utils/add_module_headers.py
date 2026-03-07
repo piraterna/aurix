@@ -25,7 +25,7 @@ HEADER = """/*******************************************************************
 /* Module Name:  {module_name} */
 /* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy */
+/* Copyright (c) 2024-2026 Jozef Nagy */
 /*                                                                               */
 /* This source is subject to the MIT License. */
 /* See License.txt in the root of this repository. */

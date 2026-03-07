@@ -2,7 +2,7 @@
 /* Module Name:  config.c */
 /* Project:      AurixOS */
 /*                                                                               */
-/* Copyright (c) 2024-2025 Jozef Nagy */
+/* Copyright (c) 2024-2026 Jozef Nagy */
 /*                                                                               */
 /* This source is subject to the MIT License. */
 /* See License.txt in the root of this repository. */
@@ -54,6 +54,7 @@ struct axboot_cfg cfg = { .default_entry = DEFAULT_ENTRY,
 						  .entry_count = 2,
 						  .bootlog_filename = NULL,
 						  .modules = { "\\System\\support\\serial16550.sys",
+									   "\\System\\support\\i8042_ps2.sys",
 									   "\\System\\support\\test.sys", NULL } };
 
 struct axboot_entry entries[2] = {

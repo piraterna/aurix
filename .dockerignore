@@ -1,0 +1,12 @@
+.git
+build/
+sysroot/
+release/
+**/*.o
+**/*.a
+**/*.bin
+**/*.img
+**/*.iso
+**/*.EFI
+**/*.efi
+uefi_nvram.json
