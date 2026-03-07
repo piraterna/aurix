@@ -3,40 +3,90 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
+
+#include <vfs/fileio.h>
 
 struct vnode;
-struct vfs_mount;
-struct vfs_fs;
-struct vfs_file;
+struct vfs;
+
+#define V_CREATE (1 << 0)
+
+enum vnodeype {
+	VNODE_NULL,
+	VNODE_REGULAR,
+	VNODE_DIR,
+	VNODE_BLOCK,
+	VNODE_CHAR,
+	VNODE_LINK,
+	VNODE_PIPE,
+	VNODE_SOCKET,
+	VNODE_BAD,
+};
+
+struct statfs {
+	uint64_t fsid;
+
+	uint64_t block_size;
+	uint64_t total_blocks;
+	uint64_t free_blocks;
+
+	uint64_t total_nodes;
+	uint64_t free_nodes;
+};
+
+struct fid {
+	size_t fid_len;
+	char *fid_data;
+};
 
 struct vfs_fops {
-	int (*write)(struct vfs_file *file, const void *buf, size_t len);
-	int (*read)(struct vfs_file *file, void *buf, size_t len);
+	int (*mount)(struct vfs *, char *, void *);
+	int (*unmount)(struct vfs *);
+
+	int (*lookup)(struct vfs *, char *);
+
+	int (*root)(struct vfs *, struct vnode **);
+
+	int (*statfs)(struct vfs *, struct statfs *);
+
+	int (*sync)(struct vfs *);
+
+	int (*fid)(struct vfs *, struct vnode *, struct fid *);
+	int (*vget)(struct vfs *, struct vnode **, struct fid *);
 };
 
 struct vfs_vops {
-	int (*lookup)(struct vnode *node, struct vnode **target,
-				  const char *component_name);
-	int (*create)(struct vnode *node, struct vnode **target,
-				  const char *component_name);
+	int (*open)(struct vnode **, int, bool, struct fileio **);
+	int (*close)(struct vnode *, int, bool);
+
+	int (*read)(struct vnode *, size_t *, size_t *, void *);
+	int (*write)(struct vnode *, void *, size_t *, size_t *);
+	int (*ioctl)(struct vnode *, int, void *);
 };
 
 struct vnode {
-	struct vfs_mount *mount;
-	struct vfs_vops *vops;
-	struct vfs_fileops *fops;
+	char *path;
+	uint8_t vtype;
+	void *node_data;
 
-	void *data;
+	struct vfs_vops *ops;
+
+	struct vfs *vfs_mount;
+	struct vfs *vfs_root;
 };
 
-struct vfs_mount {
-	struct vnode *root;
-	struct vfs_fs *fs;
+struct vfs {
+	struct vnode *root_vnode;
+	void *fs_data;
+
+	struct vfs_fops *ops;
+	struct vfs *next;
 };
 
 struct vfs_fs {
 	const char *name;
-	int (*create_mount)(struct vfs_fs *fs, struct vfs_mount *mount);
+	int (*create_mount)(struct vfs_fs *fs, struct vfs *mount);
 };
 
 struct vfs_file {
@@ -47,13 +97,18 @@ struct vfs_file {
 	int flags;
 };
 
-void vfs_init(void);
+struct vfs *vfs_create(void *fs_data);
+struct vfs *vfs_mount(void *fs, char *path, void *rootvn_data);
 
-int vfs_registerfs(struct vfs_fs *fs);
+int vfs_append(struct vfs *vfs);
+struct vnode *vnode_create(struct vfs *root_vfs, char *path, void *data);
 
-struct vfs_file *vfs_open(const char *pathname, int flags);
-int vfs_close(struct vfs_file *file);
-int vfs_write(struct vfs_file *file, const void *buf, size_t len);
-int vfs_read(struct vfs_file *file, void *buf, size_t len);
+int vfs_resolve_mount(char *path, struct vfs **out);
+
+int vfs_open(struct vfs *vfs, char *path, int flags, struct fileio **out);
+int vfs_read(struct vnode *vnode, size_t size, size_t offset, void *out);
+int vfs_write(struct vnode *vnode, void *buf, size_t size, size_t offset);
+int vfs_ioctl(struct vnode *vnode, int request, void *arg);
+int vfs_close(struct vnode *vnode);
 
 #endif /* _VFS_VFS_H */

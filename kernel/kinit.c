@@ -136,8 +136,6 @@ void _start(struct aurix_parameters *params)
 	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
 
-	vfs_init();
-
 	driver_core_init();
 	devfs_init();
 

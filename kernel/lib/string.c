@@ -111,6 +111,23 @@ size_t strlen(const char *str)
 	return s - str;
 }
 
+char *strcpy(char *dest, const char *src)
+{
+	if (!dest || !src) {
+		return NULL;
+	}
+
+	char *dp = dest;
+	char *sp = (char *)src;
+
+	while (*src != 0) {
+		*dp++ = *sp++;
+	}
+
+	*dp = 0;
+	return dp;
+}
+
 char *strtok(char *restrict str, const char *restrict delim)
 {
 	static char *saved;
