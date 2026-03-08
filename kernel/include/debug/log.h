@@ -44,7 +44,7 @@
 #endif
 
 #ifndef LOG_OUTPUT_SCREEN
-#define LOG_OUTPUT_SCREEN 1
+#define LOG_OUTPUT_SCREEN 0
 #endif
 
 #if LOG_OUTPUT_SCREEN == 1

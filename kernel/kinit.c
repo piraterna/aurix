@@ -87,9 +87,11 @@ const char *aurix_banner =
 
 void hello(void)
 {
-	kprintf("hello from a kernel proccess. (tid=%d, pid=%d, cpu=%d)\n",
+	kprintf("hello from a kernel process. (tid=%d, pid=%d, cpu=%d)\n",
 			thread_current()->tid, thread_current()->process->pid,
 			cpu_get_current()->id);
+	sleep_ms(1000);
+	devfs_print(global_devfs->root_node, 0);
 	thread_exit(thread_current());
 }
 
@@ -135,6 +137,8 @@ void _start(struct aurix_parameters *params)
 
 	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
+
+	vfs_create(NULL);
 
 	if (devfs_vfs_init(devfs_create(), "/dev") != 0) {
 		kpanic(NULL, "Failed to mount devfs at /dev");

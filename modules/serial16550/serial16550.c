@@ -226,13 +226,14 @@ static struct driver serial16550_driver = {
 	.poll = serial16550_poll,
 };
 
-#define SERIAL_DEFINE_DEVICE(n, basev, path)   \
-	static struct device serial_device_##n = { \
-		.name = "com" #n,                      \
-		.class_name = "serial",                \
-		.driver_data = 0,                      \
-		.bound_driver = 0,                     \
-	};
+#define SERIAL_DEFINE_DEVICE(n, basev, path)                           \
+	static struct device serial_device_##n = { .name = "com" #n,       \
+											   .class_name = "serial", \
+											   .driver_data = 0,       \
+											   .bound_driver = 0,      \
+											   .dev_node_path =        \
+												   SERIAL_BASE_PATH    \
+											   "com" #n };
 
 SERIAL_PORTS(SERIAL_DEFINE_DEVICE)
 

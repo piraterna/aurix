@@ -410,3 +410,44 @@ int devfs_vfs_init(devfs_t *devfs, char *mount_path)
 
 	return 0;
 }
+
+int devfs_print(devfs_node_t *devfs, int lvl)
+{
+	if (!devfs) {
+		return -1;
+	}
+
+	int a = lvl;
+
+	while (a--) {
+		kprintf("  ");
+	}
+
+	switch (devfs->type) {
+	case DEVFS_TYPE_DIR:
+		kprintf("+ %-20s", devfs->name);
+		break;
+
+	case DEVFS_TYPE_FILE:
+		kprintf("  %-20s", devfs->name);
+		kprintf(" | % 10zuB", devfs->device ? 0 : 0);
+		break;
+
+	case DEVFS_TYPE_CHAR:
+	case DEVFS_TYPE_BLOCK:
+		kprintf("  %-20s", devfs->name);
+		break;
+	}
+
+	kprintf("\n");
+
+	if (devfs->child) {
+		devfs_print(devfs->child, lvl + 1);
+	}
+
+	if (devfs->sibling) {
+		devfs_print(devfs->sibling, lvl);
+	}
+
+	return 0;
+}

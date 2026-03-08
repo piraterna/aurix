@@ -119,6 +119,8 @@ struct vfs_file {
 	int flags;
 };
 
+extern struct vfs *rootfs;
+
 struct vfs *vfs_create(void *fs_data);
 struct vfs *vfs_mount(void *fs, char *path, void *rootvn_data);
 
