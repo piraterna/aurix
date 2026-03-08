@@ -30,7 +30,7 @@ extern const struct axapi_export __axapi_exports_end[];
 	__attribute__((                                                       \
 		section(".axapi.exports"),                                        \
 		used)) static const struct axapi_export __axapi_export_##name = { \
-		#name, (uintptr_t) & name                                         \
+		#name, (uintptr_t)&name                                           \
 	};
 #include <aurix/axapi_defs.inc>
 #undef AXAPI_SYM

@@ -112,21 +112,40 @@ size_t strlen(const char *str)
 	return s - str;
 }
 
-char *strcpy(char *dest, const char *src)
+char *strcpy(char *restrict dest, const char *restrict src)
 {
 	if (!dest || !src) {
 		return NULL;
 	}
 
-	char *dp = dest;
-	char *sp = (char *)src;
+	uint8_t *restrict pdest = (uint8_t *restrict)dest;
+	const uint8_t *restrict psrc = (const uint8_t *restrict)src;
 
-	while (*src != 0) {
-		*dp++ = *sp++;
+	while (*psrc != '\0') {
+		*pdest++ = *psrc++;
 	}
 
-	*dp = 0;
-	return dp;
+	*pdest = '\0';
+
+	return dest;
+}
+
+char *strncpy(char *restrict dest, const char *restrict src, size_t n)
+{
+	if (!dest || !src || n == 0) {
+		return NULL;
+	}
+
+	uint8_t *restrict pdest = (uint8_t *restrict)dest;
+	const uint8_t *restrict psrc = (const uint8_t *restrict)src;
+
+	while (*psrc != '\0' || n-- == 0) {
+		*pdest++ = *psrc++;
+	}
+
+	*pdest = '\0';
+
+	return dest;
 }
 
 char *strtok(char *restrict str, const char *restrict delim)
