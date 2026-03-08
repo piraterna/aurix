@@ -161,7 +161,6 @@ int driver_register(struct driver *drv)
 	n->drv.class_name = kstrdup(drv->class_name);
 	n->drv.probe = drv->probe;
 	n->drv.remove = drv->remove;
-	n->drv.poll = drv->poll;
 
 	n->owner_cr3 = read_cr3();
 
@@ -220,7 +219,11 @@ int driver_bind_all(void)
 			if (d->owner_cr3)
 				write_cr3(d->owner_cr3);
 
-			int rc = drv->probe(dev);
+			int rc = -1;
+			if (!drv->probe) {
+				warn("driver: No probe function for \"%s\"\n", drv->name);
+			} else
+				rc = drv->probe(dev);
 
 			write_cr3(prev_cr3);
 			restore_if(irq_state);
@@ -241,37 +244,6 @@ int driver_bind_all(void)
 	}
 
 	return total_bound;
-}
-
-int driver_poll(const char *driver_name)
-{
-	if (!driver_name)
-		return -1;
-
-	int status = -1;
-	irqlock_acquire(&drv_lock);
-
-	for (struct drv_node *n = drv_list; n; n = n->next) {
-		if (strcmp(n->drv.name, driver_name) == 0) {
-			if (n->drv.poll) {
-				uint8_t irq_state = save_if();
-				cpu_disable_interrupts();
-
-				uint64_t prev_cr3 = read_cr3();
-				if (n->owner_cr3)
-					write_cr3(n->owner_cr3);
-
-				status = n->drv.poll();
-
-				write_cr3(prev_cr3);
-				restore_if(irq_state);
-			}
-			break;
-		}
-	}
-
-	irqlock_release(&drv_lock);
-	return status;
 }
 
 int device_get_count(void)

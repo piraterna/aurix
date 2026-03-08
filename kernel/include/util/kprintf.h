@@ -23,8 +23,11 @@
 #ifndef _UTIL_PRINT_H
 #define _UTIL_PRINT_H
 
+#include <stddef.h>
+
 int kprintf(const char *fmt, ...);
 int serial_kprintf(const char *fmt, ...);
+int snprintf(char *buf, size_t size, const char *fmt, ...);
 
 void _log_force_unlock(void);
 

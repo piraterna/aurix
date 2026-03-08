@@ -152,7 +152,7 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 	if (frame) {
 		kprintf(KPANIC_BOLD "fault " KPANIC_RESET ": ");
 		panic_print_symbol((uintptr_t)frame->rip);
-		kprintf("\n");
+		kprintf(" (%p) \n", frame->rip);
 
 		kprintf(KPANIC_DIM "exc" KPANIC_RESET
 						   "   : vec=%llu err=0x%llx cr2=0x%llx cr3=0x%llx\n",

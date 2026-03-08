@@ -241,12 +241,6 @@ void ps2_reset_all()
 
 int mod_init()
 {
-	if (!driver_poll) {
-		kprintf("i8042_ps2: Missing AXAPI driver poll func\n");
-		for (;;)
-			;
-	}
-
 	uint8_t ctl_config = 0;
 
 	// TODO: Determine if a PS/2 controller exists

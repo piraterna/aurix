@@ -39,5 +39,6 @@ char *strdup(const char *s);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 size_t strspn(const char *s, const char *accept);
 char *strchr(const char *s, int c);
+int streq(const char *a, const char *b);
 
 #endif /* _LIB_STRING_H */

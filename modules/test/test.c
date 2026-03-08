@@ -59,40 +59,13 @@ int mod_init()
 	const char *active_ports[8];
 	size_t active_count = 0;
 
-	const char *msg = "Hello serial!\r\n";
-	size_t msg_len = cstrlen(msg);
-
-	if (!driver_poll) {
-		kprintf("test-module: missing AXAPI driver poll func\n");
-		for (;;)
-			;
-	}
-
-	kprintf("test-module: waiting for driver serial16550\n");
-
-	uint64_t start_time = get_ms();
-	uint64_t timeout_ms = 5000;
-
-	while (driver_poll("serial16550") != SERIAL16550_READY) {
-		if (get_ms() - start_time > timeout_ms) {
-			kprintf("test-module: timeout waiting for serial16550\n");
-			for (;;)
-				;
-		}
-	}
-
-	kprintf("test-module: serial16550 driver ready\n");
-
-	kprintf(
-		"test-module: no way to write to serial16550 driver, reason= No devfs available!\n");
-
 	if (active_count == 0) {
 		kprintf("test-module: no serial ports found\n");
 		for (;;)
 			;
 	}
 
-	// for now just hang
+	kprintf("test-module: WIP\n");
 	for (;;)
 		;
 

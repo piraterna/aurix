@@ -265,3 +265,16 @@ char *strchr(const char *s, int c)
 	}
 	return NULL;
 }
+
+int streq(const char *a, const char *b)
+{
+	if (!a || !b)
+		return 0;
+	while (*a && *b) {
+		if (*a != *b)
+			return 0;
+		a++;
+		b++;
+	}
+	return *a == '\0' && *b == '\0';
+}

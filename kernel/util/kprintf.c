@@ -104,3 +104,12 @@ void _log_force_unlock()
 {
 	spinlock_release(&log_lock);
 }
+
+int snprintf(char *buf, size_t size, const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	int len = npf_vsnprintf(buf, size, fmt, args);
+	va_end(args);
+	return len;
+}

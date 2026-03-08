@@ -32,7 +32,6 @@ struct driver {
 	const char *class_name;
 	driver_probe_fn probe;
 	driver_remove_fn remove;
-	driver_poll_fn poll;
 };
 
 void driver_core_init(void);
