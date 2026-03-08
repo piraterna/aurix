@@ -42,6 +42,7 @@
 #include <aurix.h>
 #include <sys/sched.h>
 #include <sys/panic.h>
+#include <fs/devfs.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -135,6 +136,12 @@ void _start(struct aurix_parameters *params)
 	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
 
+	if (devfs_vfs_init(devfs_create(), "/dev") != 0) {
+		kpanic(NULL, "Failed to mount devfs at /dev");
+	}
+
+	debug("devfs initialized at /dev\n");
+
 	driver_core_init();
 
 	// TODO: Add kernel cmdline parsing
@@ -172,6 +179,8 @@ void _start(struct aurix_parameters *params)
 		uint64_t ms = get_ms();
 		success("Kernel boot complete in %u.%03u seconds\n",
 				(uint32_t)(ms / 1000ull), (uint32_t)(ms % 1000ull));
+		success("Running at %d cores on an %s\n", cpu_count,
+				cpu_get_current()->name_ext);
 	}
 
 	pcb *t = proc_create();

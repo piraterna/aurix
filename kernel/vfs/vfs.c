@@ -34,7 +34,6 @@ struct vfs *vfs_create(void *fs_data)
 	struct vfs *v = kmalloc(sizeof(struct vfs));
 	memset(v, 0, sizeof(struct vfs));
 
-	// v->fs_type = fs_type;
 	v->fs_data = fs_data;
 
 	v->ops = kmalloc(sizeof(struct vfs_fops));

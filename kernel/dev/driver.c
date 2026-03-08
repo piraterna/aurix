@@ -18,6 +18,8 @@
 /*********************************************************************************/
 
 #include <dev/driver.h>
+#include <dev/device.h>
+#include <fs/devfs.h>
 
 #include <arch/sys/irqlock.h>
 #include <arch/cpu/cpu.h>
@@ -25,11 +27,7 @@
 
 #include <aurix.h>
 #include <lib/string.h>
-
-struct dev_node {
-	struct device dev;
-	struct dev_node *next;
-};
+#include <debug/log.h>
 
 struct drv_node {
 	struct driver drv;
@@ -39,7 +37,8 @@ struct drv_node {
 };
 
 static irqlock_t dev_lock;
-static struct dev_node *dev_list;
+static struct device *dev_list;
+static int dev_count;
 
 static irqlock_t drv_lock;
 static struct drv_node *drv_list;
@@ -48,10 +47,12 @@ static char *kstrdup(const char *s)
 {
 	if (!s)
 		return NULL;
+
 	size_t len = strlen(s);
-	char *out = (char *)kmalloc(len + 1);
+	char *out = kmalloc(len + 1);
 	if (!out)
 		return NULL;
+
 	memcpy(out, s, len);
 	out[len] = '\0';
 	return out;
@@ -68,53 +69,76 @@ void driver_core_init(void)
 {
 	irqlock_init(&dev_lock);
 	irqlock_init(&drv_lock);
+
+	dev_list = NULL;
+	drv_list = NULL;
+	dev_count = 0;
+
 	debug("driver core init\n");
 }
 
 int device_register(struct device *dev)
 {
 	if (!dev || !dev->name) {
-		warn("invalid dev=%p name=%p\n", dev, dev ? (void *)dev->name : NULL);
+		warn("invalid device or name\n");
 		return -1;
 	}
 
-	struct dev_node *n = (struct dev_node *)kmalloc(sizeof(*n));
+	struct device *n = kmalloc(sizeof(*n));
 	if (!n) {
-		error("kmalloc failed for %s\n", dev->name);
+		error("kmalloc failed for device\n");
 		return -1;
 	}
-	memset(n, 0, sizeof(*n));
 
-	n->dev.name = kstrdup(dev->name);
-	n->dev.class_name = kstrdup(dev->class_name);
-	n->dev.driver_data = NULL;
-	n->dev.bound_driver = NULL;
-	if (!n->dev.name) {
-		error("name OOM\n");
-		kfree((void *)n->dev.class_name);
+	memset(n, 0, sizeof(*n));
+	n->name = kstrdup(dev->name);
+	n->class_name = kstrdup(dev->class_name);
+	n->dev_node_path = kstrdup(dev->dev_node_path);
+	n->driver_data = dev->driver_data;
+	n->ops = dev->ops;
+	n->bound_driver = NULL;
+
+	if (!n->name) {
+		kfree((void *)n->class_name);
+		kfree((void *)n->dev_node_path);
 		kfree(n);
 		return -1;
 	}
-	n->next = NULL;
 
 	irqlock_acquire(&dev_lock);
-	for (struct dev_node *it = dev_list; it; it = it->next) {
-		if (it->dev.name && strcmp(it->dev.name, dev->name) == 0) {
-			warn("duplicate name=%s class=%s\n", dev->name,
-				 dev->class_name ? dev->class_name : "(none)");
+
+	for (struct device *it = dev_list; it; it = it->next) {
+		if (strcmp(it->name, dev->name) == 0) {
 			irqlock_release(&dev_lock);
-			kfree((void *)n->dev.name);
-			kfree((void *)n->dev.class_name);
+
+			warn("duplicate device name=%s\n", dev->name);
+
+			kfree((void *)n->name);
+			kfree((void *)n->class_name);
+			kfree((void *)n->dev_node_path);
 			kfree(n);
 			return -1;
 		}
 	}
+
 	n->next = dev_list;
 	dev_list = n;
+	dev_count++;
+
 	irqlock_release(&dev_lock);
 
-	debug("device: + %s class=%s\n", n->dev.name,
-		  n->dev.class_name ? n->dev.class_name : "(none)");
+	extern devfs_t *global_devfs;
+	if (global_devfs && n->dev_node_path) {
+		devfs_node_t *node = devfs_create_node(DEVFS_TYPE_CHAR);
+		if (node) {
+			node->name = kstrdup(n->dev_node_path);
+			node->device = n;
+			devfs_append_child(global_devfs->root_node, node);
+		}
+	}
+
+	debug("device registered: %s class=%s\n", n->name,
+		  n->class_name ? n->class_name : "(none)");
 
 	return 0;
 }
@@ -122,49 +146,52 @@ int device_register(struct device *dev)
 int driver_register(struct driver *drv)
 {
 	if (!drv || !drv->name || !drv->probe) {
-		warn("invalid drv=%p name=%p probe=%p\n", drv,
-			 drv ? (void *)drv->name : NULL, drv ? (void *)drv->probe : NULL);
+		warn("invalid driver or probe missing\n");
 		return -1;
 	}
 
-	struct drv_node *n = (struct drv_node *)kmalloc(sizeof(*n));
+	struct drv_node *n = kmalloc(sizeof(*n));
 	if (!n) {
-		error("kmalloc failed for %s\n", drv->name);
+		error("kmalloc failed for driver\n");
 		return -1;
 	}
-	memset(n, 0, sizeof(*n));
 
+	memset(n, 0, sizeof(*n));
 	n->drv.name = kstrdup(drv->name);
 	n->drv.class_name = kstrdup(drv->class_name);
 	n->drv.probe = drv->probe;
 	n->drv.remove = drv->remove;
 	n->drv.poll = drv->poll;
+
 	n->owner_cr3 = read_cr3();
+
 	if (!n->drv.name) {
-		error("name OOM\n");
 		kfree((void *)n->drv.class_name);
 		kfree(n);
 		return -1;
 	}
-	n->next = NULL;
 
 	irqlock_acquire(&drv_lock);
+
 	for (struct drv_node *it = drv_list; it; it = it->next) {
-		if (it->drv.name && strcmp(it->drv.name, drv->name) == 0) {
-			warn("duplicate name=%s class=%s\n", drv->name,
-				 drv->class_name ? drv->class_name : "(none)");
+		if (strcmp(it->drv.name, drv->name) == 0) {
 			irqlock_release(&drv_lock);
+
+			warn("duplicate driver name=%s\n", drv->name);
+
 			kfree((void *)n->drv.name);
 			kfree((void *)n->drv.class_name);
 			kfree(n);
 			return -1;
 		}
 	}
+
 	n->next = drv_list;
 	drv_list = n;
+
 	irqlock_release(&drv_lock);
 
-	debug("driver: + %s class=%s\n", n->drv.name,
+	debug("driver registered: %s class=%s\n", n->drv.name,
 		  n->drv.class_name ? n->drv.class_name : "(none)");
 
 	return 0;
@@ -173,24 +200,13 @@ int driver_register(struct driver *drv)
 int driver_bind_all(void)
 {
 	int total_bound = 0;
+	debug("binding drivers to devices\n");
 
-	debug("binding devices\n");
-
-	irqlock_acquire(&drv_lock);
-	struct drv_node *d = drv_list;
-	irqlock_release(&drv_lock);
-
-	for (; d; d = d->next) {
+	for (struct drv_node *d = drv_list; d; d = d->next) {
 		struct driver *drv = &d->drv;
 		int driver_bound = 0;
 
-		irqlock_acquire(&dev_lock);
-		struct dev_node *n = dev_list;
-		irqlock_release(&dev_lock);
-
-		for (; n; n = n->next) {
-			struct device *dev = &n->dev;
-
+		for (struct device *dev = dev_list; dev; dev = dev->next) {
 			if (dev->bound_driver)
 				continue;
 
@@ -214,30 +230,29 @@ int driver_bind_all(void)
 				d->bound_count++;
 				driver_bound++;
 				total_bound++;
-
-				success("bind %s -> %s (class=%s)\n", drv->name, dev->name,
+				success("bound %s -> %s (class=%s)\n", drv->name, dev->name,
 						dev->class_name ? dev->class_name : "(none)");
 			}
 		}
 
 		if (driver_bound == 0) {
-			warn("driver %s: no devices bound (class=%s)\n", drv->name,
-				 drv->class_name ? drv->class_name : "(none)");
+			warn("driver %s: no devices bound\n", drv->name);
 		}
 	}
 
 	return total_bound;
 }
 
-int ax_driver_poll(const char *driver_name)
+int driver_poll(const char *driver_name)
 {
 	if (!driver_name)
 		return -1;
 
 	int status = -1;
 	irqlock_acquire(&drv_lock);
+
 	for (struct drv_node *n = drv_list; n; n = n->next) {
-		if (n->drv.name && strcmp(n->drv.name, driver_name) == 0) {
+		if (strcmp(n->drv.name, driver_name) == 0) {
 			if (n->drv.poll) {
 				uint8_t irq_state = save_if();
 				cpu_disable_interrupts();
@@ -254,21 +269,21 @@ int ax_driver_poll(const char *driver_name)
 			break;
 		}
 	}
+
 	irqlock_release(&drv_lock);
 	return status;
 }
 
-int ax_device_register(struct device *dev)
+int device_get_count(void)
 {
-	return device_register(dev);
+	int count;
+	irqlock_acquire(&dev_lock);
+	count = dev_count;
+	irqlock_release(&dev_lock);
+	return count;
 }
 
-int ax_driver_register(struct driver *drv)
+struct device *device_get_list(void)
 {
-	return driver_register(drv);
-}
-
-int ax_driver_bind_all(void)
-{
-	return driver_bind_all();
+	return dev_list;
 }

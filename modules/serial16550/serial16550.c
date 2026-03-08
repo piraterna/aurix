@@ -242,12 +242,12 @@ int mod_init(void)
 {
 	kprintf("serial16550: hello from serial module!\n");
 #define SERIAL_REGISTER_DEVICE(n, basev, path) \
-	ax_device_register(&serial_device_##n);
+	device_register(&serial_device_##n);
 	SERIAL_PORTS(SERIAL_REGISTER_DEVICE)
 #undef SERIAL_REGISTER_DEVICE
 
-	ax_driver_register(&serial16550_driver);
-	ax_driver_bind_all();
+	driver_register(&serial16550_driver);
+	driver_bind_all();
 
 	for (;;)
 		;

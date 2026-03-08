@@ -241,7 +241,7 @@ void ps2_reset_all()
 
 int mod_init()
 {
-	if (!ax_driver_poll) {
+	if (!driver_poll) {
 		kprintf("i8042_ps2: Missing AXAPI driver poll func\n");
 		for (;;)
 			;

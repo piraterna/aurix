@@ -23,14 +23,32 @@
 #include <stdint.h>
 
 struct driver;
+struct device;
+
+struct device_ops {
+	int (*open)(struct device *dev);
+	int (*close)(struct device *dev);
+	int (*read)(struct device *dev, void *buf, uint64_t len);
+	int (*write)(struct device *dev, const void *buf, uint64_t len);
+	int (*ioctl)(struct device *dev, uint64_t cmd, void *arg);
+	int (*poll)(struct device *dev);
+};
 
 struct device {
 	const char *name;
 	const char *class_name;
+
+	const char *dev_node_path;
+
 	void *driver_data;
+
 	struct driver *bound_driver;
+	struct device_ops *ops;
+
+	struct device *next;
 };
 
-int device_register(struct device *dev);
+int device_get_count(void);
+struct device *device_get_list(void);
 
 #endif

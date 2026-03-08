@@ -22,6 +22,7 @@
 
 #include <lib/string.h>
 #include <aurix.h>
+#include <mm/heap.h>
 
 void *memcpy(void *restrict dest, const void *restrict src, size_t n)
 {
@@ -173,4 +174,75 @@ char *strtok(char *restrict str, const char *restrict delim)
 
 	saved = NULL;
 	return token_start;
+}
+
+char *strdup(const char *s)
+{
+	if (!s)
+		return NULL;
+	size_t len = strlen(s);
+	char *out = kmalloc(len + 1);
+	if (!out)
+		return NULL;
+	for (size_t i = 0; i <= len; i++) {
+		out[i] = s[i];
+	}
+	return out;
+}
+
+char *strtok_r(char *str, const char *delim, char **saveptr)
+{
+	char *s;
+
+	if (str)
+		s = str;
+	else if (*saveptr)
+		s = *saveptr;
+	else
+		return NULL;
+
+	s += strspn(s, delim);
+	if (*s == '\0') {
+		*saveptr = NULL;
+		return NULL;
+	}
+
+	char *token_end = s;
+	while (*token_end && !strchr(delim, *token_end))
+		token_end++;
+
+	if (*token_end) {
+		*token_end = '\0';
+		*saveptr = token_end + 1;
+	} else {
+		*saveptr = NULL;
+	}
+
+	return s;
+}
+
+size_t strspn(const char *s, const char *accept)
+{
+	size_t len = 0;
+	for (; *s; s++) {
+		const char *a;
+		for (a = accept; *a; a++) {
+			if (*s == *a)
+				break;
+		}
+		if (!*a)
+			break;
+		len++;
+	}
+	return len;
+}
+
+char *strchr(const char *s, int c)
+{
+	while (*s) {
+		if (*s == (char)c)
+			return (char *)s;
+		s++;
+	}
+	return NULL;
 }

@@ -62,7 +62,7 @@ int mod_init()
 	const char *msg = "Hello serial!\r\n";
 	size_t msg_len = cstrlen(msg);
 
-	if (!ax_driver_poll) {
+	if (!driver_poll) {
 		kprintf("test-module: missing AXAPI driver poll func\n");
 		for (;;)
 			;
@@ -73,7 +73,7 @@ int mod_init()
 	uint64_t start_time = get_ms();
 	uint64_t timeout_ms = 5000;
 
-	while (ax_driver_poll("serial16550") != SERIAL16550_READY) {
+	while (driver_poll("serial16550") != SERIAL16550_READY) {
 		if (get_ms() - start_time > timeout_ms) {
 			kprintf("test-module: timeout waiting for serial16550\n");
 			for (;;)

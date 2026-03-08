@@ -36,7 +36,5 @@ struct driver {
 };
 
 void driver_core_init(void);
-int driver_register(struct driver *drv);
-int driver_bind_all(void);
 
 #endif
