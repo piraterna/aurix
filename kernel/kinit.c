@@ -92,9 +92,7 @@ void hello(void)
 			cpu_get_current()->id);
 	sleep_ms(1000);
 
-	devfs_print(global_devfs->root_node, 0);
-
-	struct fileio *com1 = open("/dev/raw/serial/com1", O_CREATE);
+	struct fileio *com1 = open("/dev/raw/serial/com1", 0);
 	if (!com1) {
 		kprintf("Failed to open /dev/raw/serial/com1\n");
 		goto exit;
@@ -150,7 +148,12 @@ void _start(struct aurix_parameters *params)
 	heap_init(kvctx);
 
 	struct devfs *devfs = devfs_create();
-	devfs_vfs_init(devfs, "/");
+	if (!devfs) {
+		kpanic(NULL, "Failed to  create devfs");
+	}
+	if (devfs_vfs_init(devfs, "/dev") != 0) {
+		kpanic(NULL, "Failed to init devfs");
+	}
 	debug("devfs initialized at /dev\n");
 
 	driver_core_init(devfs);
@@ -194,8 +197,8 @@ void _start(struct aurix_parameters *params)
 				cpu_get_current()->name_ext);
 	}
 
-	pcb *t = proc_create();
-	thread_create(t, hello);
+	pcb *p = proc_create();
+	thread_create(p, hello);
 
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();

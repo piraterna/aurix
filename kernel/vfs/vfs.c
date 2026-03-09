@@ -102,7 +102,7 @@ int vfs_resolve_mount(char *path, struct vfs **out)
 	struct vfs *v = vfs_list;
 	for (; v != NULL; v = v->next) {
 		if (!v->root_vnode) {
-			error("vfs: No root vnode for vnode\n");
+			warn("vfs: No root vnode for vnode\n");
 			return -1;
 		}
 

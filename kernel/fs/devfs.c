@@ -25,6 +25,7 @@
 #include <mm/heap.h>
 #include <lib/string.h>
 #include <debug/log.h>
+#include <debug/assert.h>
 
 struct devfs *global_devfs = NULL;
 
@@ -314,6 +315,8 @@ int devfs_open(struct vnode **vnode, int flags, bool create,
 		error("devfs_open: NULL devfs\n");
 		return -1;
 	}
+
+	success("devfs: open(%s) reached\n", vn->path);
 
 	struct devfs_node *devfs_node;
 	devfs_find_node(devfs, vn->path, &devfs_node);
