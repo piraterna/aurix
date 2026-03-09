@@ -26,20 +26,26 @@
 #define LSR_DATA_READY 0x01
 #define LSR_THR_EMPTY 0x20
 #define SERIAL_BASE_PATH "/dev/raw/serial/"
+#define SERIAL_OPEN_TIMEOUT 5000000u
 
 static const uint16_t COM_BASES[8] = { 0x3F8, 0x2F8, 0x3E8, 0x2E8,
 									   0x5F8, 0x4F8, 0x5E8, 0x4E8 };
 
 struct serial_ctx {
 	uint16_t base;
+	int open;
 };
 
 static struct serial_ctx serial_ctxs[8];
 
+static int serial_open(struct device *dev);
+static int serial_close(struct device *dev);
 static int serial_read(struct device *dev, void *buf, uint64_t len);
 static int serial_write(struct device *dev, const void *buf, uint64_t len);
 
 static struct device_ops serial_ops = {
+	.open = serial_open,
+	.close = serial_close,
 	.read = serial_read,
 	.write = serial_write,
 	.ioctl = 0,
@@ -88,6 +94,47 @@ static int serial_port_present(uint16_t base)
 	if (ax_inb(base + 7) != 0xA5)
 		return 0;
 	return 1;
+}
+
+static int serial_open(struct device *dev)
+{
+	if (!dev || !dev->driver_data)
+		return -1;
+
+	struct serial_ctx *ctx = dev->driver_data;
+
+	if (ctx->open)
+		return 0;
+
+	uint16_t base = ctx->base;
+
+	kprintf("serial16550: open() called\n");
+
+	for (uint32_t spins = 0; spins < SERIAL_OPEN_TIMEOUT; spins++) {
+		uint8_t lsr = ax_inb(base + 5);
+
+		if (lsr != 0xFF) {
+			ctx->open = 1;
+			return 0;
+		}
+
+		if ((spins & 0xFF) == 0)
+			ax_io_wait();
+	}
+
+	return -1;
+}
+
+static int serial_close(struct device *dev)
+{
+	if (!dev || !dev->driver_data)
+		return -1;
+
+	struct serial_ctx *ctx = dev->driver_data;
+
+	ctx->open = 0;
+
+	return 0;
 }
 
 static int serial_read(struct device *dev, void *buf, uint64_t len)

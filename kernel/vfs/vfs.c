@@ -45,6 +45,7 @@ struct vfs *vfs_create(void *fs_data)
 
 struct vfs *vfs_mount(void *fs, char *path, void *rootvn_data)
 {
+	trace("vfs_mount: fs=%p path=%s\n", fs, path);
 	if (!fs) {
 		error("fs pointer is null\n");
 		return NULL;
@@ -57,7 +58,10 @@ struct vfs *vfs_mount(void *fs, char *path, void *rootvn_data)
 	}
 
 	v->root_vnode = vnode_create(rootvfs, path, rootvn_data);
+	trace("vfs_mount: root_vnode->path=%s\n", v->root_vnode->path);
 	v->root_vnode->vfs_mount = v;
+
+	vfs_append(v);
 
 	return v;
 }
@@ -97,24 +101,32 @@ struct vnode *vnode_create(struct vfs *root_vfs, char *path, void *data)
 int vfs_resolve_mount(char *path, struct vfs **out)
 {
 	struct vfs *v;
+	trace("vfs_resolve_mount: path=%s\n", path);
 	for (v = rootfs; v != NULL; v = v->next) {
+		trace("vfs_resolve_mount: checking v=%p root_vnode=%p\n", v,
+			  v->root_vnode);
 		if (!v->root_vnode) {
-			return -1;
-		}
-
-		char *prefix = v->root_vnode->path;
-
-		if (strlen(path) < strlen(prefix)) {
 			continue;
 		}
 
-		if (strncmp(path, prefix, strlen(prefix)) == 0) {
-			*out = v;
-			break;
+		char *prefix = v->root_vnode->path;
+		trace("vfs_resolve_mount: prefix=%s\n", prefix);
+
+		size_t prefix_len = strlen(prefix);
+		if (strlen(path) < prefix_len) {
+			continue;
+		}
+
+		if (strncmp(path, prefix, prefix_len) == 0) {
+			if (path[prefix_len] == '\0' || path[prefix_len] == '/') {
+				*out = v;
+				break;
+			}
 		}
 	}
 
 	if (!v) {
+		error("vfs_resolve_mount: no vfs found for %s\n", path);
 		return -1;
 	}
 
@@ -123,14 +135,16 @@ int vfs_resolve_mount(char *path, struct vfs **out)
 
 int vfs_open(struct vfs *vfs, char *path, int flags, struct fileio **out)
 {
+	trace("vfs_open: vfs=%p path=%s\n", vfs, path);
 	struct vnode *vn_file = vnode_create(vfs, path, NULL);
 	vn_file->vfs_mount = vfs;
+	trace("vfs_open: root_vnode->ops=%p\n", vfs->root_vnode->ops);
 	memcpy(vn_file->ops, vfs->root_vnode->ops, sizeof(struct vfs_vops));
 	vn_file->path += strlen(vfs->root_vnode->path);
 
 	struct fileio *fio_file = fio_create();
 
-	if (!vn_file->ops->open(&vn_file, flags, false, &fio_file)) {
+	if (vn_file->ops->open(&vn_file, flags, false, &fio_file) != 0) {
 		kfree(vn_file->path);
 		kfree(vn_file);
 		return -1;
@@ -160,7 +174,7 @@ int vfs_write(struct vnode *vnode, void *buf, size_t size, size_t offset)
 		return -1;
 	}
 
-	return vnode->ops->read(vnode, buf, &size, &offset);
+	return vnode->ops->write(vnode, buf, &size, &offset);
 }
 
 int vfs_ioctl(struct vnode *vnode, int request, void *arg)

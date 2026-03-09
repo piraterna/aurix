@@ -92,6 +92,16 @@ void hello(void)
 			cpu_get_current()->id);
 	sleep_ms(1000);
 	devfs_print(global_devfs->root_node, 0);
+
+	struct fileio *com1 = open("/dev/raw/serial/com1", O_CREATE);
+	if (!com1) {
+		kprintf("Failed to open /dev/raw/serial/com1\n");
+		goto exit;
+	}
+	const char *msg = "Hello from kernel thread!\n";
+	write(com1, (void *)msg, strlen(msg));
+	close(com1);
+exit:
 	thread_exit(thread_current());
 }
 
