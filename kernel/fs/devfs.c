@@ -370,8 +370,6 @@ int devfs_open(struct vnode **vnode, int flags, bool create,
 		return -1;
 	}
 
-	success("devfs: open(%s) reached\n", vn->path);
-
 	struct devfs_node *devfs_node;
 	devfs_find_node(devfs, vn->path, &devfs_node);
 
@@ -438,7 +436,9 @@ int devfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 	}
 
 	struct devfs_node *node = vn->node_data;
+	success("devfs: write(%s) reached\n", vn->path);
 
+	kprintf("%p\n", node->device->ops);
 	if (!node || !node->device || !node->device->ops ||
 		!node->device->ops->write) {
 		error("devfs_write: write unsupported\n");

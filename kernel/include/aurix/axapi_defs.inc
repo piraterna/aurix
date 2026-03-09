@@ -22,3 +22,6 @@ AXAPI_SYM(void, sleep_ms, (uint64_t ms))
 AXAPI_SYM(int, streq, (const char *, const char *))
 AXAPI_SYM(void *, memset, (void *, int, size_t))
 AXAPI_SYM(size_t, strlen, (const char *))
+AXAPI_SYM(void *, memcpy, (void *restrict, const void *restrict, size_t))
+
+AXAPI_SYM(void *, kmap, (void *, size_t))
