@@ -36,24 +36,3 @@ void ax_io_wait(void)
 {
 	io_wait();
 }
-
-void *kmap(void *virt_addr, size_t pages)
-{
-	if (!virt_addr)
-		return NULL;
-
-	pagetable *user_pm = thread_current()->process->pm;
-	if (!user_pm)
-		return NULL;
-
-	uintptr_t phys = vget_phys(user_pm, (uintptr_t)virt_addr);
-	if (!phys)
-		return NULL;
-
-	extern vctx_t *kvctx;
-	void *kvirt = vallocat(kvctx, pages, VALLOC_RW, phys);
-	if (!kvirt)
-		return NULL;
-
-	return kvirt;
-}
