@@ -72,16 +72,55 @@ static void devfs_publish_device(struct device *dev)
 	if (!global_devfs)
 		return;
 
-	struct devfs_node *devfs_node = devfs_create_node(DEVFS_TYPE_CHAR);
-	devfs_node->name = strdup(dev->dev_node_path);
-	devfs_node->device = dev;
+	char *path = strdup(dev->dev_node_path);
+	char *saveptr;
+	char *token;
 
-	if (devfs_append_child(devfs->root_node, devfs_node) != 0) {
-		error("driver: failed to publish driver\n");
-		return;
+	struct devfs_node *current = global_devfs->root_node;
+
+	bool ends_with_slash = path[strlen(path) - 1] == '/';
+
+	token = strtok_r(path, "/", &saveptr);
+
+	while (token) {
+		char *next = strtok_r(NULL, "/", &saveptr);
+		bool is_last = (next == NULL);
+
+		if (is_last && !ends_with_slash) {
+			struct devfs_node *node = devfs_create_node(DEVFS_TYPE_CHAR);
+			node->name = strdup(token);
+			node->device = dev;
+
+			if (devfs_append_child(current, node) != 0) {
+				error("driver: failed to publish device\n");
+				kfree(path);
+				return;
+			}
+
+			debug("driver: published device %s -> %s\n", dev->name,
+				  dev->dev_node_path);
+		} else {
+			struct devfs_node *dir = devfs_find_child(current, token);
+
+			if (!dir) {
+				dir = devfs_create_node(DEVFS_TYPE_DIR);
+				dir->name = strdup(token);
+				devfs_append_child(current, dir);
+			}
+
+			current = dir;
+
+			if (is_last && ends_with_slash) {
+				warn(
+					"driver: device path ends with '/', treating as directory: %s\n",
+					dev->dev_node_path);
+			}
+		}
+
+		token = next;
 	}
 
-	debug("driver: published device %s -> %s\n", dev->name, dev->dev_node_path);
+	kfree(path);
 }
 
 static int class_match(const char *a, const char *b)

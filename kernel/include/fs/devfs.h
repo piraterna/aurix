@@ -60,6 +60,8 @@ int devfs_find_node(struct devfs *devfs, char *path, struct devfs_node **out);
 int devfs_find_or_create_node(struct devfs *ramfs, char *path,
 							  enum devfs_ftype ramfs_ftype,
 							  struct devfs_node **out);
+struct devfs_node *devfs_find_child(struct devfs_node *parent,
+									const char *name);
 
 int devfs_append_child(struct devfs_node *parent, struct devfs_node *child);
 int devfs_node_add(struct devfs *ramfs, char *path, struct devfs_node **out);

@@ -94,6 +94,23 @@ int devfs_find_node(struct devfs *devfs, char *path, struct devfs_node **out)
 	return 0;
 }
 
+struct devfs_node *devfs_find_child(struct devfs_node *parent, const char *name)
+{
+	if (!parent || !name)
+		return NULL;
+
+	struct devfs_node *child = parent->child;
+
+	while (child) {
+		if (child->name && strcmp(child->name, name) == 0)
+			return child;
+
+		child = child->sibling;
+	}
+
+	return NULL;
+}
+
 int devfs_append_child(struct devfs_node *parent, struct devfs_node *child)
 {
 	if (!parent->child) {
@@ -454,6 +471,8 @@ int devfs_vfs_init(struct devfs *devfs, char *mount_path)
 	devfs->root_node->sibling = NULL;
 	devfs->root_node->child = NULL;
 	devfs->root_node->type = DEVFS_TYPE_DIR;
+
+	global_devfs = devfs;
 
 	return 0;
 }

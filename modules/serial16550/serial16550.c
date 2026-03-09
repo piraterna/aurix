@@ -25,7 +25,7 @@
 
 #define LSR_DATA_READY 0x01
 #define LSR_THR_EMPTY 0x20
-#define SERIAL_BASE_PATH "/raw/serial/"
+#define SERIAL_BASE_PATH "/dev/raw/serial/"
 #define SERIAL_OPEN_TIMEOUT 5000000u
 
 static const uint16_t COM_BASES[8] = { 0x3F8, 0x2F8, 0x3E8, 0x2E8,

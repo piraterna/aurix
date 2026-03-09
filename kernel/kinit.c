@@ -92,6 +92,8 @@ void hello(void)
 			cpu_get_current()->id);
 	sleep_ms(1000);
 
+	devfs_print(global_devfs->root_node, 0);
+
 	struct fileio *com1 = open("/dev/raw/serial/com1", 0);
 	if (!com1) {
 		kprintf("Failed to open /dev/raw/serial/com1\n");
