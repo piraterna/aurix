@@ -60,7 +60,7 @@ struct fileio *open(char *path, int flags)
 		return NULL;
 	}
 
-	trace("open: f=%p\n", f);
+	success("open: f=%p\n", f);
 	f->offset = 0;
 	f->flags = flags;
 

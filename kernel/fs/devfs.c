@@ -62,35 +62,72 @@ int devfs_find_node(struct devfs *devfs, char *path, struct devfs_node **out)
 		return -1;
 	}
 
-	struct devfs_node *cur_node = devfs->root_node->child;
 	*out = NULL;
 
-	if (path[0] == '/')
+	if (*path == '/')
 		path++;
 
-	char *name_dup = strdup(path);
-	char *temp = name_dup;
-	char *dir = NULL;
-
-	for (int j = 0; *temp; j++) {
-		(void)j;
-		dir = strtok_r(NULL, "/", &temp);
-		for (; cur_node != NULL; cur_node = cur_node->sibling) {
-			if (strcmp(cur_node->name, dir) != 0)
-				continue;
-
-			if (*temp) {
-				cur_node = cur_node->child;
-				break;
-			}
-			break;
-		}
+	if (*path == '\0') {
+		*out = devfs->root_node;
+		return 0;
 	}
 
-	kfree(name_dup);
-	*out = cur_node;
-	if (!cur_node)
+	char *dup = strdup(path);
+	if (!dup) {
+		error("devfs_find_node: strdup failed\n");
 		return -1;
+	}
+
+	char *save;
+	char *token = strtok_r(dup, "/", &save);
+
+	struct devfs_node *cur = devfs->root_node;
+	int depth = 0;
+
+	while (token) {
+		struct devfs_node *child = cur->child;
+
+		if (!child) {
+			warn("devfs_find_node: node '%s' has no children\n",
+				 cur->name ? cur->name : "(root)");
+		}
+
+		struct devfs_node *tmp = child;
+		int idx = 0;
+
+		while (tmp) {
+			tmp = tmp->sibling;
+			idx++;
+		}
+
+		struct devfs_node *match = NULL;
+
+		while (child) {
+			if (child->name && strcmp(child->name, token) == 0) {
+				match = child;
+				break;
+			}
+
+			child = child->sibling;
+		}
+
+		if (!match) {
+			warn("devfs_find_node: component '%s' NOT FOUND under '%s'\n",
+				 token, cur->name ? cur->name : "(root)");
+
+			kfree(dup);
+			return -1;
+		}
+
+		cur = match;
+		token = strtok_r(NULL, "/", &save);
+		depth++;
+	}
+
+	kfree(dup);
+
+	*out = cur;
+
 	return 0;
 }
 

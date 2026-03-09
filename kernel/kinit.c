@@ -87,18 +87,19 @@ const char *aurix_banner =
 
 void hello(void)
 {
-	kprintf("hello from a kernel process. (tid=%d, pid=%d, cpu=%d)\n",
+	kprintf("kproc: hello from a kernel process. (tid=%d, pid=%d, cpu=%d)\n",
 			thread_current()->tid, thread_current()->process->pid,
 			cpu_get_current()->id);
 	sleep_ms(1000);
-
-	devfs_print(global_devfs->root_node, 0);
 
 	struct fileio *com1 = open("/dev/raw/serial/com1", 0);
 	if (!com1) {
 		kprintf("Failed to open /dev/raw/serial/com1\n");
 		goto exit;
 	}
+
+	kprintf("kproc: open() succeeded\n");
+
 	const char *msg = "Hello from kernel thread!\n";
 	write(com1, (void *)msg, strlen(msg));
 	close(com1);
