@@ -22,10 +22,10 @@
 
 #include <stdint.h>
 #include <dev/device.h>
+#include <fs/devfs.h>
 
 typedef int (*driver_probe_fn)(struct device *dev);
 typedef void (*driver_remove_fn)(struct device *dev);
-typedef int (*driver_poll_fn)(void);
 
 struct driver {
 	const char *name;
@@ -34,6 +34,6 @@ struct driver {
 	driver_remove_fn remove;
 };
 
-void driver_core_init(void);
+void driver_core_init(struct devfs *fs);
 
 #endif

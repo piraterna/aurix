@@ -91,6 +91,7 @@ void hello(void)
 			thread_current()->tid, thread_current()->process->pid,
 			cpu_get_current()->id);
 	sleep_ms(1000);
+
 	devfs_print(global_devfs->root_node, 0);
 
 	struct fileio *com1 = open("/dev/raw/serial/com1", O_CREATE);
@@ -148,15 +149,11 @@ void _start(struct aurix_parameters *params)
 	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
 
-	vfs_create(NULL);
-
-	if (devfs_vfs_init(devfs_create(), "/dev") != 0) {
-		kpanic(NULL, "Failed to mount devfs at /dev");
-	}
-
+	struct devfs *devfs = devfs_create();
+	devfs_vfs_init(devfs, "/");
 	debug("devfs initialized at /dev\n");
 
-	driver_core_init();
+	driver_core_init(devfs);
 
 	// TODO: Add kernel cmdline parsing
 	if (1) {

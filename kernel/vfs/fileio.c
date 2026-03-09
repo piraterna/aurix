@@ -22,7 +22,7 @@
 #include <ipc/pipe.h>
 #include <mm/heap.h>
 #include <aurix.h>
-
+#include <debug/assert.h>
 #include <string.h>
 
 int f2vflags(int fio_flags)

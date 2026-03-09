@@ -49,6 +49,9 @@ struct device {
 };
 
 int device_get_count(void);
-struct device *device_get_list(void);
+
+#define MAX_DEVICES 128
+extern struct device *device_list[MAX_DEVICES];
+extern int device_count;
 
 #endif

@@ -43,6 +43,12 @@ static int dev_count;
 static irqlock_t drv_lock;
 static struct drv_node *drv_list;
 
+static irqlock_t dev_lock;
+struct device *device_list[MAX_DEVICES];
+int device_count = 0;
+
+static struct devfs *devfs = NULL;
+
 static char *kstrdup(const char *s)
 {
 	if (!s)
@@ -58,6 +64,26 @@ static char *kstrdup(const char *s)
 	return out;
 }
 
+static void devfs_publish_device(struct device *dev)
+{
+	if (!dev || !dev->dev_node_path)
+		return;
+
+	if (!global_devfs)
+		return;
+
+	struct devfs_node *devfs_node = devfs_create_node(DEVFS_TYPE_CHAR);
+	devfs_node->name = strdup(dev->dev_node_path);
+	devfs_node->device = dev;
+
+	if (devfs_append_child(devfs->root_node, devfs_node) != 0) {
+		error("driver: failed to publish driver\n");
+		return;
+	}
+
+	debug("driver: published device %s -> %s\n", dev->name, dev->dev_node_path);
+}
+
 static int class_match(const char *a, const char *b)
 {
 	if (!a || !b)
@@ -65,7 +91,7 @@ static int class_match(const char *a, const char *b)
 	return strcmp(a, b) == 0;
 }
 
-void driver_core_init(void)
+void driver_core_init(struct devfs *fs)
 {
 	irqlock_init(&dev_lock);
 	irqlock_init(&drv_lock);
@@ -73,6 +99,7 @@ void driver_core_init(void)
 	dev_list = NULL;
 	drv_list = NULL;
 	dev_count = 0;
+	devfs = fs;
 
 	debug("driver core init\n");
 }
@@ -84,9 +111,26 @@ int device_register(struct device *dev)
 		return -1;
 	}
 
+	irqlock_acquire(&dev_lock);
+
+	for (int i = 0; i < device_count; i++) {
+		if (strcmp(device_list[i]->name, dev->name) == 0) {
+			warn("duplicate device name=%s\n", dev->name);
+			irqlock_release(&dev_lock);
+			return -1;
+		}
+	}
+
+	if (device_count >= MAX_DEVICES) {
+		warn("device list full, cannot register %s\n", dev->name);
+		irqlock_release(&dev_lock);
+		return -1;
+	}
+
 	struct device *n = kmalloc(sizeof(*n));
 	if (!n) {
 		error("kmalloc failed for device\n");
+		irqlock_release(&dev_lock);
 		return -1;
 	}
 
@@ -102,40 +146,15 @@ int device_register(struct device *dev)
 		kfree((void *)n->class_name);
 		kfree((void *)n->dev_node_path);
 		kfree(n);
+		irqlock_release(&dev_lock);
 		return -1;
 	}
 
-	irqlock_acquire(&dev_lock);
-
-	for (struct device *it = dev_list; it; it = it->next) {
-		if (strcmp(it->name, dev->name) == 0) {
-			irqlock_release(&dev_lock);
-
-			warn("duplicate device name=%s\n", dev->name);
-
-			kfree((void *)n->name);
-			kfree((void *)n->class_name);
-			kfree((void *)n->dev_node_path);
-			kfree(n);
-			return -1;
-		}
-	}
-
-	n->next = dev_list;
-	dev_list = n;
-	dev_count++;
+	device_list[device_count++] = n;
 
 	irqlock_release(&dev_lock);
 
-	extern devfs_t *global_devfs;
-	if (global_devfs && n->dev_node_path) {
-		devfs_node_t *node = devfs_create_node(DEVFS_TYPE_CHAR);
-		if (node) {
-			node->name = kstrdup(n->dev_node_path);
-			node->device = n;
-			devfs_append_child(global_devfs->root_node, node);
-		}
-	}
+	devfs_publish_device(n);
 
 	debug("device registered: %s class=%s\n", n->name,
 		  n->class_name ? n->class_name : "(none)");
@@ -205,7 +224,10 @@ int driver_bind_all(void)
 		struct driver *drv = &d->drv;
 		int driver_bound = 0;
 
-		for (struct device *dev = dev_list; dev; dev = dev->next) {
+		irqlock_acquire(&dev_lock);
+		for (int i = 0; i < device_count; i++) {
+			struct device *dev = device_list[i];
+
 			if (dev->bound_driver)
 				continue;
 
@@ -219,11 +241,7 @@ int driver_bind_all(void)
 			if (d->owner_cr3)
 				write_cr3(d->owner_cr3);
 
-			int rc = -1;
-			if (!drv->probe) {
-				warn("driver: No probe function for \"%s\"\n", drv->name);
-			} else
-				rc = drv->probe(dev);
+			int rc = drv->probe ? drv->probe(dev) : -1;
 
 			write_cr3(prev_cr3);
 			restore_if(irq_state);
@@ -232,11 +250,11 @@ int driver_bind_all(void)
 				dev->bound_driver = drv;
 				d->bound_count++;
 				driver_bound++;
-				total_bound++;
 				success("bound %s -> %s (class=%s)\n", drv->name, dev->name,
 						dev->class_name ? dev->class_name : "(none)");
 			}
 		}
+		irqlock_release(&dev_lock);
 
 		if (driver_bound == 0) {
 			warn("driver %s: no devices bound\n", drv->name);
@@ -250,12 +268,7 @@ int device_get_count(void)
 {
 	int count;
 	irqlock_acquire(&dev_lock);
-	count = dev_count;
+	count = device_count;
 	irqlock_release(&dev_lock);
 	return count;
-}
-
-struct device *device_get_list(void)
-{
-	return dev_list;
 }

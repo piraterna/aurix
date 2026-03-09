@@ -26,20 +26,22 @@
 #include <aurix.h>
 #include <stddef.h>
 #include <lib/string.h>
+#include <debug/assert.h>
 
-struct vfs *rootfs = NULL;
+struct vfs *vfs_list = NULL;
 
 struct vfs *vfs_create(void *fs_data)
 {
 	struct vfs *v = kmalloc(sizeof(struct vfs));
 	memset(v, 0, sizeof(struct vfs));
 
-	v->fs_data = fs_data;
-
 	v->ops = kmalloc(sizeof(struct vfs_fops));
 	memset(v->ops, 0, sizeof(struct vfs_fops));
 
+	v->fs_data = fs_data;
+
 	vfs_append(v);
+
 	return v;
 }
 
@@ -51,7 +53,7 @@ struct vfs *vfs_mount(void *fs, char *path, void *rootvn_data)
 		return NULL;
 	}
 
-	struct vfs *v = (struct vfs *)fs;
+	struct vfs *v = vfs_create(fs);
 	struct vfs *rootvfs;
 	if (vfs_resolve_mount(path, &rootvfs) != 0) {
 		rootvfs = v;
@@ -61,20 +63,18 @@ struct vfs *vfs_mount(void *fs, char *path, void *rootvn_data)
 	trace("vfs_mount: root_vnode->path=%s\n", v->root_vnode->path);
 	v->root_vnode->vfs_mount = v;
 
-	vfs_append(v);
-
 	return v;
 }
 
 int vfs_append(struct vfs *vfs)
 {
-	if (!rootfs) {
-		rootfs = vfs;
+	if (!vfs_list) {
+		vfs_list = vfs;
 		return 0;
 	}
 
 	struct vfs *v;
-	for (v = rootfs; v->next != NULL; v = v->next)
+	for (v = vfs_list; v->next != NULL; v = v->next)
 		;
 
 	v->next = vfs;
@@ -86,8 +86,7 @@ struct vnode *vnode_create(struct vfs *root_vfs, char *path, void *data)
 	struct vnode *vnode = kmalloc(sizeof(struct vnode));
 	memset(vnode, 0, sizeof(struct vnode));
 
-	vnode->path = kmalloc(strlen(path) + 1);
-	strcpy(vnode->path, path);
+	vnode->path = strdup(path);
 
 	vnode->vfs_root = root_vfs;
 	vnode->node_data = data;
@@ -100,36 +99,28 @@ struct vnode *vnode_create(struct vfs *root_vfs, char *path, void *data)
 
 int vfs_resolve_mount(char *path, struct vfs **out)
 {
-	struct vfs *v;
-	trace("vfs_resolve_mount: path=%s\n", path);
-	for (v = rootfs; v != NULL; v = v->next) {
-		trace("vfs_resolve_mount: checking v=%p root_vnode=%p\n", v,
-			  v->root_vnode);
+	struct vfs *v = vfs_list;
+	for (; v != NULL; v = v->next) {
 		if (!v->root_vnode) {
-			continue;
+			error("vfs: No root vnode for vnode\n");
+			return -1;
 		}
 
 		char *prefix = v->root_vnode->path;
-		trace("vfs_resolve_mount: prefix=%s\n", prefix);
-
-		size_t prefix_len = strlen(prefix);
-		if (strlen(path) < prefix_len) {
+		if (strlen(path) < strlen(prefix)) {
 			continue;
 		}
 
-		if (strncmp(path, prefix, prefix_len) == 0) {
-			if (path[prefix_len] == '\0' || path[prefix_len] == '/') {
-				*out = v;
-				break;
-			}
+		if (strncmp(path, prefix, strlen(prefix)) == 0) {
+			*out = v;
+			break;
 		}
 	}
 
 	if (!v) {
-		error("vfs_resolve_mount: no vfs found for %s\n", path);
+		warn("vfs: NULL vfs_list?\n");
 		return -1;
 	}
-
 	return 0;
 }
 
@@ -143,6 +134,11 @@ int vfs_open(struct vfs *vfs, char *path, int flags, struct fileio **out)
 	vn_file->path += strlen(vfs->root_vnode->path);
 
 	struct fileio *fio_file = fio_create();
+
+	if (!vn_file->ops->open) {
+		warn("open() not present for %s\n", path);
+		return -1;
+	}
 
 	if (vn_file->ops->open(&vn_file, flags, false, &fio_file) != 0) {
 		kfree(vn_file->path);
