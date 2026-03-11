@@ -48,19 +48,16 @@ struct fileio *open(char *path, int flags)
 {
 	struct fileio *f = NULL;
 	struct vfs *parent_vfs;
-	trace("open: path=%s flags=%d\n", path, flags);
 	if (vfs_resolve_mount(path, &parent_vfs) != 0) {
 		error("open: vfs_resolve_mount failed\n");
 		return NULL;
 	}
 
-	trace("open: parent_vfs=%p\n", parent_vfs);
 	if (vfs_open(parent_vfs, path, f2vflags(flags), &f) != 0) {
 		error("open: vfs_open failed\n");
 		return NULL;
 	}
 
-	success("open: f=%p\n", f);
 	f->offset = 0;
 	f->flags = flags;
 

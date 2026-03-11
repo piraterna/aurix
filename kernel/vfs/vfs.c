@@ -126,10 +126,8 @@ int vfs_resolve_mount(char *path, struct vfs **out)
 
 int vfs_open(struct vfs *vfs, char *path, int flags, struct fileio **out)
 {
-	trace("vfs_open: vfs=%p path=%s\n", vfs, path);
 	struct vnode *vn_file = vnode_create(vfs, path, NULL);
 	vn_file->vfs_mount = vfs;
-	trace("vfs_open: root_vnode->ops=%p\n", vfs->root_vnode->ops);
 	memcpy(vn_file->ops, vfs->root_vnode->ops, sizeof(struct vfs_vops));
 	vn_file->path += strlen(vfs->root_vnode->path);
 
@@ -140,6 +138,7 @@ int vfs_open(struct vfs *vfs, char *path, int flags, struct fileio **out)
 		return -1;
 	}
 
+	trace("open(%s)\n", vn_file->path);
 	if (vn_file->ops->open(&vn_file, flags, false, &fio_file) != 0) {
 		kfree(vn_file->path);
 		kfree(vn_file);
@@ -188,6 +187,12 @@ int vfs_close(struct vnode *vnode)
 		return -1;
 	}
 
+	if (!vnode->ops->close) {
+		warn("close() not present for %s\n", vnode->path);
+		return -1;
+	}
+
+	trace("close(%s)\n", vnode->path);
 	int ret = vnode->ops->close(vnode, 0, false);
 	if (!ret) {
 		return ret;

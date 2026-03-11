@@ -26,6 +26,7 @@
 #include <lib/string.h>
 #include <debug/log.h>
 #include <debug/assert.h>
+#include <aurix.h>
 
 struct devfs *global_devfs = NULL;
 
@@ -438,7 +439,10 @@ int devfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 	struct devfs_node *node = vn->node_data;
 	success("devfs: write(%s) reached\n", vn->path);
 
-	kprintf("%p\n", node->device->ops);
+	node->device->ops =
+		(struct device_ops *)PHYS_TO_VIRT((uintptr_t)node->device->ops);
+	debug("%p\n", node->device->ops);
+	debug("%p\n", node->device->ops->write);
 	if (!node || !node->device || !node->device->ops ||
 		!node->device->ops->write) {
 		error("devfs_write: write unsupported\n");

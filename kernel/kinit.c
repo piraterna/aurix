@@ -94,14 +94,18 @@ void hello(void)
 
 	struct fileio *com1 = open("/dev/raw/serial/com1", 0);
 	if (!com1) {
-		kprintf("Failed to open /dev/raw/serial/com1\n");
+		kprintf("kproc: Failed to open /dev/raw/serial/com1\n");
 		goto exit;
 	}
 
 	kprintf("kproc: open() succeeded\n");
 
 	const char *msg = "Hello from kernel thread!\n";
-	write(com1, (void *)msg, strlen(msg));
+	if (write(com1, (void *)msg, strlen(msg)) <= 0) {
+		kprintf("kproc: Failed to write to /dev/raw/serial/com1\n");
+		close(com1);
+		goto exit;
+	}
 	close(com1);
 exit:
 	thread_exit(thread_current());
