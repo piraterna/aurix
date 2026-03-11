@@ -183,6 +183,7 @@ typedef struct {
 #define SHT_NULL 0
 #define SHT_SYMTAB 2
 #define SHT_STRTAB 3
+#define SHT_RELA 4
 
 ///
 // Symbol Table
@@ -195,6 +196,18 @@ typedef struct {
 	Elf64_Addr st_value;
 	Elf64_Xword st_size;
 } __attribute__((packed)) Elf64_Sym;
+
+typedef struct {
+	Elf64_Addr r_offset;
+	Elf64_Xword r_info;
+	Elf64_Sxword r_addend;
+} __attribute__((packed)) Elf64_Rela;
+
+#define ELF64_R_SYM(info) ((info) >> 32)
+#define ELF64_R_TYPE(info) ((Elf64_Word)(info))
+
+#define R_X86_64_NONE 0
+#define R_X86_64_RELATIVE 8
 
 #define STB_LOCAL 0
 #define STB_GLOBAL 1
