@@ -24,8 +24,8 @@ MOD_DIRS = $(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v))
 export BUILD_DIR := $(BUILD_DIR)/kernel/mod
 export MOD_INSTALL_DIR := $(SYSROOT_DIR)/System/support
 
-export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fno-pic -fno-pie -fno-stack-protector -I$(abspath ../kernel/include) -I$(abspath ../kernel/include/aurix) # -fno-stack-protector: no TLS for modules
-export MOD_LDFLAGS := -nostdlib -static
+export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fpic -fpie -fno-stack-protector -I$(abspath ../kernel/include) -I$(abspath ../kernel/include/aurix) # -fno-stack-protector: no TLS for modules
+export MOD_LDFLAGS := -nostdlib -pie
 export MOD_DEFINES := __$(ARCH)__
 
 ifeq ($(USE_HOST_TOOLCHAIN),y)
@@ -55,24 +55,8 @@ $(filter-out common/.,$(MOD_DIRS)): common/.
 
 $(MOD_DIRS):
 ifeq ($(MAKECMDGOALS),)
-	@printf ">>> Building module '$(patsubst %/,%,$(dir $(@)))'...\n"
+	@printf ">>> Building module '%s'...\n" "$(patsubst %/,%,$(dir $(@)))"
 endif
-	@$(MAKE) -C $@ $(MAKECMDGOALS)
+	@$(MAKE) -C "$@" $(MAKECMDGOALS)
 
 .PHONY: $(MAKE_TARGETS) $(MOD_DIRS)
-		- ld export MOD_OBJCOPY : = $(ARCH) - elf -
-									objcopy endif
-
-									ifeq($(BUILD_TYPE), debug) export MOD_CFLAGS
-								  += -O0 - g3 - D_DEBUG else export MOD_CFLAGS
-								  += -O2 endif
-
-									 $(MAKE_TARGETS)
-	: $(MOD_DIRS)
-
-		  $(MOD_DIRS)
-	: ifeq($(MAKECMDGOALS), ) @printf
-	">>> Building module '$(patsubst %/,%,$(dir $(@)))'...\n" endif
-	@$(MAKE) - C $ @$(MAKECMDGOALS)
-
-										 .PHONY : $(MAKE_TARGETS) $(MOD_DIRS)
