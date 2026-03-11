@@ -32,6 +32,9 @@
 /* https://github.com/KevinAlavik/nekonix/blob/main/kernel/src/proc/elf.c */
 /* Thanks, Kevin <3 */
 
+void elf64_apply_relocations(Elf64_Ehdr *header, uintptr_t phys_base,
+							 uintptr_t base_vaddr);
+
 uintptr_t elf32_load(char *data, uintptr_t *addr, size_t *size,
 					 pagetable *pagemap)
 {
@@ -111,6 +114,8 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		}
 	}
 
+	elf64_apply_relocations(header, phys_base, base_vaddr);
+
 	debug("ELF loaded successfully, entry point: 0x%llx\n", header->e_entry);
 	return (uintptr_t)header->e_entry;
 }
@@ -180,6 +185,45 @@ static bool elf64_get_symtab(Elf64_Ehdr *ehdr, Elf64_Sym **symtab_out,
 	*strtab_out = (const char *)ehdr + strtab_sh->sh_offset;
 
 	return true;
+}
+
+void elf64_apply_relocations(Elf64_Ehdr *header, uintptr_t phys_base,
+							 uintptr_t base_vaddr)
+{
+	if (!header || header->e_shoff == 0 || header->e_shnum == 0)
+		return;
+
+	if (header->e_type != ET_DYN)
+		return;
+
+	Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)header + header->e_shoff);
+
+	for (Elf64_Half i = 0; i < header->e_shnum; i++) {
+		if (shdr[i].sh_type != SHT_RELA || shdr[i].sh_size == 0)
+			continue;
+
+		Elf64_Rela *rela =
+			(Elf64_Rela *)((uint8_t *)header + shdr[i].sh_offset);
+		size_t count = shdr[i].sh_size / sizeof(Elf64_Rela);
+
+		for (size_t j = 0; j < count; j++) {
+			Elf64_Word type = ELF64_R_TYPE(rela[j].r_info);
+
+			if (type == R_X86_64_RELATIVE) {
+				uintptr_t where_vaddr =
+					base_vaddr + (uintptr_t)rela[j].r_offset;
+				if (where_vaddr < base_vaddr)
+					continue;
+
+				uintptr_t offset = where_vaddr - base_vaddr;
+				uint64_t *ptr = (uint64_t *)PHYS_TO_VIRT(phys_base + offset);
+				uint64_t value = base_vaddr + (uintptr_t)rela[j].r_addend;
+				*ptr = value;
+			} else {
+				debug("Unsupported reloc type %u\n", type);
+			}
+		}
+	}
 }
 
 uintptr_t elf_lookup_symbol(char *elf_data, const char *symbol_name)
