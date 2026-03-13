@@ -429,6 +429,82 @@ int devfs_read(struct vnode *vn, size_t *bytes, size_t *offset, void *out)
 	return node->device->ops->read(node->device, out, *bytes);
 }
 
+void print_device(struct devfs_node *node, int indent)
+{
+	if (!node)
+		return;
+
+	for (int i = 0; i < indent; i++)
+		kprintf("  ");
+
+	kprintf("struct devfs_node {\n");
+	for (int i = 0; i <= indent; i++)
+		kprintf("  ");
+	kprintf("name = %s;\n", node->name ? node->name : "NULL");
+	for (int i = 0; i <= indent; i++)
+		kprintf("  ");
+	kprintf("type = %d;\n", node->type);
+
+	for (int i = 0; i <= indent; i++)
+		kprintf("  ");
+	kprintf("device = ");
+	if (node->device) {
+		kprintf("{\n");
+		for (int j = 0; j <= indent + 1; j++)
+			kprintf("  ");
+		kprintf("name = %s;\n",
+				node->device->name ? node->device->name : "NULL");
+		for (int j = 0; j <= indent + 1; j++)
+			kprintf("  ");
+		kprintf("class_name = %s;\n",
+				node->device->class_name ? node->device->class_name : "NULL");
+		for (int j = 0; j <= indent + 1; j++)
+			kprintf("  ");
+		kprintf("dev_node_path = %s;\n", node->device->dev_node_path ?
+											 node->device->dev_node_path :
+											 "NULL");
+		for (int j = 0; j <= indent + 1; j++)
+			kprintf("  ");
+		kprintf("driver_data = %p;\n", node->device->driver_data);
+		for (int j = 0; j <= indent + 1; j++)
+			kprintf("  ");
+		kprintf("bound_driver = %p;\n", node->device->bound_driver);
+		for (int j = 0; j <= indent + 1; j++)
+			kprintf("  ");
+		kprintf("ops = %p;\n", node->device->ops);
+		for (int j = 0; j <= indent + 1; j++)
+			kprintf("  ");
+		kprintf("next = %p;\n", node->device->next);
+		for (int j = 0; j <= indent; j++)
+			kprintf("  ");
+		kprintf("};\n");
+	} else {
+		kprintf("NULL;\n");
+	}
+
+	for (int i = 0; i <= indent; i++)
+		kprintf("  ");
+	kprintf("child = ");
+	if (node->child) {
+		print_device(node->child, indent + 1);
+	} else {
+		kprintf("NULL;\n");
+	}
+
+	for (int i = 0; i <= indent; i++)
+		kprintf("  ");
+	kprintf("sibling = ");
+	if (node->sibling) {
+		print_device(node->sibling, indent);
+	} else {
+		kprintf("NULL;\n");
+	}
+
+	for (int i = 0; i < indent; i++)
+		kprintf("  ");
+	kprintf("};\n");
+}
+
 int devfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 {
 	if (!vn || !buf || !bytes || !offset) {
@@ -438,6 +514,8 @@ int devfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 
 	struct devfs_node *node = vn->node_data;
 	success("devfs: write(%s) reached\n", vn->path);
+
+	print_device(node, 0);
 
 	node->device->ops =
 		(struct device_ops *)PHYS_TO_VIRT((uintptr_t)node->device->ops);

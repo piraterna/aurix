@@ -38,4 +38,35 @@ extern vctx_t *kvctx;
 #define UNREACHABLE() __builtin_unreachable()
 #endif
 
+static inline void hexdump(const void *data, size_t size)
+{
+	const unsigned char *p = (const unsigned char *)data;
+
+	for (size_t i = 0; i < size; i += 16) {
+		kprintf("%08zx  ", i);
+
+		for (size_t j = 0; j < 16; j++) {
+			if (i + j < size)
+				kprintf("%02x ", p[i + j]);
+			else
+				kprintf("   ");
+
+			if (j == 7)
+				kprintf(" ");
+		}
+
+		kprintf(" |");
+
+		for (size_t j = 0; j < 16 && i + j < size; j++) {
+			unsigned char c = p[i + j];
+			if (c >= 32 && c <= 126)
+				kprintf("%c", c);
+			else
+				kprintf(".");
+		}
+
+		kprintf("|\n");
+	}
+}
+
 #endif /* _AURIX_H */
