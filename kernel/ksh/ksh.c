@@ -26,9 +26,79 @@
 #include <util/kprintf.h>
 #include <vfs/fileio.h>
 
+#include <fs/devfs.h>
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+static void ksh_handle_ascii(char ch, char *line, size_t *len, size_t cap)
+{
+	if (!line || !len || cap == 0)
+		return;
+
+	// Enter (CR or LF).
+	if (ch == '\r' || ch == '\n') {
+		kprintf("\n");
+		line[*len] = 0;
+		ksh_exec_line(line);
+		*len = 0;
+		line[0] = 0;
+		kprintf("ksh> ");
+		return;
+	}
+
+	// Backspace (BS or DEL).
+	if ((unsigned char)ch == 0x08 || (unsigned char)ch == 0x7F) {
+		if (*len > 0) {
+			(*len)--;
+			line[*len] = 0;
+			kprintf("\b \b");
+		}
+		return;
+	}
+
+	// Keep it simple: accept printable ASCII only.
+	if ((unsigned char)ch < 0x20 || (unsigned char)ch > 0x7E)
+		return;
+
+	if (*len + 1 >= cap)
+		return;
+
+	line[(*len)++] = ch;
+	line[*len] = 0;
+	kprintf("%c", ch);
+}
+
+static struct device *ksh_fileio_device(struct fileio *f)
+{
+	if (!f)
+		return NULL;
+	if (!(f->flags & SPECIAL_FILE_TYPE_DEVICE))
+		return NULL;
+	struct vnode *vn = (struct vnode *)f->private;
+	if (!vn)
+		return NULL;
+	struct devfs_node *node = (struct devfs_node *)vn->node_data;
+	if (!node)
+		return NULL;
+	return node->device;
+}
+
+static bool ksh_dev_can_read(struct device *dev)
+{
+	return dev && dev->ops && dev->ops->read;
+}
+
+static bool ksh_dev_has_data(struct device *dev)
+{
+	if (!dev || !dev->ops)
+		return false;
+	// Without poll(), we can't safely multiplex inputs (read() may block).
+	if (!dev->ops->poll)
+		return false;
+	return dev->ops->poll(dev) != 0;
+}
 
 static char ksh_scancode_to_ascii(uint8_t sc, int shift)
 {
@@ -65,10 +135,24 @@ static char ksh_scancode_to_ascii(uint8_t sc, int shift)
 
 void ksh_thread(void)
 {
+	char com1_path[] = "/dev/raw/serial/com1";
+	struct fileio *com1 = open(com1_path, 0);
+	struct device *com1_dev = ksh_fileio_device(com1);
+	if (com1 && !ksh_dev_can_read(com1_dev))
+		kprintf("ksh: /dev/raw/serial/com1 read() not ready (skipping)\n");
+	if (!com1)
+		kprintf("ksh: /dev/raw/serial/com1 not available (skipping)\n");
+
 	char kbd_path[] = "/dev/raw/ps2/kbd0";
 	struct fileio *kbd = open(kbd_path, 0);
-	if (!kbd) {
-		kprintf("ksh: failed to open /dev/raw/ps2/kbd0\n");
+	struct device *kbd_dev = ksh_fileio_device(kbd);
+	if (kbd && !ksh_dev_can_read(kbd_dev))
+		kprintf("ksh: /dev/raw/ps2/kbd0 read() not ready (skipping)\n");
+	if (!kbd)
+		kprintf("ksh: /dev/raw/ps2/kbd0 not available (skipping)\n");
+
+	if (!kbd && !com1) {
+		kprintf("ksh: no input devices available\n");
 		goto out;
 	}
 
@@ -84,10 +168,37 @@ void ksh_thread(void)
 	bool extended = false;
 
 	for (;;) {
+		bool did_work = false;
+
+		if (com1 && com1_dev && ksh_dev_has_data(com1_dev)) {
+			for (unsigned i = 0; i < 32; i++) {
+				if (!ksh_dev_has_data(com1_dev))
+					break;
+				uint8_t b = 0;
+				size_t n = read(com1, 1, &b);
+				if (n == (size_t)-1 || n == 0)
+					break;
+				did_work = true;
+				ksh_handle_ascii((char)b, line, &len, sizeof(line));
+			}
+		}
+
+		if (!kbd) {
+			if (!did_work)
+				sleep_ms(10);
+			continue;
+		}
+
 		uint8_t sc = 0;
+		if (kbd_dev && !ksh_dev_has_data(kbd_dev)) {
+			if (!did_work)
+				sleep_ms(10);
+			continue;
+		}
 		size_t n = read(kbd, 1, &sc);
 		if (n == (size_t)-1 || n == 0) {
-			sleep_ms(10);
+			if (!did_work)
+				sleep_ms(10);
 			continue;
 		}
 
@@ -126,37 +237,27 @@ void ksh_thread(void)
 
 		// Enter.
 		if (sc == 0x1C) {
-			kprintf("\n");
-			line[len] = 0;
-			ksh_exec_line(line);
-			len = 0;
-			line[0] = 0;
-			kprintf("ksh> ");
+			ksh_handle_ascii('\n', line, &len, sizeof(line));
 			continue;
 		}
 
 		// Backspace.
 		if (sc == 0x0E) {
-			if (len > 0) {
-				len--;
-				line[len] = 0;
-				kprintf("\b \b");
-			}
+			ksh_handle_ascii(0x08, line, &len, sizeof(line));
 			continue;
 		}
 
 		char ch = ksh_scancode_to_ascii(sc, (lshift || rshift) ? 1 : 0);
 		if (!ch)
 			continue;
-		if (len + 1 >= sizeof(line))
-			continue;
-		line[len++] = ch;
-		line[len] = 0;
-		kprintf("%c", ch);
+		ksh_handle_ascii(ch, line, &len, sizeof(line));
 	}
 
 	// not reached
-	close(kbd);
+	if (kbd)
+		close(kbd);
+	if (com1)
+		close(com1);
 
 out:
 	thread_exit(thread_current());

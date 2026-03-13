@@ -42,6 +42,7 @@ static int serial_open(struct device *dev);
 static int serial_close(struct device *dev);
 static int serial_read(struct device *dev, void *buf, uint64_t len);
 static int serial_write(struct device *dev, const void *buf, uint64_t len);
+static int serial_poll(struct device *dev);
 
 static struct device_ops serial_ops = {
 	.open = serial_open,
@@ -49,6 +50,7 @@ static struct device_ops serial_ops = {
 	.read = serial_read,
 	.write = serial_write,
 	.ioctl = 0,
+	.poll = serial_poll,
 };
 
 static uint8_t serial_tx_empty(uint16_t base)
@@ -147,12 +149,21 @@ static int serial_read(struct device *dev, void *buf, uint64_t len)
 		return -1;
 	struct serial_ctx *ctx = dev->driver_data;
 	uint8_t *dst = buf;
-	for (uint64_t i = 0; i < len; i++) {
-		while (!(ax_inb(ctx->base + 5) & LSR_DATA_READY)) {
-		}
-		dst[i] = ax_inb(ctx->base + 0);
+	uint64_t n = 0;
+	for (; n < len; n++) {
+		if (!(ax_inb(ctx->base + 5) & LSR_DATA_READY))
+			break;
+		dst[n] = ax_inb(ctx->base + 0);
 	}
-	return (int)len;
+	return (int)n;
+}
+
+static int serial_poll(struct device *dev)
+{
+	if (!dev || !dev->driver_data)
+		return 0;
+	struct serial_ctx *ctx = dev->driver_data;
+	return (ax_inb(ctx->base + 5) & LSR_DATA_READY) != 0;
 }
 
 static int serial_write(struct device *dev, const void *buf, uint64_t len)

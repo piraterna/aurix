@@ -331,7 +331,7 @@ static int cmd_ps(int argc, char **argv)
 	for (size_t i = 0; i < ent_count; i++) {
 		pcb *p = ents[i].p;
 		const char *pname = (p && p->name) ? p->name : "(unnamed)";
-		kprintf("%u   %llu      %s\n", p->pid,
+		kprintf("%u    %llu        %s\n", p->pid,
 				(unsigned long long)ents[i].threads_seen, pname);
 	}
 	if (ent_count == (sizeof(ents) / sizeof(ents[0])))
