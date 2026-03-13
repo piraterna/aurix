@@ -3,6 +3,9 @@ AXAPI_SYM(int, snprintf, (char *, size_t, const char *, ...))
 
 AXAPI_SYM(void, sched_yield, (void))
 
+AXAPI_SYM(int, make_child, (void (*entry)(void)))
+AXAPI_SYM(int, make_child_ex, (void (*entry)(void), uint64_t flags))
+
 AXAPI_SYM(uint8_t, cpu_get_current_id, (void))
 
 AXAPI_SYM(void *, kmalloc, (size_t size))

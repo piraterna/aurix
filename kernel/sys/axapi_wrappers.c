@@ -22,6 +22,26 @@
 #include <stdint.h>
 #include <sys/sched.h>
 
+int make_child_ex(void (*entry)(void), uint64_t flags)
+{
+	(void)flags;
+	if (!entry)
+		return -1;
+	tcb *cur = thread_current();
+	if (!cur || !cur->process)
+		return -1;
+
+	tcb *t = thread_create(cur->process, entry);
+	if (!t)
+		return -1;
+	return (int)t->tid;
+}
+
+int make_child(void (*entry)(void))
+{
+	return make_child_ex(entry, 0);
+}
+
 uint8_t ax_inb(uint16_t port)
 {
 	return inb(port);

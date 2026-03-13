@@ -4,6 +4,9 @@ sysroot/
 .vscode/
 .idea/
 
+modules/ps2kbd/
+modules/ps2mouse/
+
 .DS_Store
 Brewfile.lock.json
 *.o

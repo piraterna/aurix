@@ -30,9 +30,16 @@
 #define PS2_COMMAND 0x64
 #define PS2_STATUS 0x64
 
+#define PS2_STATUS_OUT_FULL (1u << 0)
+#define PS2_STATUS_IN_FULL (1u << 1)
+#define PS2_STATUS_AUXDATA (1u << 5)
+
+#define PS2_PORT1 1u
+#define PS2_PORT2 2u
+
 bool ps2_wait_until_inbuf_free();
 bool ps2_send(uint8_t port, uint8_t val);
-uint8_t ps2_recv(uint8_t port);
+bool ps2_recv(uint8_t *out);
 
 void ps2_reset_port(uint8_t port);
 void ps2_reset_all();

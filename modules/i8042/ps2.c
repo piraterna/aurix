@@ -10,19 +10,19 @@
 /*                                                                               */
 /* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
 /* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
 /* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
 /* SOFTWARE. */
 /*********************************************************************************/
 
 #include <aurix/axapi.h>
+
 #include <sys/aurix/mod.h>
-#include <dev/driver.h>
+
+#include <dev/device.h>
+
 #include <ps2.h>
 
 #include <stdbool.h>
@@ -34,297 +34,497 @@ void mod_exit(void);
 
 __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.name = "i8042_ps2",
-	.desc = "i8042 PS/2 Controller Driver",
+	.desc = "i8042 PS/2 Controller",
 	.author = "Jozef Nagy",
 
 	.mod_init = mod_init,
 	.mod_exit = mod_exit,
 };
 
-struct ps2_info {
-	bool is_dual_channel;
+// ===== i8042 controller helpers =====
 
-	bool port_enabled[2];
-	uint16_t port_ident[2];
-};
+static void ps2_flush_output(void)
+{
+	for (uint32_t spins = 0; spins < 1024; spins++) {
+		uint8_t st = ax_inb(PS2_STATUS);
+		if (!(st & PS2_STATUS_OUT_FULL))
+			break;
+		(void)ax_inb(PS2_DATA);
+	}
+}
 
-struct ps2_info info = { 0 };
+bool ps2_wait_until_inbuf_free(void)
+{
+	uint64_t start_time = get_ms();
+	uint64_t timeout_ms = 1000;
 
-void ps2_write_ctl_config(uint8_t val)
+	while (ax_inb(PS2_STATUS) & PS2_STATUS_IN_FULL) {
+		if (get_ms() - start_time > timeout_ms)
+			return false;
+	}
+
+	return true;
+}
+
+static bool ps2_wait_until_outbuf_full(uint64_t timeout_ms)
+{
+	uint64_t start = get_ms();
+	while (!(ax_inb(PS2_STATUS) & PS2_STATUS_OUT_FULL)) {
+		if ((get_ms() - start) > timeout_ms)
+			return false;
+	}
+	return true;
+}
+
+static void ps2_write_ctl_config(uint8_t val)
 {
 	ax_outb(PS2_COMMAND, 0x60);
 	ax_outb(PS2_DATA, val);
 }
 
-uint8_t ps2_read_ctl_config()
+static uint8_t ps2_read_ctl_config(void)
 {
 	ax_outb(PS2_COMMAND, 0x20);
+	(void)ps2_wait_until_outbuf_full(100);
 	return ax_inb(PS2_DATA);
-}
-
-void ps2_test_and_enable_port(uint8_t port)
-{
-	if (port == 0 || port >= 2) {
-		kprintf(
-			"i8042_ps2: Invalid port number supplied to ps2_test_and_enable_port(): %u\n",
-			port);
-		return;
-	}
-
-	if (port == 1) {
-		ax_outb(PS2_COMMAND, 0xAB);
-	} else if (port == 2) {
-		ax_outb(PS2_COMMAND, 0xA9);
-	}
-
-	uint8_t test = ax_inb(PS2_DATA);
-	if (test != 0) {
-		kprintf("i8042_ps2: Port #%u failed self-test: ", port);
-		switch (test) {
-		case 1:
-			kprintf("clock line stuck low\n");
-			break;
-		case 2:
-			kprintf("clock line stuck high\n");
-			break;
-		case 3:
-			kprintf("data line stuck low\n");
-			break;
-		case 4:
-			kprintf("data line stuck high\n");
-			break;
-		default:
-			kprintf("unknown error\n");
-			break;
-		}
-
-		return;
-	}
-
-	// test passed, enable port
-	uint8_t ctl_config = ps2_read_ctl_config();
-
-	if (port == 1) {
-		ax_outb(PS2_COMMAND, 0xAE);
-		ctl_config |= (1 << 0);
-	} else if (port == 2) {
-		ax_outb(PS2_COMMAND, 0xA8);
-		ctl_config |= (1 << 1);
-	}
-
-	ps2_write_ctl_config(ctl_config);
-
-	info.port_enabled[port - 1] = true;
-	kprintf("i8042_ps2: Enabled PS/2 port #%u\n", port);
-}
-
-bool ps2_wait_until_inbuf_free()
-{
-	uint64_t start_time = get_ms();
-	uint64_t timeout_ms = 1000;
-
-	while (ax_inb(PS2_STATUS) & (1 << 1)) {
-		if (get_ms() - start_time > timeout_ms) {
-			return false;
-		}
-	}
-
-	return true;
 }
 
 bool ps2_send(uint8_t port, uint8_t val)
 {
-	if (port == 0 || port > 2) {
-		kprintf("i8042_ps2: Invalid port number supplied to ps2_send(): %u\n",
-				port);
+	if (port != PS2_PORT1 && port != PS2_PORT2)
 		return false;
-	}
 
-	if (port == 2 && !info.port_enabled[1]) {
-		kprintf(
-			"i8042_ps2: Port #2 not enabled/present, writing is impossible.\n");
-		return false;
-	}
-
-	if (port == 2)
+	if (port == PS2_PORT2)
 		ax_outb(PS2_COMMAND, 0xD4);
 
-	if (!ps2_wait_until_inbuf_free()) {
-		kprintf(
-			"i8042_ps2: Input buffer didn't empty in time, not writing data. (timeout expired)\n");
+	if (!ps2_wait_until_inbuf_free())
 		return false;
-	}
 
 	ax_outb(PS2_DATA, val);
 	return true;
 }
 
-void ps2_identify_device(uint8_t port)
+bool ps2_recv(uint8_t *out)
 {
-	if (port == 0 || port >= 2) {
-		kprintf(
-			"i8042_ps2: Invalid port number supplied to ps2_identify_device(): %u\n",
-			port);
-		return;
-	}
+	if (!out)
+		return false;
+	if (!ps2_wait_until_outbuf_full(1000))
+		return false;
+	*out = ax_inb(PS2_DATA);
+	return true;
+}
 
-	uint64_t start_time = get_ms();
-	uint64_t timeout_ms = 1000;
+static bool ps2_device_reset(uint8_t port)
+{
+	if (!ps2_send(port, 0xFF))
+		return false;
 
-	ps2_send(port, 0xF5);
-	while (ax_inb(PS2_DATA != 0xFA)) {
-		if (get_ms() - start_time > timeout_ms) {
-			return;
-		}
-	}
+	uint8_t b = 0;
+	if (!ps2_recv(&b))
+		return false;
+	if (b != 0xFA)
+		return false;
 
-	start_time = get_ms();
-
-	ps2_send(port, 0xF2);
-	while (ax_inb(PS2_DATA != 0xFA)) {
-		if (get_ms() - start_time > timeout_ms) {
-			return;
-		}
-	}
-
-	ax_inb(PS2_DATA);
-
-	uint8_t ident[2] = { 0 };
-	ident[0] = ax_inb(PS2_DATA);
-	if (ident[0] == 0xAB || ident[0] == 0xAC) {
-		ident[1] = ax_inb(PS2_DATA);
-	}
-
-	info.port_ident[port - 1] = ident[0] << 8 | ident[1];
-
-	// enable scanning
-	ps2_send(port, 0xF4);
-
-	kprintf("i8042_ps2: Device present on port #%u: %x\n", port,
-			info.port_ident[port - 1]);
+	if (!ps2_recv(&b))
+		return false;
+	return b == 0xAA;
 }
 
 void ps2_reset_port(uint8_t port)
 {
-	if (port == 0 || port > 2) {
-		kprintf(
-			"i8042_ps2: Invalid port number supplied to ps2_reset_port(): %u\n",
-			port);
-		return;
-	}
-
-	if (info.port_enabled[port - 1]) {
-		kprintf("i8042_ps2: Sending RESET byte to PS/2 device #%u...\n", port);
-		if (!ps2_send(port, 0xFF)) {
-			info.port_enabled[port - 1] = false;
-		}
-
-		uint8_t res[2];
-		res[0] = ax_inb(PS2_DATA);
-		res[1] = ax_inb(PS2_DATA);
-
-		if ((res[0] != 0xFA && res[1] != 0xAA)) {
-			kprintf(
-				"i8042_ps2: Device on port #%u did not reset successfully\n",
-				port);
-			info.port_enabled[port - 1] = false;
-			return;
-		}
-	}
+	(void)ps2_device_reset(port);
 }
 
-void ps2_reset_all()
+void ps2_reset_all(void)
 {
-	ps2_reset_port(1);
-	ps2_reset_port(2);
+	ps2_reset_port(PS2_PORT1);
+	ps2_reset_port(PS2_PORT2);
 }
 
-int mod_init()
+static bool ps2_test_port(uint8_t port)
 {
-	uint8_t ctl_config = 0;
+	if (port == PS2_PORT1)
+		ax_outb(PS2_COMMAND, 0xAB);
+	else if (port == PS2_PORT2)
+		ax_outb(PS2_COMMAND, 0xA9);
+	else
+		return false;
 
-	// TODO: Determine if a PS/2 controller exists
-	kprintf(
-		"i8042_ps2: PS/2 Controller check is not implemented yet, assuming there is one.\n");
+	uint8_t b = 0;
+	if (!ps2_recv(&b))
+		return false;
+	return b == 0x00;
+}
 
-	kprintf("i8042_ps2: Sending disable command to PS/2 controller...\n");
-	ax_outb(PS2_COMMAND, 0xAD);
+static void ps2_enable_port(uint8_t port)
+{
+	if (port == PS2_PORT1)
+		ax_outb(PS2_COMMAND, 0xAE);
+	else if (port == PS2_PORT2)
+		ax_outb(PS2_COMMAND, 0xA8);
+}
+
+static void ps2_disable_port(uint8_t port)
+{
+	if (port == PS2_PORT1)
+		ax_outb(PS2_COMMAND, 0xAD);
+	else if (port == PS2_PORT2)
+		ax_outb(PS2_COMMAND, 0xA7);
+}
+
+static bool ps2_controller_init(void)
+{
+	ps2_disable_port(PS2_PORT1);
+	ps2_disable_port(PS2_PORT2);
+	ps2_flush_output();
+
+	uint8_t cfg = ps2_read_ctl_config();
+	// Disable IRQ1/IRQ12. Enable translation (set2->set1) for the keyboard.
+	cfg &= (uint8_t)~((1u << 0) | (1u << 1));
+	cfg |= (uint8_t)(1u << 6);
+	// Enable clocks (clear disable-clock bits)
+	cfg &= (uint8_t)~((1u << 4) | (1u << 5));
+	ps2_write_ctl_config(cfg);
+
+	// Controller self-test
+	ax_outb(PS2_COMMAND, 0xAA);
+	uint8_t st = 0;
+	if (!ps2_recv(&st) || st != 0x55) {
+		kprintf("i8042_ps2: controller self-test failed (0x%02x)\n", st);
+		return false;
+	}
+
+	ps2_write_ctl_config(cfg);
+
+	// Probe for second port
+	bool dual = false;
+	ax_outb(PS2_COMMAND, 0xA8);
+	cfg = ps2_read_ctl_config();
+	if ((cfg & (1u << 5)) == 0)
+		dual = true;
 	ax_outb(PS2_COMMAND, 0xA7);
 
-	// flush output buffer
-	ax_inb(PS2_DATA);
+	bool p1_ok = ps2_test_port(PS2_PORT1);
+	bool p2_ok = dual ? ps2_test_port(PS2_PORT2) : false;
 
-	ctl_config = ps2_read_ctl_config();
-
-	// disable IRQs and translation for port 1
-	ctl_config &= (1 << 0);
-	ctl_config &= (1 << 6);
-
-	// enable clock signal
-	ctl_config &= (1 << 4);
-
-	ps2_write_ctl_config(ctl_config);
-
-	// perform self test
-	ax_outb(PS2_COMMAND, 0xAA);
-	uint8_t selftest = ax_inb(PS2_DATA);
-	if (selftest != 0x55) {
-		kprintf("i8042_ps2: PS/2 Controller self-test failed (replied %x)!",
-				selftest);
-		for (;;)
-			;
+	if (!p1_ok && !p2_ok) {
+		kprintf("i8042_ps2: no working ports\n");
+		return false;
 	}
 
-	// incase the controller was reset during self test
-	ps2_write_ctl_config(ctl_config);
+	if (p1_ok)
+		ps2_enable_port(PS2_PORT1);
+	if (p2_ok)
+		ps2_enable_port(PS2_PORT2);
 
-	// enable second channel if there is one
-	ax_outb(PS2_COMMAND, 0xA8);
-	ctl_config = ps2_read_ctl_config();
-	if (ctl_config & (1 << 5)) {
-		info.is_dual_channel = true;
+	kprintf("i8042_ps2: controller init ok (dual=%d)\n", dual ? 1 : 0);
+	return true;
+}
 
-		ax_outb(PS2_COMMAND, 0xA7);
-		ctl_config &= (1 << 0);
-		ctl_config &= (1 << 5);
-		ps2_write_ctl_config(ctl_config);
+// ===== keyboard + mouse threads =====
+
+#define PS2_RB_SIZE 256u
+#define PS2_RB_MASK (PS2_RB_SIZE - 1u)
+
+struct ps2_ring {
+	uint8_t buf[PS2_RB_SIZE];
+	uint32_t head;
+	uint32_t tail;
+};
+
+static struct ps2_ring raw_kbd;
+static struct ps2_ring raw_mouse;
+static struct ps2_ring kbd_out;
+static struct ps2_ring mouse_out;
+
+static void rb_push(struct ps2_ring *rb, uint8_t b)
+{
+	uint32_t head = __atomic_load_n(&rb->head, __ATOMIC_RELAXED);
+	uint32_t tail = __atomic_load_n(&rb->tail, __ATOMIC_ACQUIRE);
+	if ((head - tail) >= PS2_RB_SIZE) {
+		__atomic_store_n(&rb->tail, tail + 1, __ATOMIC_RELEASE);
+		tail++;
 	}
+	rb->buf[head & PS2_RB_MASK] = b;
+	__atomic_store_n(&rb->head, head + 1, __ATOMIC_RELEASE);
+}
 
-	// test and enable both ports
-	ps2_test_and_enable_port(1);
-	if (info.is_dual_channel) {
-		ps2_test_and_enable_port(2);
+static int rb_pop(struct ps2_ring *rb, uint8_t *out)
+{
+	uint32_t tail = __atomic_load_n(&rb->tail, __ATOMIC_RELAXED);
+	uint32_t head = __atomic_load_n(&rb->head, __ATOMIC_ACQUIRE);
+	if (tail == head)
+		return 0;
+	*out = rb->buf[tail & PS2_RB_MASK];
+	__atomic_store_n(&rb->tail, tail + 1, __ATOMIC_RELEASE);
+	return 1;
+}
+
+static int rb_count(struct ps2_ring *rb)
+{
+	uint32_t head = __atomic_load_n(&rb->head, __ATOMIC_ACQUIRE);
+	uint32_t tail = __atomic_load_n(&rb->tail, __ATOMIC_ACQUIRE);
+	return (int)(head - tail);
+}
+
+static int ps2_poll_and_demux(void)
+{
+	int got = 0;
+	for (;;) {
+		uint8_t status = ax_inb(PS2_STATUS);
+		if (!(status & PS2_STATUS_OUT_FULL))
+			break;
+
+		uint8_t data = ax_inb(PS2_DATA);
+		if (status & PS2_STATUS_AUXDATA)
+			rb_push(&raw_mouse, data);
+		else
+			rb_push(&raw_kbd, data);
+		got++;
 	}
+	return got;
+}
 
-	// are any ports okay?
-	if (!info.port_enabled[0] && !info.port_enabled[1]) {
-		kprintf("i8042_ps2: No ports were successfully enabled, exitting.\n");
-		// TODO: Module unloading
-		for (;;)
-			;
+static bool ps2_is_dev_response(uint8_t b)
+{
+	return b == 0xFA || b == 0xAA || b == 0xFE;
+}
+
+static void ps2_kbd_thread(void)
+{
+	(void)ps2_send(PS2_PORT1, 0xF4);
+
+	for (;;) {
+		uint8_t sc = 0;
+		if (!rb_pop(&raw_kbd, &sc)) {
+			sleep_ms(1);
+			continue;
+		}
+		if (!ps2_is_dev_response(sc))
+			rb_push(&kbd_out, sc);
 	}
+}
 
-	ps2_reset_all();
+static void ps2_mouse_thread(void)
+{
+	(void)ps2_send(PS2_PORT2, 0xF6);
+	(void)ps2_send(PS2_PORT2, 0xF4);
 
-	if (info.port_enabled[0]) {
-		ps2_identify_device(1);
+	for (;;) {
+		uint8_t b = 0;
+		if (!rb_pop(&raw_mouse, &b)) {
+			sleep_ms(1);
+			continue;
+		}
+		if (b == 0xFA || b == 0xAA || b == 0xFE)
+			continue;
+		rb_push(&mouse_out, b);
 	}
+}
 
-	if (info.port_enabled[1]) {
-		ps2_identify_device(2);
+static void ps2_kbd_pump_inline(uint32_t budget)
+{
+	while (budget--) {
+		uint8_t sc = 0;
+		if (!rb_pop(&raw_kbd, &sc))
+			break;
+		if (!ps2_is_dev_response(sc))
+			rb_push(&kbd_out, sc);
 	}
+}
 
-	kprintf(
-		"i8042_ps2: Successfully initialized i8042 PS/2 %s-Channel Controller\n",
-		info.is_dual_channel ? "Dual" : "Single");
+static void ps2_mouse_pump_inline(uint32_t budget)
+{
+	while (budget--) {
+		uint8_t b = 0;
+		if (!rb_pop(&raw_mouse, &b))
+			break;
+		if (b == 0xFA || b == 0xAA || b == 0xFE)
+			continue;
+		rb_push(&mouse_out, b);
+	}
+}
 
-	// for now just hang
-	for (;;)
-		;
-
+static int kbd_open(struct device *dev)
+{
+	(void)dev;
 	return 0;
 }
 
-void mod_exit()
+static int kbd_close(struct device *dev)
+{
+	(void)dev;
+	return 0;
+}
+
+static int kbd_read(struct device *dev, void *buf, uint64_t len)
+{
+	(void)dev;
+	if (!buf)
+		return -1;
+	uint8_t *dst = buf;
+	uint64_t n = 0;
+	while (n < len) {
+		uint8_t b;
+		if (!rb_pop(&kbd_out, &b))
+			break;
+		dst[n++] = b;
+	}
+	return (int)n;
+}
+
+static int kbd_write(struct device *dev, const void *buf, uint64_t len)
+{
+	(void)dev;
+	(void)buf;
+	(void)len;
+	return -1;
+}
+
+static int kbd_ioctl(struct device *dev, uint64_t cmd, void *arg)
+{
+	(void)dev;
+	(void)cmd;
+	(void)arg;
+	return 0;
+}
+
+static int kbd_poll(struct device *dev)
+{
+	(void)dev;
+	return rb_count(&kbd_out) > 0;
+}
+
+static struct device_ops kbd_ops = {
+	.open = kbd_open,
+	.close = kbd_close,
+	.read = kbd_read,
+	.write = kbd_write,
+	.ioctl = kbd_ioctl,
+	.poll = kbd_poll,
+};
+
+static int mouse_open(struct device *dev)
+{
+	(void)dev;
+	return 0;
+}
+
+static int mouse_close(struct device *dev)
+{
+	(void)dev;
+	return 0;
+}
+
+static int mouse_read(struct device *dev, void *buf, uint64_t len)
+{
+	(void)dev;
+	if (!buf)
+		return -1;
+	uint8_t *dst = buf;
+	uint64_t n = 0;
+	while (n < len) {
+		uint8_t b;
+		if (!rb_pop(&mouse_out, &b))
+			break;
+		dst[n++] = b;
+	}
+	return (int)n;
+}
+
+static int mouse_write(struct device *dev, const void *buf, uint64_t len)
+{
+	(void)dev;
+	(void)buf;
+	(void)len;
+	return -1;
+}
+
+static int mouse_ioctl(struct device *dev, uint64_t cmd, void *arg)
+{
+	(void)dev;
+	(void)cmd;
+	(void)arg;
+	return 0;
+}
+
+static int mouse_poll(struct device *dev)
+{
+	(void)dev;
+	return rb_count(&mouse_out) > 0;
+}
+
+static struct device_ops mouse_ops = {
+	.open = mouse_open,
+	.close = mouse_close,
+	.read = mouse_read,
+	.write = mouse_write,
+	.ioctl = mouse_ioctl,
+	.poll = mouse_poll,
+};
+
+int mod_init(void)
+{
+	memset(&raw_kbd, 0, sizeof(raw_kbd));
+	memset(&raw_mouse, 0, sizeof(raw_mouse));
+	memset(&kbd_out, 0, sizeof(kbd_out));
+	memset(&mouse_out, 0, sizeof(mouse_out));
+
+	(void)ps2_controller_init();
+	ps2_flush_output();
+
+	struct device kbddev;
+	memset(&kbddev, 0, sizeof(kbddev));
+	kbddev.name = "kbd0";
+	kbddev.class_name = "input";
+	kbddev.dev_node_path = "/raw/ps2/kbd0";
+	kbddev.driver_data = NULL;
+	kbddev.ops = &kbd_ops;
+	if (device_register(&kbddev) != 0)
+		kprintf("i8042_ps2: failed to publish /raw/ps2/kbd0\n");
+
+	struct device mousedev;
+	memset(&mousedev, 0, sizeof(mousedev));
+	mousedev.name = "mouse0";
+	mousedev.class_name = "input";
+	mousedev.dev_node_path = "/raw/ps2/mouse0";
+	mousedev.driver_data = NULL;
+	mousedev.ops = &mouse_ops;
+	if (device_register(&mousedev) != 0)
+		kprintf("i8042_ps2: failed to publish /raw/ps2/mouse0\n");
+
+	bool kbd_worker = false;
+	bool mouse_worker = false;
+	int ktid = -1;
+	int mtid = -1;
+
+	if (!make_child) {
+		kprintf(
+			"i8042_ps2: make_child AXAPI missing; running kbd/mouse inline\n");
+	} else {
+		ktid = make_child(ps2_kbd_thread);
+		mtid = make_child(ps2_mouse_thread);
+		kbd_worker = (ktid >= 0);
+		mouse_worker = (mtid >= 0);
+		kprintf("i8042_ps2: spawned kbd tid=%d mouse tid=%d\n", ktid, mtid);
+		if (!kbd_worker)
+			kprintf("i8042_ps2: failed to spawn kbd thread; inline fallback\n");
+		if (!mouse_worker)
+			kprintf(
+				"i8042_ps2: failed to spawn mouse thread; inline fallback\n");
+	}
+
+	for (;;) {
+		int got = ps2_poll_and_demux();
+		if (!kbd_worker)
+			ps2_kbd_pump_inline(64);
+		if (!mouse_worker)
+			ps2_mouse_pump_inline(64);
+		if (got == 0)
+			sleep_ms(1);
+	}
+}
+
+void mod_exit(void)
 {
 }

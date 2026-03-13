@@ -59,7 +59,8 @@ struct fileio *open(char *path, int flags)
 	}
 
 	f->offset = 0;
-	f->flags = flags;
+	// Preserve flags set by filesystem/device open handlers.
+	f->flags |= (size_t)flags;
 
 	return f;
 }
@@ -79,23 +80,19 @@ size_t read(struct fileio *file, size_t size, void *out)
 	}
 
 	if (!(file->flags & SPECIAL_FILE_TYPE_DEVICE)) {
-		if (file->offset >= file->size) {
+		if (file->offset >= file->size)
 			return 0;
-		}
 
-		if (size > file->size) {
+		if (size > file->size)
 			size = (file->size - file->offset);
-		}
 	}
 
 	int ret = vfs_read((struct vnode *)file->private, size, file->offset, out);
-	if (!ret) {
-		return -1;
-	}
+	if (ret < 0)
+		return (size_t)-1;
 
-	file->offset += size;
-
-	return size;
+	file->offset += (size_t)ret;
+	return (size_t)ret;
 }
 
 int write(struct fileio *file, void *buf, size_t size)
