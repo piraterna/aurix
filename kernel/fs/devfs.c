@@ -397,6 +397,11 @@ int devfs_open(struct vnode **vnode, int flags, bool create,
 	fio_file->flags |= SPECIAL_FILE_TYPE_DEVICE;
 	fio_file->size = 0;
 
+	if (devfs_node && devfs_node->device && devfs_node->device->ops &&
+		devfs_node->device->ops->open) {
+		return devfs_node->device->ops->open(devfs_node->device);
+	}
+
 	return 0;
 }
 
@@ -408,6 +413,11 @@ int devfs_close(struct vnode *vn, int flags, bool create)
 		error("devfs_close: vnode null\n");
 		return -1;
 	}
+
+	struct devfs_node *node = vn->node_data;
+	if (node && node->device && node->device->ops && node->device->ops->close)
+		return node->device->ops->close(node->device);
+
 	return 0;
 }
 
@@ -517,15 +527,14 @@ int devfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 
 	print_device(node, 0);
 
-	node->device->ops =
-		(struct device_ops *)PHYS_TO_VIRT((uintptr_t)node->device->ops);
-	debug("%p\n", node->device->ops);
-	debug("%p\n", node->device->ops->write);
 	if (!node || !node->device || !node->device->ops ||
 		!node->device->ops->write) {
 		error("devfs_write: write unsupported\n");
 		return -1;
 	}
+
+	debug("%p\n", node->device->ops);
+	debug("%p\n", node->device->ops->write);
 
 	return node->device->ops->write(node->device, buf, *bytes);
 }

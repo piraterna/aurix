@@ -28,6 +28,12 @@ export MOD_CFLAGS := -Wall -Wextra -ffreestanding -fpic -fpie -fno-stack-protect
 export MOD_LDFLAGS := -nostdlib -pie
 export MOD_DEFINES := __$(ARCH)__
 
+ifeq ($(ARCH),x86_64)
+# GCC/Clang do not support -mcmodel=kernel together with PIC/PIE codegen.
+# Drivers are loaded as PIE (ET_DYN) into the higher half, so we use -mcmodel=large.
+export MOD_CFLAGS += -mcmodel=large -mno-red-zone
+endif
+
 ifeq ($(USE_HOST_TOOLCHAIN),y)
 export MOD_AS := gcc
 export MOD_CC := gcc

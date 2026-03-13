@@ -58,14 +58,20 @@ static uint8_t serial_tx_empty(uint16_t base)
 
 static int serial_putc(uint16_t base, char c)
 {
+	uint8_t lsr_before = ax_inb(base + 5);
 	for (uint32_t spins = 0; spins < 2000000u; spins++) {
 		if (serial_tx_empty(base))
 			break;
 		if ((spins & 0xff) == 0)
 			ax_io_wait();
 	}
-	if (!serial_tx_empty(base))
+	if (!serial_tx_empty(base)) {
+		uint8_t lsr_after = ax_inb(base + 5);
+		kprintf(
+			"serial16550: serial_putc timeout base=0x%X ch=0x%02X lsr(before)=0x%02X lsr(after)=0x%02X\n",
+			base, (unsigned char)c, lsr_before, lsr_after);
 		return -1;
+	}
 	ax_outb(base, (uint8_t)c);
 	return 0;
 }
@@ -153,15 +159,22 @@ static int serial_read(struct device *dev, void *buf, uint64_t len)
 
 static int serial_write(struct device *dev, const void *buf, uint64_t len)
 {
+	kprintf("serial16550: write(dev=%p buf=%p len=%llu)\n", dev, buf,
+			(unsigned long long)len);
 	if (!dev || !dev->driver_data || !buf)
 		return -1;
 	struct serial_ctx *ctx = dev->driver_data;
+	kprintf("serial16550: ctx=%p base=0x%X open=%d\n", ctx, ctx->base,
+			ctx->open);
 	const char *src = buf;
 	for (uint64_t i = 0; i < len; i++) {
 		if (src[i] == '\r')
 			continue;
-		if (serial_putc(ctx->base, src[i]) != 0)
+		if (serial_putc(ctx->base, src[i]) != 0) {
+			kprintf("serial16550: write failed at i=%llu ch=0x%02X\n",
+					(unsigned long long)i, (unsigned char)src[i]);
 			return -1;
+		}
 	}
 	return (int)len;
 }

@@ -100,7 +100,7 @@ void hello(void)
 
 	kprintf("kproc: open() succeeded\n");
 
-	const char *msg = "Hello from kernel thread!\n";
+	const char *msg = "Hello from kernel thread calling serial driver!\n";
 	if (write(com1, (void *)msg, strlen(msg)) <= 0) {
 		kprintf("kproc: Failed to write to /dev/raw/serial/com1\n");
 		close(com1);

@@ -28,40 +28,50 @@
 #include <sys/axapi.h>
 #include <aurix/axapi.h>
 #include <lib/string.h>
+#include <lib/align.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
+#include <mm/heap.h>
 #include <arch/cpu/cpu.h>
+#include <arch/mm/paging.h>
 
 pcb **loaded_modules = (pcb **)NULL;
 
-static void *elf64_vaddr_to_file_ptr(char *elf, uintptr_t vaddr)
-{
-	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
-	if (ehdr->e_ident[EI_MAG0] != ELFMAG0 ||
-		ehdr->e_ident[EI_MAG1] != ELFMAG1 ||
-		ehdr->e_ident[EI_MAG2] != ELFMAG2 || ehdr->e_ident[EI_MAG3] != ELFMAG3)
-		return NULL;
-	if (ehdr->e_ident[EI_CLASS] != ELFCLASS64)
-		return NULL;
+#define MODULE_VA_BASE 0xffffffffe0000000ULL
 
-	Elf64_Phdr *ph = (Elf64_Phdr *)(elf + ehdr->e_phoff);
-	for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
-		if (ph[i].p_type != PT_LOAD)
+static vctx_t *kmod_vctx = NULL;
+
+struct module_image {
+	struct module_image *next;
+	char *elf;
+	uintptr_t load_base;
+	uintptr_t link_base;
+	size_t exec_size;
+};
+
+static struct module_image *module_images = NULL;
+
+bool module_lookup_image(uintptr_t addr, char **elf_out,
+						 uintptr_t *load_base_out, uintptr_t *link_base_out)
+{
+	if (!elf_out || !load_base_out || !link_base_out)
+		return false;
+	*elf_out = NULL;
+	*load_base_out = 0;
+	*link_base_out = 0;
+
+	for (struct module_image *m = module_images; m; m = m->next) {
+		if (addr < m->load_base)
 			continue;
-		uintptr_t start = (uintptr_t)ph[i].p_vaddr;
-		uintptr_t end = start + (uintptr_t)ph[i].p_filesz;
-		if (vaddr >= start && vaddr < end) {
-			uintptr_t off = (uintptr_t)ph[i].p_offset + (vaddr - start);
-			return elf + off;
-		}
+		if (addr >= m->load_base + m->exec_size)
+			continue;
+		*elf_out = m->elf;
+		*load_base_out = m->load_base;
+		*link_base_out = m->link_base;
+		return true;
 	}
 
-	return NULL;
-}
-
-static const char *elf64_vaddr_to_file_cstr(char *elf, uintptr_t vaddr)
-{
-	return (const char *)elf64_vaddr_to_file_ptr(elf, vaddr);
+	return false;
 }
 
 static Elf64_Shdr *elf64_find_section(Elf64_Ehdr *ehdr, const char *name)
@@ -79,7 +89,8 @@ static Elf64_Shdr *elf64_find_section(Elf64_Ehdr *ehdr, const char *name)
 	return NULL;
 }
 
-static void axapi_patch_imports(pcb *proc, char *elf)
+static void axapi_patch_imports(uintptr_t load_base, uintptr_t link_base,
+								char *elf)
 {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
 	Elf64_Shdr *imports = elf64_find_section(ehdr, ".axapi.imports");
@@ -88,26 +99,22 @@ static void axapi_patch_imports(pcb *proc, char *elf)
 
 	size_t count = imports->sh_size / sizeof(struct axapi_import);
 	struct axapi_import *imp =
-		(struct axapi_import *)(elf + imports->sh_offset);
+		(struct axapi_import *)(load_base +
+								((uintptr_t)imports->sh_addr - link_base));
 
 	for (size_t i = 0; i < count; i++) {
-		const char *name =
-			elf64_vaddr_to_file_cstr(elf, (uintptr_t)imp[i].name);
-		uintptr_t addr = axapi_resolve(name);
-		if (!addr) {
+		const char *name = imp[i].name;
+		uintptr_t resolved = axapi_resolve(name);
+		if (!resolved) {
 			error("Unresolved AXAPI import: %s\n", name ? name : "(null)");
 			continue;
 		}
 
-		uintptr_t target_vaddr = (uintptr_t)imp[i].target;
-		uintptr_t target_phys = vget_phys(proc->pm, target_vaddr);
-		if (!target_phys) {
-			error("AXAPI import target not mapped: %s @ %p\n",
-				  name ? name : "(null)", (void *)target_vaddr);
+		if (!imp[i].target) {
+			error("AXAPI import target NULL: %s\n", name ? name : "(null)");
 			continue;
 		}
-
-		*(uintptr_t *)PHYS_TO_VIRT(target_phys) = addr;
+		*imp[i].target = resolved;
 	}
 }
 
@@ -121,7 +128,6 @@ bool module_load(void *addr, uint32_t size)
 {
 	uint32_t file_size = size;
 	uintptr_t entry_point = 0;
-	uintptr_t loaded_at = 0;
 	pcb *mod = proc_create();
 
 	if (!mod) {
@@ -133,33 +139,65 @@ bool module_load(void *addr, uint32_t size)
 	mod->image_elf = virt_data;
 	mod->image_size = file_size;
 
-	entry_point = elf_load(virt_data, &loaded_at, (size_t *)&size, mod->pm);
-	if (entry_point == 0) {
-		error("Failed to load module file\n");
+	if (!kmod_vctx) {
+		kmod_vctx = vinit(kernel_pm, MODULE_VA_BASE);
+		if (!kmod_vctx) {
+			error("Failed to init module vctx\n");
+			return false;
+		}
+	}
+
+	uintptr_t link_base = 0;
+	size_t exec_size = 0;
+	if (!elf_get_load_range(virt_data, &link_base, &exec_size)) {
+		error("Failed to query module load range\n");
 		return false;
 	}
+
+	exec_size = (size_t)ALIGN_UP(exec_size, PAGE_SIZE);
+	size_t pages = exec_size / PAGE_SIZE;
+	uintptr_t phys_base = (uintptr_t)palloc(pages);
+	if (!phys_base) {
+		error("Failed to allocate module physical memory\n");
+		return false;
+	}
+
+	uintptr_t load_base =
+		(uintptr_t)vallocat(kmod_vctx, pages, VALLOC_RW, (uint64_t)phys_base);
+	if (!load_base) {
+		error("Failed to allocate module virtual range\n");
+		pfree((void *)phys_base, pages);
+		return false;
+	}
+
+	elf_loaded_image_t img;
+	memset(&img, 0, sizeof(img));
+	if (!elf_load_image_mapped(virt_data, kernel_pm, load_base, phys_base,
+							   &img)) {
+		error("Failed to load module file\n");
+		vfree(kmod_vctx, (void *)load_base);
+		pfree((void *)phys_base, pages);
+		return false;
+	}
+	entry_point = img.entry;
+	mod->image_phys_base = img.phys_base;
+	mod->image_load_base = img.load_base;
+	mod->image_link_base = img.link_base;
+	mod->image_exec_size = img.size;
 
 	uintptr_t modinfo_addr = elf_lookup_symbol(virt_data, "modinfo");
 	uintptr_t init_vaddr = entry_point;
 
 	if (modinfo_addr != 0) {
-		void *mi_ptr = elf64_vaddr_to_file_ptr(virt_data, modinfo_addr);
-		if (mi_ptr) {
-			struct axmod_info mi;
-			memcpy(&mi, mi_ptr, sizeof(mi));
-
-			const char *name =
-				mi.name ?
-					elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.name) :
-					NULL;
-			const char *desc =
-				mi.desc ?
-					elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.desc) :
-					NULL;
-			const char *author =
-				mi.author ?
-					elf64_vaddr_to_file_cstr(virt_data, (uintptr_t)mi.author) :
-					NULL;
+		if (modinfo_addr < img.link_base) {
+			warn("'modinfo' below link base\n");
+		} else {
+			struct axmod_info *mi =
+				(struct axmod_info *)(img.load_base +
+									  (modinfo_addr - img.link_base));
+			const char *name = mi->name;
+			const char *desc = mi->desc;
+			const char *author = mi->author;
 
 			mod->name = name;
 			info("Loaded module: %s\n", name ? name : "(no name)");
@@ -167,24 +205,32 @@ bool module_load(void *addr, uint32_t size)
 				info("  Description: %s\n", desc);
 			if (author)
 				info("  Author: %s\n", author);
-			if (mi.mod_init) {
-				init_vaddr = (uintptr_t)mi.mod_init;
-				trace("  Init function: %p\n", mi.mod_init);
+			if (mi->mod_init) {
+				init_vaddr = (uintptr_t)mi->mod_init;
+				trace("  Init function: %p\n", mi->mod_init);
 			}
-			if (mi.mod_exit)
-				trace("  Exit function: %p\n", mi.mod_exit);
-		} else {
-			warn("'modinfo' not in any loadable segment\n");
+			if (mi->mod_exit)
+				trace("  Exit function: %p\n", mi->mod_exit);
 		}
 	} else {
 		warn("No 'modinfo' symbol found in module\n");
 	}
 
-	axapi_patch_imports(mod, virt_data);
+	axapi_patch_imports(img.load_base, img.link_base, virt_data);
 	thread_create(mod, (void (*)())(void *)init_vaddr);
 
-	trace("Module loaded at physical 0x%lx, entry point 0x%lx\n", loaded_at,
-		  entry_point);
+	struct module_image *rec = kmalloc(sizeof(*rec));
+	if (rec) {
+		rec->elf = virt_data;
+		rec->load_base = img.load_base;
+		rec->link_base = img.link_base;
+		rec->exec_size = img.size;
+		rec->next = module_images;
+		module_images = rec;
+	}
+
+	trace("Module loaded at phys 0x%lx, vaddr 0x%lx, entry 0x%lx\n",
+		  img.phys_base, img.load_base, entry_point);
 
 	return true;
 }

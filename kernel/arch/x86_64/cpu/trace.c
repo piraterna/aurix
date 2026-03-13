@@ -23,6 +23,7 @@
 #include <arch/cpu/cpu.h>
 #include <cpu/trace.h>
 #include <loader/elf.h>
+#include <loader/module.h>
 #include <mm/vmm.h>
 #include <sys/ksyms.h>
 #include <sys/sched.h>
@@ -42,6 +43,22 @@ bool trace_lookup_symbol(uintptr_t addr, const char **name_out,
 
 	if (addr == 0)
 		return false;
+
+	{
+		char *elf = NULL;
+		uintptr_t load_base = 0;
+		uintptr_t link_base = 0;
+		if (module_lookup_image(addr, &elf, &load_base, &link_base) && elf) {
+			uintptr_t link_addr = (addr - load_base) + link_base;
+			uintptr_t sym_link = 0;
+			if (!elf_lookup_addr(elf, link_addr, name_out, &sym_link) ||
+				!*name_out)
+				return false;
+			if (sym_addr_out)
+				*sym_addr_out = (sym_link - link_base) + load_base;
+			return true;
+		}
+	}
 
 	if (addr >= KERNEL_BASE)
 		return ksym_lookup(addr, name_out, sym_addr_out);

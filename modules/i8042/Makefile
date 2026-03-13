@@ -45,7 +45,7 @@ install: all
 
 .PHONY: clean
 clean:
-	@rm -rf $(MOD_FILE)
+	@rm -rf $(BUILD_DIR)
 
 -include $(wildcard $(BUILD_DIR)/mods/$(MOD_NAME)/*.d)
 

@@ -100,11 +100,17 @@ size_t read(struct fileio *file, size_t size, void *out)
 
 int write(struct fileio *file, void *buf, size_t size)
 {
+	if (!file) {
+		error("fileio pointer is null\n");
+		return -1;
+	}
+
 	struct vnode *vn = file->private;
 
 	if (file->flags & PIPE_WRITE_END) {
-		pipe_write(file, buf, &size);
-		return 0;
+		if (pipe_write(file, buf, &size) != 0)
+			return -1;
+		return (int)size;
 	} else if (file->flags & PIPE_READ_END) {
 		return -1;
 	}
@@ -114,13 +120,14 @@ int write(struct fileio *file, void *buf, size_t size)
 		offset += file->size;
 	}
 
-	if (!vfs_write(vn, buf, size, offset)) {
+	int ret = vfs_write(vn, buf, size, offset);
+	if (ret < 0) {
 		return -1;
 	}
 
-	file->offset += size;
+	file->offset += (size_t)ret;
 
-	return 0;
+	return ret;
 }
 
 int close(struct fileio *file)

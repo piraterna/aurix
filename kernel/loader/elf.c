@@ -25,6 +25,7 @@
 #include <loader/elf.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
+#include <sys/axapi.h>
 #include <aurix.h>
 
 #include <stdint.h>
@@ -32,8 +33,9 @@
 /* https://github.com/KevinAlavik/nekonix/blob/main/kernel/src/proc/elf.c */
 /* Thanks, Kevin <3 */
 
-void elf64_apply_relocations(Elf64_Ehdr *header, uintptr_t phys_base,
-							 uintptr_t base_vaddr);
+static void elf64_apply_relocations_ex(Elf64_Ehdr *header, uintptr_t phys_base,
+									   uintptr_t load_base,
+									   uintptr_t link_base);
 
 uintptr_t elf32_load(char *data, uintptr_t *addr, size_t *size,
 					 pagetable *pagemap)
@@ -114,10 +116,168 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		}
 	}
 
-	elf64_apply_relocations(header, phys_base, base_vaddr);
+	elf64_apply_relocations_ex(header, phys_base, base_vaddr, base_vaddr);
 
 	debug("ELF loaded successfully, entry point: 0x%llx\n", header->e_entry);
 	return (uintptr_t)header->e_entry;
+}
+
+bool elf_get_load_range(char *data, uintptr_t *link_base_out, size_t *size_out)
+{
+	if (!data || !link_base_out || !size_out)
+		return false;
+
+	Elf64_Ehdr *header = (Elf64_Ehdr *)data;
+	if (header->e_ident[EI_MAG0] != ELFMAG0 ||
+		header->e_ident[EI_MAG1] != ELFMAG1 ||
+		header->e_ident[EI_MAG2] != ELFMAG2 ||
+		header->e_ident[EI_MAG3] != ELFMAG3)
+		return false;
+	if (header->e_ident[EI_CLASS] != ELFCLASS64)
+		return false;
+	if (header->e_machine != EM_AMD64)
+		return false;
+
+	Elf64_Phdr *ph = (Elf64_Phdr *)((uint8_t *)data + header->e_phoff);
+	uintptr_t link_base = (uintptr_t)-1;
+	uintptr_t end_vaddr = 0;
+
+	for (uint16_t i = 0; i < header->e_phnum; i++) {
+		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
+			continue;
+
+		uintptr_t seg_start = ALIGN_DOWN((uintptr_t)ph[i].p_vaddr, PAGE_SIZE);
+		uintptr_t seg_end = ALIGN_UP(
+			(uintptr_t)ph[i].p_vaddr + (uintptr_t)ph[i].p_memsz, PAGE_SIZE);
+
+		if (seg_start < link_base)
+			link_base = seg_start;
+		if (seg_end > end_vaddr)
+			end_vaddr = seg_end;
+	}
+
+	if (link_base == (uintptr_t)-1 || end_vaddr <= link_base)
+		return false;
+
+	*link_base_out = link_base;
+	*size_out = (size_t)(end_vaddr - link_base);
+	return true;
+}
+
+bool elf_load_image_at(char *data, pagetable *pagemap, uintptr_t load_base,
+					   elf_loaded_image_t *out)
+{
+	if (!data || !pagemap || !out)
+		return false;
+
+	Elf64_Ehdr *header = (Elf64_Ehdr *)data;
+	if (header->e_ident[EI_MAG0] != ELFMAG0 ||
+		header->e_ident[EI_MAG1] != ELFMAG1 ||
+		header->e_ident[EI_MAG2] != ELFMAG2 ||
+		header->e_ident[EI_MAG3] != ELFMAG3) {
+		error("elf_load_image_at(): Invalid ELF magic\n");
+		return false;
+	}
+	if (header->e_ident[EI_CLASS] != ELFCLASS64 ||
+		header->e_machine != EM_AMD64) {
+		error("elf_load_image_at(): Unsupported ELF\n");
+		return false;
+	}
+	if (header->e_type != ET_DYN) {
+		error("elf_load_image_at(): Expected ET_DYN PIE\n");
+		return false;
+	}
+
+	uintptr_t link_base = 0;
+	size_t exec_size = 0;
+	if (!elf_get_load_range(data, &link_base, &exec_size)) {
+		error("elf_load_image_at(): No loadable segments\n");
+		return false;
+	}
+
+	exec_size = (size_t)ALIGN_UP(exec_size, PAGE_SIZE);
+	size_t pages = exec_size / PAGE_SIZE;
+	uintptr_t phys_base = (uintptr_t)palloc(pages);
+	if (!phys_base) {
+		error("elf_load_image_at(): OOM\n");
+		return false;
+	}
+
+	return elf_load_image_mapped(data, pagemap, load_base, phys_base, out);
+}
+
+bool elf_load_image_mapped(char *data, pagetable *pagemap, uintptr_t load_base,
+						   uintptr_t phys_base, elf_loaded_image_t *out)
+{
+	if (!data || !pagemap || !out)
+		return false;
+
+	Elf64_Ehdr *header = (Elf64_Ehdr *)data;
+	if (header->e_ident[EI_MAG0] != ELFMAG0 ||
+		header->e_ident[EI_MAG1] != ELFMAG1 ||
+		header->e_ident[EI_MAG2] != ELFMAG2 ||
+		header->e_ident[EI_MAG3] != ELFMAG3) {
+		error("elf_load_image_mapped(): Invalid ELF magic\n");
+		return false;
+	}
+	if (header->e_ident[EI_CLASS] != ELFCLASS64 ||
+		header->e_machine != EM_AMD64) {
+		error("elf_load_image_mapped(): Unsupported ELF\n");
+		return false;
+	}
+	if (header->e_type != ET_DYN) {
+		error("elf_load_image_mapped(): Expected ET_DYN PIE\n");
+		return false;
+	}
+
+	uintptr_t link_base = 0;
+	size_t exec_size = 0;
+	if (!elf_get_load_range(data, &link_base, &exec_size)) {
+		error("elf_load_image_mapped(): No loadable segments\n");
+		return false;
+	}
+
+	exec_size = (size_t)ALIGN_UP(exec_size, PAGE_SIZE);
+
+	memset((void *)PHYS_TO_VIRT(phys_base), 0, exec_size);
+
+	Elf64_Phdr *ph = (Elf64_Phdr *)((uint8_t *)data + header->e_phoff);
+	for (uint16_t i = 0; i < header->e_phnum; i++) {
+		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
+			continue;
+
+		uintptr_t aligned_vaddr =
+			ALIGN_DOWN((uintptr_t)ph[i].p_vaddr, PAGE_SIZE);
+		uintptr_t seg_off = (uintptr_t)ph[i].p_vaddr - aligned_vaddr;
+		uintptr_t seg_size = seg_off + (uintptr_t)ph[i].p_memsz;
+		uintptr_t seg_phys = phys_base + (aligned_vaddr - link_base);
+		uintptr_t seg_virt = load_base + (aligned_vaddr - link_base);
+
+		uint64_t flags = VMM_PRESENT;
+		if (ph[i].p_flags & PF_W)
+			flags |= VMM_WRITABLE;
+		if (!(ph[i].p_flags & PF_X))
+			flags |= VMM_NX;
+
+		/* Update permissions for this segment. */
+		map_pages(pagemap, seg_virt, seg_phys, seg_size, flags);
+
+		memcpy((void *)PHYS_TO_VIRT(seg_phys + seg_off), data + ph[i].p_offset,
+			   ph[i].p_filesz);
+		if (ph[i].p_filesz < ph[i].p_memsz) {
+			memset((void *)PHYS_TO_VIRT(seg_phys + seg_off + ph[i].p_filesz), 0,
+				   ph[i].p_memsz - ph[i].p_filesz);
+		}
+	}
+
+	elf64_apply_relocations_ex(header, phys_base, load_base, link_base);
+
+	out->phys_base = phys_base;
+	out->load_base = load_base;
+	out->link_base = link_base;
+	out->size = exec_size;
+	out->entry = load_base + ((uintptr_t)header->e_entry - link_base);
+	return true;
 }
 
 uintptr_t elf_load(char *data, uintptr_t *addr, size_t *size,
@@ -187,8 +347,37 @@ static bool elf64_get_symtab(Elf64_Ehdr *ehdr, Elf64_Sym **symtab_out,
 	return true;
 }
 
-void elf64_apply_relocations(Elf64_Ehdr *header, uintptr_t phys_base,
-							 uintptr_t base_vaddr)
+static bool elf64_get_rela_symtab(Elf64_Ehdr *header, Elf64_Shdr *rela_sh,
+								  Elf64_Sym **symtab_out, size_t *nsyms_out,
+								  const char **strtab_out)
+{
+	if (!header || !rela_sh || !symtab_out || !nsyms_out || !strtab_out)
+		return false;
+	if (header->e_shoff == 0 || header->e_shnum == 0)
+		return false;
+
+	Elf64_Shdr *shdr = (Elf64_Shdr *)((uint8_t *)header + header->e_shoff);
+	if (rela_sh->sh_link >= header->e_shnum)
+		return false;
+	Elf64_Shdr *symtab_sh = &shdr[rela_sh->sh_link];
+	if (symtab_sh->sh_size == 0)
+		return false;
+	if (symtab_sh->sh_type != SHT_SYMTAB && symtab_sh->sh_type != SHT_DYNSYM)
+		return false;
+	if (symtab_sh->sh_link >= header->e_shnum)
+		return false;
+	Elf64_Shdr *strtab_sh = &shdr[symtab_sh->sh_link];
+	if (strtab_sh->sh_type != SHT_STRTAB || strtab_sh->sh_size == 0)
+		return false;
+
+	*symtab_out = (Elf64_Sym *)((uint8_t *)header + symtab_sh->sh_offset);
+	*nsyms_out = symtab_sh->sh_size / sizeof(Elf64_Sym);
+	*strtab_out = (const char *)header + strtab_sh->sh_offset;
+	return true;
+}
+
+static void elf64_apply_relocations_ex(Elf64_Ehdr *header, uintptr_t phys_base,
+									   uintptr_t load_base, uintptr_t link_base)
 {
 	if (!header || header->e_shoff == 0 || header->e_shnum == 0)
 		return;
@@ -202,23 +391,67 @@ void elf64_apply_relocations(Elf64_Ehdr *header, uintptr_t phys_base,
 		if (shdr[i].sh_type != SHT_RELA || shdr[i].sh_size == 0)
 			continue;
 
+		Elf64_Sym *symtab = NULL;
+		size_t nsyms = 0;
+		const char *strtab = NULL;
+		(void)elf64_get_rela_symtab(header, &shdr[i], &symtab, &nsyms, &strtab);
+
 		Elf64_Rela *rela =
 			(Elf64_Rela *)((uint8_t *)header + shdr[i].sh_offset);
 		size_t count = shdr[i].sh_size / sizeof(Elf64_Rela);
 
 		for (size_t j = 0; j < count; j++) {
 			Elf64_Word type = ELF64_R_TYPE(rela[j].r_info);
+			Elf64_Word sym_idx = (Elf64_Word)ELF64_R_SYM(rela[j].r_info);
+
+			uintptr_t where_link = (uintptr_t)rela[j].r_offset;
+			if (where_link < link_base)
+				continue;
+			uintptr_t where_off = where_link - link_base;
+			uint8_t *where_ptr = (uint8_t *)PHYS_TO_VIRT(phys_base + where_off);
+			uintptr_t P = load_base + where_off;
+			uintptr_t S = 0;
+			intptr_t A = (intptr_t)rela[j].r_addend;
+
+			if (type != R_X86_64_RELATIVE && symtab && strtab &&
+				sym_idx < nsyms) {
+				Elf64_Sym *sym = &symtab[sym_idx];
+				const char *name =
+					sym->st_name ? (strtab + sym->st_name) : NULL;
+				if (sym->st_shndx != SHN_UNDEF) {
+					if ((uintptr_t)sym->st_value >= link_base)
+						S = load_base + ((uintptr_t)sym->st_value - link_base);
+				} else if (name && name[0] != '\0') {
+					S = axapi_resolve(name);
+					if (!S && ELF64_ST_BIND(sym->st_info) == STB_WEAK)
+						S = 0;
+				}
+			}
 
 			if (type == R_X86_64_RELATIVE) {
-				uintptr_t where_vaddr =
-					base_vaddr + (uintptr_t)rela[j].r_offset;
-				if (where_vaddr < base_vaddr)
+				*(uint64_t *)where_ptr = (uint64_t)(load_base + (uintptr_t)A);
+			} else if (type == R_X86_64_64) {
+				*(uint64_t *)where_ptr = (uint64_t)(S + (uintptr_t)A);
+			} else if (type == R_X86_64_GLOB_DAT ||
+					   type == R_X86_64_JUMP_SLOT) {
+				*(uint64_t *)where_ptr = (uint64_t)S;
+			} else if (type == R_X86_64_PC32 || type == R_X86_64_PLT32) {
+				int64_t val = (int64_t)((S + (uintptr_t)A) - P);
+				if (val < INT32_MIN || val > INT32_MAX) {
+					debug("Reloc overflow (PC32) S=%p P=%p\n", S, P);
 					continue;
-
-				uintptr_t offset = where_vaddr - base_vaddr;
-				uint64_t *ptr = (uint64_t *)PHYS_TO_VIRT(phys_base + offset);
-				uint64_t value = base_vaddr + (uintptr_t)rela[j].r_addend;
-				*ptr = value;
+				}
+				*(int32_t *)where_ptr = (int32_t)val;
+			} else if (type == R_X86_64_32) {
+				uint64_t val = (uint64_t)(S + (uintptr_t)A);
+				*(uint32_t *)where_ptr = (uint32_t)val;
+			} else if (type == R_X86_64_32S) {
+				int64_t val = (int64_t)((uint64_t)(S + (uintptr_t)A));
+				if (val < INT32_MIN || val > INT32_MAX) {
+					debug("Reloc overflow (32S)\n");
+					continue;
+				}
+				*(int32_t *)where_ptr = (int32_t)val;
 			} else {
 				debug("Unsupported reloc type %u\n", type);
 			}

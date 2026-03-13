@@ -60,6 +60,10 @@ typedef struct pcb {
 	const char *name;
 	char *image_elf;
 	size_t image_size;
+	uintptr_t image_phys_base;
+	uintptr_t image_load_base;
+	uintptr_t image_link_base;
+	size_t image_exec_size;
 } pcb;
 
 void sched_init(void);

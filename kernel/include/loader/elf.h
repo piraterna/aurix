@@ -21,6 +21,8 @@
 #define _LOADER_ELF_H
 
 #include <mm/vmm.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 ///
@@ -184,6 +186,7 @@ typedef struct {
 #define SHT_SYMTAB 2
 #define SHT_STRTAB 3
 #define SHT_RELA 4
+#define SHT_DYNSYM 11
 
 ///
 // Symbol Table
@@ -207,7 +210,15 @@ typedef struct {
 #define ELF64_R_TYPE(info) ((Elf64_Word)(info))
 
 #define R_X86_64_NONE 0
+#define R_X86_64_64 1
+#define R_X86_64_PC32 2
+#define R_X86_64_PLT32 4
+#define R_X86_64_COPY 5
+#define R_X86_64_GLOB_DAT 6
+#define R_X86_64_JUMP_SLOT 7
 #define R_X86_64_RELATIVE 8
+#define R_X86_64_32 10
+#define R_X86_64_32S 11
 
 #define STB_LOCAL 0
 #define STB_GLOBAL 1
@@ -226,6 +237,22 @@ typedef struct {
 
 uintptr_t elf_load(char *data, uintptr_t *addr, size_t *size,
 				   pagetable *pagemap);
+
+typedef struct {
+	uintptr_t phys_base;
+	uintptr_t load_base;
+	uintptr_t link_base;
+	size_t size;
+	uintptr_t entry;
+} elf_loaded_image_t;
+
+bool elf_get_load_range(char *data, uintptr_t *link_base_out, size_t *size_out);
+bool elf_load_image_at(char *data, pagetable *pagemap, uintptr_t load_base,
+					   elf_loaded_image_t *out);
+
+bool elf_load_image_mapped(char *data, pagetable *pagemap, uintptr_t load_base,
+						   uintptr_t phys_base, elf_loaded_image_t *out);
+
 uintptr_t elf_lookup_symbol(char *elf_data, const char *symbol_name);
 bool elf_lookup_addr(char *elf_data, uintptr_t addr, const char **name_out,
 					 uintptr_t *sym_addr_out);
