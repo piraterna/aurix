@@ -141,10 +141,10 @@ export CODENAME := "Matterhorn"
 export VERSION := "0.1"
 export GITREV := $(shell git rev-parse --short HEAD)
 
-export DEFINES := AURIX_CODENAME=$(CODENAME) \
-				AURIX_VERSION=$(VERSION) \
-				AURIX_GITREV=$(GITREV) \
-				BUILD_TYPE=$(BUILD_TYPE)
+export DEFINES := AURIX_CODENAME=\"$(CODENAME)\" \
+                  AURIX_VERSION=\"$(VERSION)\" \
+                  AURIX_GITREV=\"$(GITREV)\" \
+                  BUILD_TYPE=\"$(BUILD_TYPE)\"
 
 ifeq ($(BUILD_TYPE),debug)
 DEFINES += BUILD_DEBUG

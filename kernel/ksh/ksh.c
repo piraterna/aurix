@@ -163,10 +163,6 @@ void ksh_thread(void)
 	size_t len = 0;
 	line[0] = 0;
 
-	bool lshift = false;
-	bool rshift = false;
-	bool extended = false;
-
 	for (;;) {
 		bool did_work = false;
 
@@ -202,35 +198,6 @@ void ksh_thread(void)
 			continue;
 		}
 
-		if (sc == 0xE0 || sc == 0xE1) {
-			extended = true;
-			continue;
-		}
-
-		if (extended) {
-			// Ignore extended keys for this tiny shell.
-			extended = false;
-			continue;
-		}
-
-		// Shift press/release.
-		if (sc == 0x2A) {
-			lshift = true;
-			continue;
-		}
-		if (sc == 0x36) {
-			rshift = true;
-			continue;
-		}
-		if (sc == 0xAA) {
-			lshift = false;
-			continue;
-		}
-		if (sc == 0xB6) {
-			rshift = false;
-			continue;
-		}
-
 		// Ignore key releases.
 		if (sc & 0x80)
 			continue;
@@ -247,7 +214,7 @@ void ksh_thread(void)
 			continue;
 		}
 
-		char ch = ksh_scancode_to_ascii(sc, (lshift || rshift) ? 1 : 0);
+		char ch = ksh_scancode_to_ascii(sc, 0);
 		if (!ch)
 			continue;
 		ksh_handle_ascii(ch, line, &len, sizeof(line));

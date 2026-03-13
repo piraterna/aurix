@@ -55,6 +55,7 @@ static int cmd_hexdump(int argc, char **argv);
 static int cmd_sched(int argc, char **argv);
 static int cmd_free(int argc, char **argv);
 static int cmd_clear(int argc, char **argv);
+static int cmd_fetch(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
@@ -70,7 +71,8 @@ static const ksh_command ksh_commands[] = {
 	{ "hexdump", "hexdump <addr> <len>", "dump memory (unsafe if unmapped)",
 	  cmd_hexdump },
 	{ "sched", "sched", "show scheduler enabled state", cmd_sched },
-	{ "clear", "clear", "clears screen", cmd_clear }
+	{ "clear", "clear", "clears screen", cmd_clear },
+	{ "fetch", "fetch", "show system information", cmd_fetch },
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
@@ -401,28 +403,29 @@ static int cmd_free(int argc, char **argv)
 	(void)argc;
 	(void)argv;
 
-	uint64_t total = bitmap_pages;
-	uint64_t usable = pmm_usable_pages();
-	uint64_t freep = pmm_free_pages();
-	uint64_t used_usable = (usable >= freep) ? (usable - freep) : 0;
-	uint64_t used_total = pmm_used_pages();
+	uint64_t total_pages = bitmap_pages;
+	uint64_t usable_pages = pmm_usable_pages();
+	uint64_t free_pages = pmm_free_pages();
+	uint64_t used_pages_usable =
+		(usable_pages >= free_pages) ? (usable_pages - free_pages) : 0;
+	uint64_t used_pages_total = pmm_used_pages();
 
-	uint64_t total_b = total * (uint64_t)PAGE_SIZE;
-	uint64_t usable_b = usable * (uint64_t)PAGE_SIZE;
-	uint64_t free_b = freep * (uint64_t)PAGE_SIZE;
-	uint64_t used_usable_b = used_usable * (uint64_t)PAGE_SIZE;
+	uint64_t total_mem = total_pages * (uint64_t)PAGE_SIZE;
+	uint64_t usable_mem = usable_pages * (uint64_t)PAGE_SIZE;
+	uint64_t free_mem = free_pages * (uint64_t)PAGE_SIZE;
+	uint64_t used_mem = used_pages_usable * (uint64_t)PAGE_SIZE;
 
-	kprintf("pmm: total_pages=%llu usable_pages=%llu\n",
-			(unsigned long long)total, (unsigned long long)usable);
-	kprintf(
-		"pmm: free_pages=%llu used_pages=%llu (usable) used_pages=%llu (total)\n",
-		(unsigned long long)freep, (unsigned long long)used_usable,
-		(unsigned long long)used_total);
-	kprintf("mem: total=%llu MiB usable=%llu MiB free=%llu MiB used=%llu MiB\n",
-			(unsigned long long)(total_b / (1024ull * 1024ull)),
-			(unsigned long long)(usable_b / (1024ull * 1024ull)),
-			(unsigned long long)(free_b / (1024ull * 1024ull)),
-			(unsigned long long)(used_usable_b / (1024ull * 1024ull)));
+	uint64_t mib = 1024ull * 1024ull;
+
+	kprintf("mem: total=%lluMiB usable=%lluMiB used=%lluMiB free=%lluMiB "
+			"pages(total=%llu usable=%llu used=%llu free=%llu)\n",
+			(unsigned long long)(total_mem / mib),
+			(unsigned long long)(usable_mem / mib),
+			(unsigned long long)(used_mem / mib),
+			(unsigned long long)(free_mem / mib),
+			(unsigned long long)total_pages, (unsigned long long)usable_pages,
+			(unsigned long long)used_pages_total,
+			(unsigned long long)free_pages);
 
 	return 0;
 }
@@ -432,5 +435,37 @@ static int cmd_clear(int argc, char **argv)
 	(void)argc;
 	(void)argv;
 	kprintf("\033[2J\033[H");
+	return 0;
+}
+
+static int cmd_fetch(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+
+	struct cpu *c = &cpuinfo[0];
+
+	uint64_t uptime_ms = get_ms();
+
+	uint64_t total_pages = bitmap_pages;
+	uint64_t usable_pages = pmm_usable_pages();
+	uint64_t free_pages = pmm_free_pages();
+	uint64_t used_pages = usable_pages - free_pages;
+
+	uint64_t total_mem = total_pages * (uint64_t)PAGE_SIZE;
+	uint64_t used_mem = used_pages * (uint64_t)PAGE_SIZE;
+
+	uint64_t mib = 1024ull * 1024ull;
+
+	kprintf("        /\\        aurix-" AURIX_VERSION "-" AURIX_GITREV
+			" (" AURIX_CODENAME ")\n"
+			"       /  \\       -------------------\n"
+			"      / /\\ \\      cpu: %s (%zu)\n"
+			"     / ____ \\     uptime: %llu ms\n"
+			"    /_/    \\_\\    memory: %llu / %llu MiB\n",
+			c->name_ext, cpu_count, (unsigned long long)uptime_ms,
+			(unsigned long long)(used_mem / mib),
+			(unsigned long long)(total_mem / mib));
+
 	return 0;
 }

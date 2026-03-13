@@ -79,5 +79,6 @@ tcb *thread_create(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
 void thread_exit(tcb *thread);
 tcb *thread_current(void);
+tcb *thread_get_by_tid(uint32_t tid);
 
 #endif // _SYS_SCHED_H

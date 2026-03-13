@@ -35,7 +35,8 @@ INCLUDE_DIRS := include \
 				include/ext \
 				include/arch/$(ARCH) \
 				include/platform/$(PLATFORM)
-DEFINES := __$(ARCH)__
+
+DEFINES += __$(ARCH)__
 
 KERNEL_NASM := nasm
 

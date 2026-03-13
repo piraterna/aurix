@@ -468,3 +468,30 @@ tcb *thread_current(void)
 	return cpu
 		->thread_list; // head of the CPU thread list is the current thread
 }
+
+tcb *thread_get_by_tid(uint32_t tid)
+{
+	if (tid == UINT32_MAX)
+		return NULL;
+
+	for (size_t cpu_idx = 0; cpu_idx < cpu_count; cpu_idx++) {
+		struct cpu *cpu = &cpuinfo[cpu_idx];
+		if (!cpu)
+			continue;
+
+		irqlock_acquire(&cpu->sched_lock);
+
+		tcb *t = cpu->thread_list;
+		while (t) {
+			if (t->tid == tid) {
+				irqlock_release(&cpu->sched_lock);
+				return t;
+			}
+			t = t->cpu_next;
+		}
+
+		irqlock_release(&cpu->sched_lock);
+	}
+
+	return NULL;
+}

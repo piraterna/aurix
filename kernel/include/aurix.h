@@ -38,6 +38,22 @@ extern vctx_t *kvctx;
 #define UNREACHABLE() __builtin_unreachable()
 #endif
 
+#ifndef AURIX_VERSION
+#define AURIX_VERSION "0.1"
+#endif
+
+#ifndef AURIX_GITREV
+#define AURIX_GITREV "unknown"
+#endif
+
+#ifndef AURIX_CODENAME
+#define AURIX_CODENAME "Matterhorn"
+#endif
+
+#ifndef BUILD_TYPE
+#define BUILD_TYPE "debug"
+#endif
+
 static inline void hexdump(const void *data, size_t size)
 {
 	const unsigned char *p = (const unsigned char *)data;
