@@ -372,7 +372,10 @@ int devfs_open(struct vnode **vnode, int flags, bool create,
 	}
 
 	struct devfs_node *devfs_node;
-	devfs_find_node(devfs, vn->path, &devfs_node);
+	if (devfs_find_node(devfs, vn->path, &devfs_node) != 0) {
+		error("devfs_open: Failed to find node\n");
+		return -1;
+	}
 
 	if (!devfs_node) {
 		if (!(flags & V_CREATE)) {

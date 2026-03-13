@@ -135,6 +135,7 @@ static char ksh_scancode_to_ascii(uint8_t sc, int shift)
 
 void ksh_thread(void)
 {
+	sleep_ms(1000);
 	char com1_path[] = "/dev/raw/serial/com1";
 	struct fileio *com1 = open(com1_path, 0);
 	struct device *com1_dev = ksh_fileio_device(com1);

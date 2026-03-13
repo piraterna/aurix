@@ -179,11 +179,11 @@ static bool ps2_controller_init(void)
 	ps2_flush_output();
 
 	uint8_t cfg = ps2_read_ctl_config();
-	// Disable IRQ1/IRQ12. Enable translation (set2->set1) for the keyboard.
-	cfg &= (uint8_t)~((1u << 0) | (1u << 1));
-	cfg |= (uint8_t)(1u << 6);
+	// Disable IRQ1/IRQ12
+	cfg &= (uint8_t) ~((1u << 0) | (1u << 1));
+
 	// Enable clocks (clear disable-clock bits)
-	cfg &= (uint8_t)~((1u << 4) | (1u << 5));
+	cfg &= (uint8_t) ~((1u << 4) | (1u << 5));
 	ps2_write_ctl_config(cfg);
 
 	// Controller self-test

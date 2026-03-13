@@ -2,18 +2,18 @@
 /* Module Name:  ff.c                                                             */
 /* Project:      AurixOS                                                          */
 /*                                                                               */
-/* Copyright (c) 2024-2026 Jozef Nagy                                              */
+/* Copyright (c) 2024-2026 Jozef Nagy                                             */
 /*                                                                               */
 /* This source is subject to the MIT License.                                     */
 /* See License.txt in the root of this repository.                                */
 /* All other rights reserved.                                                     */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR      */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,       */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER          */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,   */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE   */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR     */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE    */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER         */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE  */
 /* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
@@ -29,6 +29,7 @@
 #include <config.h>
 #include <aurix.h>
 #include <string.h>
+#include <sys/spinlock.h>
 
 #define ALIGNMENT PAGE_SIZE
 #define USER_ALIGNMENT 16
@@ -40,6 +41,8 @@ static void *pool = NULL;
 static size_t pool_pages = 0;
 static block_t *freelist = NULL;
 static vctx_t *heap_ctx = NULL;
+
+static spinlock_t heap_lock;
 
 static size_t compute_check(const block_t *b)
 {
@@ -76,7 +79,6 @@ static uint64_t *leading_canary_ptr(const block_t *b)
 
 static uint64_t *trailing_canary_ptr(const block_t *b)
 {
-	/* Place trailing canary right after the user region (not at alloc_size). */
 	return (uint64_t *)((uint8_t *)b + sizeof(block_t) + CANARY_SIZE +
 						b->user_size);
 }
@@ -104,6 +106,7 @@ static int check_canaries(const block_t *b)
 	return 1;
 }
 
+/* NO LOCKS HERE */
 static void freelist_insert(block_t *b)
 {
 	block_t *cur = freelist;
@@ -199,6 +202,7 @@ static int grow_heap(vctx_t *ctx, size_t needed_pages)
 void heap_init(vctx_t *ctx)
 {
 	heap_ctx = ctx;
+	spinlock_init(&heap_lock);
 
 	pool = valloc(ctx, FF_POOL_SIZE, VALLOC_RW);
 	if (!pool) {
@@ -216,7 +220,6 @@ void heap_init(vctx_t *ctx)
 
 	freelist = b;
 
-	// Register tests
 #if CONFIG_BUILD_TESTS
 	TEST_ADD(heap_test);
 #endif
@@ -227,6 +230,8 @@ void *kmalloc(size_t size)
 	if (size == 0)
 		return NULL;
 
+	spinlock_acquire(&heap_lock);
+
 	size_t user_sz = ALIGN_UP(size, USER_ALIGNMENT);
 	size_t payload = user_sz + 2 * CANARY_SIZE;
 	size_t effective = ALIGN_UP(payload, ALIGNMENT);
@@ -235,8 +240,10 @@ void *kmalloc(size_t size)
 	block_t *chosen = NULL;
 
 	while (cur) {
-		if (!validate(cur))
+		if (!validate(cur)) {
+			spinlock_release(&heap_lock);
 			return NULL;
+		}
 
 		if (cur->size >= effective) {
 			chosen = cur;
@@ -250,10 +257,23 @@ void *kmalloc(size_t size)
 		size_t needed =
 			(effective + sizeof(block_t) + PAGE_SIZE - 1) / PAGE_SIZE + 1;
 
-		if (!grow_heap(heap_ctx, needed))
+		if (!grow_heap(heap_ctx, needed)) {
+			spinlock_release(&heap_lock);
 			return NULL;
+		}
 
-		return kmalloc(size);
+		cur = freelist;
+		while (cur) {
+			if (cur->size >= effective) {
+				chosen = cur;
+				break;
+			}
+			cur = cur->next;
+		}
+		if (!chosen) {
+			spinlock_release(&heap_lock);
+			return NULL;
+		}
 	}
 
 	freelist_remove(chosen);
@@ -280,6 +300,8 @@ void *kmalloc(size_t size)
 	set_check(chosen);
 	write_canaries(chosen);
 
+	spinlock_release(&heap_lock);
+
 	return (uint8_t *)chosen + sizeof(block_t) + CANARY_SIZE;
 }
 
@@ -288,13 +310,14 @@ void kfree(void *ptr)
 	if (!ptr)
 		return;
 
+	spinlock_acquire(&heap_lock);
+
 	block_t *b = (block_t *)((uint8_t *)ptr - CANARY_SIZE - sizeof(block_t));
 
-	if (!validate(b))
+	if (!validate(b) || !check_canaries(b)) {
+		spinlock_release(&heap_lock);
 		return;
-
-	if (!check_canaries(b))
-		return;
+	}
 
 	b->user_size = 0;
 	b->alloc_size = 0;
@@ -320,6 +343,8 @@ void kfree(void *ptr)
 			set_check(p);
 		}
 	}
+
+	spinlock_release(&heap_lock);
 }
 
 void heap_switch_ctx(vctx_t *ctx)

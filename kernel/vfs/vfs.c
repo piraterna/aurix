@@ -127,29 +127,50 @@ int vfs_resolve_mount(char *path, struct vfs **out)
 int vfs_open(struct vfs *vfs, char *path, int flags, struct fileio **out)
 {
 	struct vnode *vn_file = vnode_create(vfs, path, NULL);
+	if (!vn_file) {
+		warn("vnode_create failed for %s\n", path);
+		return -1;
+	}
+
 	vn_file->vfs_mount = vfs;
 	memcpy(vn_file->ops, vfs->root_vnode->ops, sizeof(struct vfs_vops));
-	vn_file->path += strlen(vfs->root_vnode->path);
+
+	char *orig_path = vn_file->path;
+	if (vn_file->path)
+		vn_file->path += strlen(vfs->root_vnode->path);
 
 	struct fileio *fio_file = fio_create();
+	if (!fio_file) {
+		warn("fio_create failed\n");
+		vn_file->path = orig_path;
+		kfree(orig_path);
+		kfree(vn_file);
+		return -1;
+	}
 
 	if (!vn_file->ops->open) {
 		warn("open() not present for %s\n", path);
+		vn_file->path = orig_path;
+		kfree(orig_path);
+		kfree(vn_file);
+		kfree(fio_file);
 		return -1;
 	}
 
 	trace("open(%s)\n", vn_file->path);
 	if (vn_file->ops->open(&vn_file, flags, false, &fio_file) != 0) {
-		kfree(vn_file->path);
+		vn_file->path = orig_path;
+		kfree(orig_path);
 		kfree(vn_file);
+		kfree(fio_file);
 		return -1;
 	}
 
 	fio_file->private = vn_file;
-
 	*out = fio_file;
 
-	vn_file->path -= strlen(vfs->root_vnode->path);
+	if (vn_file->path)
+		vn_file->path = orig_path;
 
 	return 0;
 }

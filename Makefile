@@ -121,7 +121,7 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
-QEMU_FLAGS := -m 2G -smp 12 -rtc base=localtime -serial stdio
+QEMU_FLAGS := -m 2G -smp 12 -rtc base=localtime -serial stdio -cpu host -enable-kvm
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
