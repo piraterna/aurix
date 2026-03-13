@@ -98,14 +98,14 @@ void hello(void)
 		goto exit;
 	}
 
-	kprintf("kproc: open() succeeded\n");
-
 	const char *msg = "Hello from kernel thread calling serial driver!\n";
 	if (write(com1, (void *)msg, strlen(msg)) <= 0) {
 		kprintf("kproc: Failed to write to /dev/raw/serial/com1\n");
 		close(com1);
 		goto exit;
 	}
+
+	kprintf("kproc: successfully wrote to /dev/raw/serial/com1\n");
 	close(com1);
 exit:
 	thread_exit(thread_current());

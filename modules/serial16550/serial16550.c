@@ -114,8 +114,6 @@ static int serial_open(struct device *dev)
 
 	uint16_t base = ctx->base;
 
-	kprintf("serial16550: open() called\n");
-
 	for (uint32_t spins = 0; spins < SERIAL_OPEN_TIMEOUT; spins++) {
 		uint8_t lsr = ax_inb(base + 5);
 
@@ -159,13 +157,9 @@ static int serial_read(struct device *dev, void *buf, uint64_t len)
 
 static int serial_write(struct device *dev, const void *buf, uint64_t len)
 {
-	kprintf("serial16550: write(dev=%p buf=%p len=%llu)\n", dev, buf,
-			(unsigned long long)len);
 	if (!dev || !dev->driver_data || !buf)
 		return -1;
 	struct serial_ctx *ctx = dev->driver_data;
-	kprintf("serial16550: ctx=%p base=0x%X open=%d\n", ctx, ctx->base,
-			ctx->open);
 	const char *src = buf;
 	for (uint64_t i = 0; i < len; i++) {
 		if (src[i] == '\r')
