@@ -39,6 +39,8 @@
 uint64_t bitmap_pages;
 uint64_t bitmap_size;
 uint8_t *bitmap;
+uint64_t used_pages;
+uint64_t usable_pages;
 static uint64_t free_pages;
 static spinlock_t pmm_lock;
 static uint64_t page_cache[PAGE_CACHE_SIZE];
@@ -81,6 +83,7 @@ void pmm_init(void)
 	spinlock_init(&pmm_lock);
 
 	uint64_t high = 0;
+	usable_pages = 0;
 	free_pages = 0;
 
 	debug("Dumping memory map:\n");
@@ -91,8 +94,7 @@ void pmm_init(void)
 			uint64_t top = e->base + e->size;
 			if (top > high)
 				high = top;
-
-			free_pages += e->size / PAGE_SIZE;
+			usable_pages += e->size / PAGE_SIZE;
 		}
 
 		debug("Entry %u: 0x%llx, size=%llu bytes, type=%s\n", i, e->base,
@@ -101,6 +103,7 @@ void pmm_init(void)
 
 	bitmap_pages = high / PAGE_SIZE;
 	bitmap_size = bitmap_pages / 8;
+	used_pages = bitmap_pages;
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
@@ -108,9 +111,11 @@ void pmm_init(void)
 			e->size >= bitmap_size) {
 			bitmap = (uint8_t *)PHYS_TO_VIRT(e->base);
 			memset(bitmap, 0xFF, bitmap_size);
-			e->base += ALIGN_UP(bitmap_size, PAGE_SIZE);
-			e->size -= ALIGN_UP(bitmap_size, PAGE_SIZE);
-			free_pages -= ALIGN_UP(bitmap_size, PAGE_SIZE) / PAGE_SIZE;
+			uint64_t bmp_pages = ALIGN_UP(bitmap_size, PAGE_SIZE) / PAGE_SIZE;
+			e->base += bmp_pages * PAGE_SIZE;
+			e->size -= bmp_pages * PAGE_SIZE;
+			if (usable_pages >= bmp_pages)
+				usable_pages -= bmp_pages;
 			break;
 		}
 	}
@@ -128,7 +133,14 @@ void pmm_init(void)
 	}
 
 	// NULL should be reserved
-	bitmap_set(bitmap, 0);
+	if (!bitmap_get(bitmap, 0)) {
+		bitmap_set(bitmap, 0);
+		if (free_pages > 0)
+			free_pages--;
+		used_pages++;
+	} else {
+		bitmap_set(bitmap, 0);
+	}
 
 	// Register tests
 #ifdef CONFIG_BUILD_TESTS
@@ -199,6 +211,7 @@ void *palloc(size_t pages)
 							bitmap_set(bitmap, start_bit + j - pages + 1 + k);
 						}
 						free_pages -= pages;
+						used_pages += pages;
 
 						addr =
 							(void *)((start_bit + j - pages + 1) * PAGE_SIZE);
@@ -256,6 +269,8 @@ void pfree(void *ptr, size_t pages)
 		if (bitmap_get(bitmap, start + i)) {
 			bitmap_clear(bitmap, start + i);
 			free_pages++;
+			if (used_pages > 0)
+				used_pages--;
 
 			if (pages == 1 && cache_index < cache_size) {
 				page_cache[cache_index++] = start;
@@ -264,4 +279,19 @@ void pfree(void *ptr, size_t pages)
 	}
 
 	spinlock_release(&pmm_lock);
+}
+
+uint64_t pmm_free_pages(void)
+{
+	return free_pages;
+}
+
+uint64_t pmm_used_pages(void)
+{
+	return used_pages;
+}
+
+uint64_t pmm_usable_pages(void)
+{
+	return usable_pages;
 }

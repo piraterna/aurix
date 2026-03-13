@@ -229,6 +229,7 @@ void sched_init(void)
 	if (!kernel_proc_inited) {
 		memset(&kernel_proc, 0, sizeof(kernel_proc));
 		kernel_proc.pid = 0;
+		kernel_proc.name = strdup("idle");
 		kernel_proc.pm = kernel_pm;
 		kernel_proc.vctx = kvctx;
 		kernel_proc.threads = NULL;

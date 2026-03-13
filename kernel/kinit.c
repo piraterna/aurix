@@ -43,6 +43,7 @@
 #include <sys/sched.h>
 #include <sys/panic.h>
 #include <fs/devfs.h>
+#include <ksh/ksh.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -87,75 +88,24 @@ const char *aurix_banner =
 
 void hello(void)
 {
-	kprintf("kproc: hello from a kernel process. (tid=%d, pid=%d, cpu=%d)\n",
-			thread_current()->tid, thread_current()->process->pid,
-			cpu_get_current()->id);
-	sleep_ms(250);
+	kprintf("kproc: hello (tid=%d pid=%d cpu=%d)\n", thread_current()->tid,
+			thread_current()->process->pid, cpu_get_current()->id);
 
-	struct fileio *kbd = open("/dev/raw/ps2/kbd0", 0);
-	if (!kbd) {
-		kprintf("kproc: Failed to open /dev/raw/ps2/kbd0\n");
-		goto out;
-	}
-
-	struct fileio *mouse = open("/dev/raw/ps2/mouse0", 0);
-	if (!mouse) {
-		kprintf("kproc: Failed to open /dev/raw/ps2/mouse0 (kbd only)\n");
-	}
-
-	kprintf("kproc: PS/2 input ready; polling for updates...\n");
-
-	uint8_t mpkt[3] = { 0 };
-	uint8_t mpkti = 0;
-
-	for (;;) {
-		bool did_work = false;
-
-		uint8_t sc = 0;
-		size_t n = read(kbd, 1, &sc);
-		if (!(n == (size_t)-1 || n == 0)) {
-			did_work = true;
-			kprintf("kbd: sc=0x%02x\n", (unsigned)sc);
+	{
+		char com1_path[] = "/dev/raw/serial/com1";
+		struct fileio *com1 = open(com1_path, 0);
+		if (com1) {
+			char msg[] =
+				"kproc: hello -> com1 opened via /dev/raw/serial/com1\n";
+			(void)write(com1, msg, strlen(msg));
+			close(com1);
+		} else {
+			kprintf("kproc: /dev/raw/serial/com1 not available (skipping)\n");
 		}
-
-		if (mouse) {
-			uint8_t b = 0;
-			size_t mn = read(mouse, 1, &b);
-			if (!(mn == (size_t)-1 || mn == 0)) {
-				did_work = true;
-				// Basic PS/2 3-byte packet decode; resync on bit3.
-				if (mpkti == 0 && (b & 0x08) == 0) {
-					// out of sync
-				} else {
-					mpkt[mpkti++] = b;
-					if (mpkti == 3) {
-						mpkti = 0;
-						int dx = (int8_t)mpkt[1];
-						int dy = (int8_t)mpkt[2];
-						dy = -dy;
-						bool l = (mpkt[0] & 0x01) != 0;
-						bool r = (mpkt[0] & 0x02) != 0;
-						bool m = (mpkt[0] & 0x04) != 0;
-						if (dx != 0 || dy != 0 || l || r || m) {
-							kprintf("mouse: dx=%d dy=%d buttons=%c%c%c\n", dx,
-									dy, l ? 'L' : '-', r ? 'R' : '-',
-									m ? 'M' : '-');
-						}
-					}
-				}
-			}
-		}
-
-		if (!did_work)
-			sleep_ms(10);
 	}
 
-	// not reached
-	if (mouse)
-		close(mouse);
-	close(kbd);
-
-out:
+	struct tcb *ksh = thread_create(thread_current()->process, ksh_thread);
+	ksh->process->name = strdup("ksh");
 	thread_exit(thread_current());
 }
 

@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  pmm.h */
+/* Module Name:  cmd.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -10,36 +10,17 @@
 /*                                                                               */
 /* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
 /* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
 /* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- */
-/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- */
+/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _MM_PMM_H
-#define _MM_PMM_H
+#ifndef _KSH_CMD_H
+#define _KSH_CMD_H
 
-#include <stddef.h>
-#include <stdint.h>
+// Execute a single command line. The buffer may be modified in-place.
+void ksh_exec_line(char *line);
 
-#define PAGE_SIZE 0x1000
-
-extern uint64_t bitmap_pages;
-extern uint64_t used_pages;
-extern uint64_t usable_pages;
-
-void pmm_init(void);
-void pmm_reclaim_bootparms(void);
-
-void *palloc(size_t pages);
-void pfree(void *ptr, size_t pages);
-
-uint64_t pmm_free_pages(void);
-uint64_t pmm_used_pages(void);
-uint64_t pmm_usable_pages(void);
-
-#endif /* _MM_PMM_H */
+#endif /* _KSH_CMD_H */
