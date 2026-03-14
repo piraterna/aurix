@@ -383,10 +383,6 @@ static int cmd_hexdump(int argc, char **argv)
 		kprintf("ksh: len must be > 0\n");
 		return 1;
 	}
-	if (len > 4096) {
-		kprintf("ksh: capping len to 4096\n");
-		len = 4096;
-	}
 
 	kprintf("hexdump: addr=%p len=%llu\n", (void *)(uintptr_t)addr,
 			(unsigned long long)len);
