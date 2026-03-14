@@ -157,8 +157,11 @@ void pmm_reclaim_bootparms()
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
+
 		if (e->type == AURIX_MMAP_BOOTLOADER_RECLAIMABLE ||
 			e->type == AURIX_MMAP_ACPI_RECLAIMABLE) {
+			uint64_t pages = ALIGN_UP(e->size, PAGE_SIZE) / PAGE_SIZE;
+
 			if (e->base >= VIRT_TO_PHYS(bitmap) &&
 				e->base < VIRT_TO_PHYS(bitmap) + bitmap_size) {
 				trace(
@@ -166,8 +169,10 @@ void pmm_reclaim_bootparms()
 					e->base, e->size);
 				continue;
 			}
+
 			e->type = AURIX_MMAP_USABLE;
-			pfree((void *)e->base, ALIGN_UP(e->size, PAGE_SIZE) / PAGE_SIZE);
+			usable_pages += pages;
+			pfree((void *)e->base, pages);
 		}
 	}
 }
