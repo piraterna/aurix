@@ -50,6 +50,7 @@ struct module_image {
 };
 
 static struct module_image *module_images = NULL;
+static struct module_info_node *module_list = NULL;
 
 bool module_lookup_image(uintptr_t addr, char **elf_out,
 						 uintptr_t *load_base_out, uintptr_t *link_base_out)
@@ -200,6 +201,19 @@ bool module_load(void *addr, uint32_t size)
 			const char *author = mi->author;
 
 			mod->name = name;
+			struct module_info_node *node = kmalloc(sizeof(*node));
+			if (node) {
+				node->proc = mod;
+				node->name = name;
+				node->desc = desc;
+				node->author = author;
+				node->init = mi->mod_init;
+				node->exit = mi->mod_exit;
+				node->load_base = img.load_base;
+
+				node->next = module_list;
+				module_list = node;
+			}
 			info("Loaded module: %s\n", name ? name : "(no name)");
 			if (desc)
 				info("  Description: %s\n", desc);
@@ -233,4 +247,9 @@ bool module_load(void *addr, uint32_t size)
 		  img.phys_base, img.load_base, entry_point);
 
 	return true;
+}
+
+struct module_info_node *module_get_list(void)
+{
+	return module_list;
 }

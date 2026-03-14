@@ -22,10 +22,28 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <sys/sched.h>
 
 bool module_load(void *addr, uint32_t size);
 
 bool module_lookup_image(uintptr_t addr, char **elf_out,
 						 uintptr_t *load_base_out, uintptr_t *link_base_out);
+
+struct module_info_node {
+	struct module_info_node *next;
+
+	pcb *proc;
+
+	const char *name;
+	const char *desc;
+	const char *author;
+
+	int (*init)(void);
+	void (*exit)(void);
+
+	uintptr_t load_base;
+};
+
+struct module_info_node *module_get_list(void);
 
 #endif /* _LOADER_MODULE_H */

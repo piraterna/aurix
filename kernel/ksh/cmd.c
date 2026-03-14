@@ -33,6 +33,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <loader/module.h>
+
 extern const char *aurix_banner;
 
 typedef int (*ksh_cmd_fn)(int argc, char **argv);
@@ -56,6 +58,7 @@ static int cmd_sched(int argc, char **argv);
 static int cmd_free(int argc, char **argv);
 static int cmd_clear(int argc, char **argv);
 static int cmd_fetch(int argc, char **argv);
+static int cmd_modls(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
@@ -73,6 +76,7 @@ static const ksh_command ksh_commands[] = {
 	{ "sched", "sched", "show scheduler enabled state", cmd_sched },
 	{ "clear", "clear", "clears screen", cmd_clear },
 	{ "fetch", "fetch", "show system information", cmd_fetch },
+	{ "modls", "modls", "shows loaded modules", cmd_modls },
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
@@ -467,5 +471,27 @@ static int cmd_fetch(int argc, char **argv)
 			(unsigned long long)(used_mem / mib),
 			(unsigned long long)(total_mem / mib));
 
+	return 0;
+}
+
+static int cmd_modls(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+	struct module_info_node *m = module_get_list();
+
+	while (m) {
+		kprintf("Module: %s\n", m->name ? m->name : "(unknown)");
+
+		if (m->desc)
+			kprintf("  Desc: %s\n", m->desc);
+
+		if (m->author)
+			kprintf("  Author: %s\n", m->author);
+
+		kprintf("  Load base: 0x%lx\n", m->load_base);
+
+		m = m->next;
+	}
 	return 0;
 }

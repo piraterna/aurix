@@ -35,7 +35,7 @@ void mod_exit(void);
 __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.name = "i8042_ps2",
 	.desc = "i8042 PS/2 Controller",
-	.author = "Jozef Nagy",
+	.author = "Jozef Nagy & Kevin Alavik",
 
 	.mod_init = mod_init,
 	.mod_exit = mod_exit,
