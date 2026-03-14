@@ -164,9 +164,14 @@ _For more information and to report security issues, please refer to our [securi
 
 ## Screenshots
 
-### (Current state) February 1st, 2026  
+### (Current state) March 14th, 2026
 <div align="center">
-    <img src="docs/images/screenshots/01022026.png" alt="Current state February 1st, 2026" width="500px">
+    <img src="docs/images/screenshots/14032026.png" alt="Current state March 14th, 2026" width="500px">
+</div>
+
+### February 1st, 2026
+<div align="center">
+    <img src="docs/images/screenshots/01022026.png" alt="February 1st, 2026" width="500px">
 </div>
 
 ## License
