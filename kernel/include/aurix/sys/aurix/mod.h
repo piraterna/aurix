@@ -34,4 +34,16 @@ struct axmod_info {
 	void (*mod_exit)(void);
 } __attribute__((packed));
 
+#ifndef MOD_NAME
+#define MOD_NAME unknown
+#endif
+
+#define __AX_STR(x) #x
+#define __AX_XSTR(x) __AX_STR(x)
+#define MOD_COLOR "\x1b[38;2;100;100;100m"
+#define MOD_RESET "\x1b[0m"
+
+#define mod_log(fmt, ...) \
+	kprintf(MOD_COLOR __AX_XSTR(MOD_NAME) ": " fmt MOD_RESET, ##__VA_ARGS__)
+
 #endif /* __SYS_AURIX_MOD_H */

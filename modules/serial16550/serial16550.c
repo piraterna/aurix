@@ -69,8 +69,8 @@ static int serial_putc(uint16_t base, char c)
 	}
 	if (!serial_tx_empty(base)) {
 		uint8_t lsr_after = ax_inb(base + 5);
-		kprintf(
-			"serial16550: serial_putc timeout base=0x%X ch=0x%02X lsr(before)=0x%02X lsr(after)=0x%02X\n",
+		mod_log(
+			"serial_putc timeout base=0x%X ch=0x%02X lsr(before)=0x%02X lsr(after)=0x%02X\n",
 			base, (unsigned char)c, lsr_before, lsr_after);
 		return -1;
 	}
@@ -176,8 +176,8 @@ static int serial_write(struct device *dev, const void *buf, uint64_t len)
 		if (src[i] == '\r')
 			continue;
 		if (serial_putc(ctx->base, src[i]) != 0) {
-			kprintf("serial16550: write failed at i=%llu ch=0x%02X\n",
-					(unsigned long long)i, (unsigned char)src[i]);
+			mod_log("write failed at i=%llu ch=0x%02X\n", (unsigned long long)i,
+					(unsigned char)src[i]);
 			return -1;
 		}
 	}
@@ -200,13 +200,13 @@ static int serial_probe(struct device *dev)
 	}
 
 	if (idx < 0) {
-		kprintf("serial16550: unknown device %s\n", dev->name);
+		mod_log("unknown device %s\n", dev->name);
 		return -1;
 	}
 
 	uint16_t base = COM_BASES[idx];
 	if (!serial_port_present(base)) {
-		kprintf("serial16550: %s not present, skipping\n", dev->name);
+		mod_log("%s not present, skipping\n", dev->name);
 		return -1;
 	}
 
@@ -215,7 +215,7 @@ static int serial_probe(struct device *dev)
 	serial_ctxs[idx].base = base;
 
 	serial_init_port(base);
-	kprintf("serial16550: %s initialized at 0x%X\n", dev->name, base);
+	mod_log("%s initialized at 0x%X\n", dev->name, base);
 	return 0;
 }
 

@@ -205,7 +205,7 @@ static bool ps2_controller_init(void)
 	ax_outb(PS2_COMMAND, 0xAA);
 	uint8_t st = 0;
 	if (!ps2_recv(&st) || st != 0x55) {
-		kprintf("i8042_ps2: controller self-test failed (0x%02x)\n", st);
+		mod_log("controller self-test failed (0x%02x)\n", st);
 		return false;
 	}
 
@@ -223,7 +223,7 @@ static bool ps2_controller_init(void)
 	bool p2_ok = dual ? ps2_test_port(PS2_PORT2) : false;
 
 	if (!p1_ok && !p2_ok) {
-		kprintf("i8042_ps2: no working ports\n");
+		mod_log("no working ports\n");
 		return false;
 	}
 
@@ -234,7 +234,7 @@ static bool ps2_controller_init(void)
 	if (p2_ok)
 		ps2_enable_port(PS2_PORT2);
 
-	kprintf("i8042_ps2: controller init ok (dual=%d)\n", dual ? 1 : 0);
+	mod_log("controller init ok (dual=%d)\n", dual ? 1 : 0);
 	return true;
 }
 
@@ -498,7 +498,7 @@ int mod_init(void)
 	kbddev.driver_data = NULL;
 	kbddev.ops = &kbd_ops;
 	if (device_register(&kbddev) != 0)
-		kprintf("i8042_ps2: failed to publish /raw/ps2/kbd0\n");
+		mod_log("failed to publish /raw/ps2/kbd0\n");
 
 	struct device mousedev;
 	memset(&mousedev, 0, sizeof(mousedev));
@@ -508,7 +508,7 @@ int mod_init(void)
 	mousedev.driver_data = NULL;
 	mousedev.ops = &mouse_ops;
 	if (device_register(&mousedev) != 0)
-		kprintf("i8042_ps2: failed to publish /raw/ps2/mouse0\n");
+		mod_log("failed to publish /raw/ps2/mouse0\n");
 
 	bool kbd_worker = false;
 	bool mouse_worker = false;
@@ -523,9 +523,9 @@ int mod_init(void)
 		mtid = make_child(ps2_mouse_thread);
 		kbd_worker = (ktid >= 0);
 		mouse_worker = (mtid >= 0);
-		kprintf("i8042_ps2: spawned kbd tid=%d mouse tid=%d\n", ktid, mtid);
+		mod_log("spawned kbd tid=%d mouse tid=%d\n", ktid, mtid);
 		if (!kbd_worker)
-			kprintf("i8042_ps2: failed to spawn kbd thread; inline fallback\n");
+			mod_log("failed to spawn kbd thread; inline fallback\n");
 		if (!mouse_worker)
 			kprintf(
 				"i8042_ps2: failed to spawn mouse thread; inline fallback\n");

@@ -25,6 +25,7 @@ MOD_FILE := $(BUILD_DIR)/$(MOD_NAME).sys
 
 MOD_INCLUDE_DIRS := include ../i8042/include
 MOD_DEFINES := __$(ARCH)__
+MOD_DEFINES += MOD_NAME=$(MOD_NAME)
 
 MOD_CFLAGS += $(foreach d, $(MOD_INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(MOD_DEFINES), -D$d)
