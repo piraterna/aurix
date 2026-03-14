@@ -86,29 +86,6 @@ const char *aurix_banner =
 	" / ___ \\ |_| | |  | |>  <| |_| |___) |\n"
 	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2026 Jozef Nagy";
 
-void hello(void)
-{
-	kprintf("kproc: hello (tid=%d pid=%d cpu=%d)\n", thread_current()->tid,
-			thread_current()->process->pid, cpu_get_current()->id);
-
-	{
-		char com1_path[] = "/dev/raw/serial/com1";
-		struct fileio *com1 = open(com1_path, 0);
-		if (com1) {
-			char msg[] =
-				"kproc: hello -> com1 opened via /dev/raw/serial/com1\n";
-			(void)write(com1, msg, strlen(msg));
-			close(com1);
-		} else {
-			kprintf("kproc: /dev/raw/serial/com1 not available (skipping)\n");
-		}
-	}
-
-	struct tcb *ksh = thread_create(thread_current()->process, ksh_thread);
-	ksh->process->name = strdup("ksh");
-	thread_exit(thread_current());
-}
-
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
@@ -202,8 +179,10 @@ void _start(struct aurix_parameters *params)
 				cpu_get_current()->name_ext);
 	}
 
+	debug("launching ksh (builtin debug shell)\n");
 	pcb *p = proc_create();
-	thread_create(p, hello);
+	struct tcb *ksh = thread_create(p, ksh_thread);
+	ksh->process->name = strdup("ksh");
 
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();

@@ -172,6 +172,23 @@ static void ps2_disable_port(uint8_t port)
 		ax_outb(PS2_COMMAND, 0xA7);
 }
 
+static bool ps2_set_scancode_set1(void)
+{
+	uint8_t resp;
+
+	if (!ps2_send(PS2_PORT1, 0xF0))
+		return false;
+	if (!ps2_recv(&resp) || resp != 0xFA)
+		return false;
+
+	if (!ps2_send(PS2_PORT1, 0x01))
+		return false;
+	if (!ps2_recv(&resp) || resp != 0xFA)
+		return false;
+
+	return true;
+}
+
 static bool ps2_controller_init(void)
 {
 	ps2_disable_port(PS2_PORT1);
@@ -179,11 +196,9 @@ static bool ps2_controller_init(void)
 	ps2_flush_output();
 
 	uint8_t cfg = ps2_read_ctl_config();
-	// Disable IRQ1/IRQ12
-	cfg &= (uint8_t) ~((1u << 0) | (1u << 1));
-
-	// Enable clocks (clear disable-clock bits)
-	cfg &= (uint8_t) ~((1u << 4) | (1u << 5));
+	cfg &= ~((1 << 0) | (1 << 1)); // disable IRQs
+	cfg &= ~(1 << 6); // disable translation
+	cfg &= ~((1 << 4) | (1 << 5)); // enable clocks
 	ps2_write_ctl_config(cfg);
 
 	// Controller self-test
@@ -212,8 +227,10 @@ static bool ps2_controller_init(void)
 		return false;
 	}
 
-	if (p1_ok)
+	if (p1_ok) {
 		ps2_enable_port(PS2_PORT1);
+		ps2_set_scancode_set1(); // force set 1
+	}
 	if (p2_ok)
 		ps2_enable_port(PS2_PORT2);
 

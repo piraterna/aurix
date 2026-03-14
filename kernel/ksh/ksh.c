@@ -135,22 +135,26 @@ static char ksh_scancode_to_ascii(uint8_t sc, int shift)
 
 void ksh_thread(void)
 {
-	sleep_ms(1000);
 	char com1_path[] = "/dev/raw/serial/com1";
 	struct fileio *com1 = open(com1_path, 0);
-	struct device *com1_dev = ksh_fileio_device(com1);
-	if (com1 && !ksh_dev_can_read(com1_dev))
-		kprintf("ksh: /dev/raw/serial/com1 read() not ready (skipping)\n");
-	if (!com1)
+	struct device *com1_dev = NULL;
+	if (com1) {
+		com1_dev = ksh_fileio_device(com1);
+		if (!ksh_dev_can_read(com1_dev))
+			kprintf("ksh: /dev/raw/serial/com1 read() not ready (skipping)\n");
+	} else {
 		kprintf("ksh: /dev/raw/serial/com1 not available (skipping)\n");
-
+	}
 	char kbd_path[] = "/dev/raw/ps2/kbd0";
 	struct fileio *kbd = open(kbd_path, 0);
-	struct device *kbd_dev = ksh_fileio_device(kbd);
-	if (kbd && !ksh_dev_can_read(kbd_dev))
-		kprintf("ksh: /dev/raw/ps2/kbd0 read() not ready (skipping)\n");
-	if (!kbd)
+	struct device *kbd_dev = NULL;
+	if (kbd) {
+		kbd_dev = ksh_fileio_device(kbd);
+		if (!ksh_dev_can_read(kbd_dev))
+			kprintf("ksh: /dev/raw/ps2/kbd0 read() not ready (skipping)\n");
+	} else {
 		kprintf("ksh: /dev/raw/ps2/kbd0 not available (skipping)\n");
+	}
 
 	if (!kbd && !com1) {
 		kprintf("ksh: no input devices available\n");
