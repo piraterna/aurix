@@ -132,7 +132,10 @@ void _start(struct aurix_parameters *params)
 
 	// setup fs
 	ramfs_init();
-	vfs_mount(NULL, "ramfs", "/", NULL);
+	struct ramfs *ramfs = ramfs_create_fs();
+	if (ramfs_vfs_init(ramfs, "/") != 0) {
+		kpanic(NULL, "Failed to initialize ramfs");
+	}
 
 	vfs_mkdir("/dev", 0755);
 	devfs_init();
