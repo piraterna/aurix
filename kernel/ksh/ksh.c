@@ -137,7 +137,7 @@ void ksh_thread(void)
 {
 	sleep_ms(1000); // just wait to make sure stuff is inited, bad
 	char com1_path[] = "/dev/raw/serial/com1";
-	struct fileio *com1 = open(com1_path, 0);
+	struct fileio *com1 = open(com1_path, 0, 0);
 	struct device *com1_dev = NULL;
 	if (com1) {
 		com1_dev = ksh_fileio_device(com1);
@@ -147,7 +147,7 @@ void ksh_thread(void)
 		kprintf("ksh: /dev/raw/serial/com1 not available (skipping)\n");
 	}
 	char kbd_path[] = "/dev/raw/ps2/kbd0";
-	struct fileio *kbd = open(kbd_path, 0);
+	struct fileio *kbd = open(kbd_path, 0, 0);
 	struct device *kbd_dev = NULL;
 	if (kbd) {
 		kbd_dev = ksh_fileio_device(kbd);

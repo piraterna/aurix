@@ -44,6 +44,7 @@
 #include <sys/panic.h>
 #include <fs/devfs.h>
 #include <ksh/ksh.h>
+#include <fs/ramfs.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -129,14 +130,16 @@ void _start(struct aurix_parameters *params)
 	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
 
-	struct devfs *devfs = devfs_create();
-	if (!devfs) {
-		kpanic(NULL, "Failed to  create devfs");
-	}
-	if (devfs_vfs_init(devfs, "/dev") != 0) {
-		kpanic(NULL, "Failed to init devfs");
-	}
-	debug("devfs initialized at /dev\n");
+	// setup fs
+	ramfs_init();
+	vfs_mount(NULL, "ramfs", "/", NULL);
+
+	vfs_mkdir("/dev", 0755);
+	devfs_init();
+
+	struct devfs *devfs = devfs_create_fs();
+	if (devfs_vfs_init(devfs, "/dev") != 0)
+		kpanic(NULL, "Failed to initialize devfs");
 
 	driver_core_init(devfs);
 

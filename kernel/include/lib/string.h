@@ -40,5 +40,7 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 size_t strspn(const char *s, const char *accept);
 char *strchr(const char *s, int c);
 int streq(const char *a, const char *b);
+char *strcat(char *restrict dest, const char *restrict src);
+char *strrchr(const char *s, int c);
 
 #endif /* _LIB_STRING_H */

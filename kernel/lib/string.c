@@ -278,3 +278,35 @@ int streq(const char *a, const char *b)
 	}
 	return *a == '\0' && *b == '\0';
 }
+
+char *strcat(char *restrict dest, const char *restrict src)
+{
+	char *d = dest;
+
+	while (*d)
+		d++;
+
+	while (*src) {
+		*d++ = *src++;
+	}
+
+	*d = '\0';
+
+	return dest;
+}
+
+char *strrchr(const char *s, int c)
+{
+	const char *last = NULL;
+
+	while (*s) {
+		if (*s == (char)c)
+			last = s;
+		s++;
+	}
+
+	if (c == '\0')
+		return (char *)s;
+
+	return (char *)last;
+}
