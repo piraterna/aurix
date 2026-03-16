@@ -24,6 +24,7 @@
 #include <mm/heap.h>
 #include <debug/log.h>
 #include <lib/string.h>
+#include <user/access.h>
 
 #define align4(x) (((x) + 3) & ~3)
 
@@ -41,16 +42,12 @@ static uint64_t parse_hex(char *buf, size_t len)
 
 static int cpio_reader_next(cpio_reader_t *reader, struct cpio_file *file)
 {
-	if ((size_t)(reader->end - reader->pos) < 110) {
-		warn("cpio: Not enough data for header\n");
+	if ((size_t)(reader->end - reader->pos) < 110)
 		return -1;
-	}
 
 	if (memcmp(reader->pos, "070701", 6) != 0 &&
-		memcmp(reader->pos, "070702", 6) != 0) {
-		warn("cpio: Invalid magic number\n");
+		memcmp(reader->pos, "070702", 6) != 0)
 		return -1;
-	}
 
 	uint8_t *pos = reader->pos + 6;
 
@@ -83,53 +80,30 @@ static int cpio_reader_next(cpio_reader_t *reader, struct cpio_file *file)
 
 	reader->pos = pos;
 
-	if ((size_t)(reader->end - reader->pos) < file->namesize) {
-		warn("cpio: Not enough data for filename\n");
+	if (file->namesize == 0 ||
+		(size_t)(reader->end - reader->pos) < file->namesize)
 		return -1;
-	}
 
-	char *filename = kmalloc(file->namesize);
-	if (!filename) {
-		warn("cpio: Memory allocation failed for filename\n");
-		return -1;
-	}
-
-	memcpy(filename, reader->pos, file->namesize);
+	file->filename = (char *)reader->pos;
 	reader->pos += file->namesize;
 	reader->pos = (uint8_t *)align4((uintptr_t)reader->pos);
 
-	if (filename[file->namesize - 1] != '\0') {
-		warn("cpio: Filename not null-terminated\n");
-		kfree(filename);
+	if (file->filename[file->namesize - 1] != '\0')
 		return -1;
-	}
 
-	if (strcmp(filename, "TRAILER!!!") == 0) {
-		kfree(filename);
+	if (strcmp(file->filename, "TRAILER!!!") == 0)
 		return 1;
+
+	uint16_t type = file->mode & S_IFMT;
+	if (type == S_IFREG) {
+		if ((size_t)(reader->end - reader->pos) < file->filesize)
+			return -1;
+		file->data = reader->pos;
+		reader->pos += file->filesize;
+		reader->pos = (uint8_t *)align4((uintptr_t)reader->pos);
+	} else {
+		file->data = NULL;
 	}
-
-	file->filename = filename;
-	debug("cpio: Trying to allocate %llu bytes for file data '%s'\n",
-		  file->filesize, file->filename);
-
-	if ((size_t)(reader->end - reader->pos) < file->filesize) {
-		warn("cpio: Not enough data for file content\n");
-		return -1;
-	}
-
-	file->data = kmalloc(file->filesize);
-	if (!file->data) {
-		warn("cpio: Memory allocation failed for file data: %p\n");
-		return -1;
-	}
-
-	memcpy(file->data, reader->pos, file->filesize);
-	reader->pos += file->filesize;
-	reader->pos = (uint8_t *)align4((uintptr_t)reader->pos);
-
-	debug("cpio: Parsed file '%s' (size: %llu bytes)\n", file->filename,
-		  file->filesize);
 
 	return 0;
 }
@@ -203,10 +177,6 @@ struct cpio_file *cpio_fs_get_file(struct cpio_fs *fs, const char *filename)
 
 void cpio_fs_free(struct cpio_fs *fs)
 {
-	for (size_t i = 0; i < fs->file_count; ++i) {
-		kfree(fs->files[i].filename);
-		kfree(fs->files[i].data);
-	}
 	kfree(fs->files);
 	fs->files = NULL;
 	fs->file_count = 0;

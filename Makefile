@@ -98,10 +98,11 @@ endef
 export BUILD_DIR ?= $(ROOT_DIR)/build
 export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
 export RELEASE_DIR ?= $(ROOT_DIR)/release
+export INITRD_DIR ?= $(ROOT_DIR)/initrd
+export MODULE_DIR ?= $(ROOT_DIR)/modules
+export APPS_DIR ?= $(ROOT_DIR)/apps
 
 export NOUEFI ?= n
-
-export MODULE_DIR ?= $(ROOT_DIR)/modules
 
 ifeq ($(CONFIG_USE_HOSTTOOLCHAIN),y)
 export USE_HOST_TOOLCHAIN := y
@@ -121,7 +122,6 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
-INITRD_DIR := $(ROOT_DIR)/initrd
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
 QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
@@ -164,7 +164,7 @@ ifeq ($(DOCKER_BUILD),y)
 all:
 	@$(call docker_make,all)
 else
-all: genconfig boot kernel kmodules initrd
+all: genconfig boot kernel kmodules apps initrd
 	@:
 endif
 
@@ -197,18 +197,33 @@ kmodules:
 	@$(MAKE) -C $(MODULE_DIR)
 endif
 
-.PHONY: initrd
-initrd:
+.PHONY: apps
+ifeq ($(DOCKER_BUILD),y)
+apps:
+	@$(call docker_make,apps)
+else
+apps:
+	@printf ">>> Building apps...\n"
+	@$(MAKE) -C $(APPS_DIR)
+endif
+
+initrd: apps
 	@printf ">>> Building initrd...\n"
+	@rm -rf $(BUILD_DIR)/initrd
+	@mkdir -p $(BUILD_DIR)/initrd
+	@cp -r $(INITRD_DIR)/* $(BUILD_DIR)/initrd/
+
+	@$(MAKE) -C $(APPS_DIR) install INITRD_DEST=$(BUILD_DIR)/initrd/bin
+
 	@mkdir -p $(SYSROOT_DIR)/System
-	@cd $(INITRD_DIR) && find . -type f | cpio -H newc -o > $(INITRD_CPIO)
+	@cd $(BUILD_DIR)/initrd && find . -type f | cpio -H newc -o > $(INITRD_CPIO)
 
 .PHONY: install
 ifeq ($(DOCKER_BUILD),y)
 install:
 	@$(call docker_make,install)
 else
-install: boot kernel kmodules initrd
+install: boot kernel kmodules apps initrd
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
 ifneq (,$(filter $(ARCH),i686 x86_64))
@@ -311,6 +326,7 @@ endif
 clean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
+	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean

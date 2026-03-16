@@ -17,3 +17,5 @@ Brewfile.lock.json
 
 uefi_nvram.json
 .config*
+
+initrd/bin

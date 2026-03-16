@@ -18,6 +18,7 @@
 /*********************************************************************************/
 
 #include <boot/axprot.h>
+#include <aurix.h>
 #include <arch/cpu/cpu.h>
 #include <arch/apic/apic.h>
 #include <arch/cpu/irq.h>
@@ -159,7 +160,8 @@ void _start(struct aurix_parameters *params)
 
 	struct cpio_fs *cpio = kmalloc(sizeof(struct cpio_fs));
 	memset(cpio, 0, sizeof(struct cpio_fs));
-	if (cpio_fs_parse(cpio, (void *)initrd_mod->addr, initrd_mod->size) != 0) {
+	if (cpio_fs_parse(cpio, (void *)PHYS_TO_VIRT((uintptr_t)initrd_mod->addr),
+					  initrd_mod->size) != 0) {
 		kpanic(NULL, "Failed to parse initrd file.");
 	}
 
