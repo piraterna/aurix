@@ -126,7 +126,15 @@ static void devfs_publish_device(struct device *dev)
 		} else {
 			// Directory token
 			struct devfs_node *dir = NULL;
-			if (devfs_find_node(devfs, token, &dir) != 0) {
+			// Find existing child with this name
+			for (struct devfs_node *child = current->child; child;
+				 child = child->sibling) {
+				if (strcmp(child->name, token) == 0) {
+					dir = child;
+					break;
+				}
+			}
+			if (!dir) {
 				dir = devfs_create_fs_node(DEVFS_TYPE_DIR);
 				if (!dir) {
 					trace(

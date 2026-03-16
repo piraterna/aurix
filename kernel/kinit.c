@@ -221,6 +221,8 @@ void _start(struct aurix_parameters *params)
 
 	debug("launching ksh (builtin debug shell)\n");
 	pcb *p = proc_create();
+	p->pm = kernel_pm;
+	p->vctx = kvctx;
 	struct tcb *ksh = thread_create(p, ksh_thread);
 	ksh->process->name = strdup("ksh");
 

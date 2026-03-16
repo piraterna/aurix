@@ -61,6 +61,7 @@ static int cmd_fetch(int argc, char **argv);
 static int cmd_modls(int argc, char **argv);
 static int cmd_exec(int argc, char **argv);
 static int cmd_readf(int argc, char **argv);
+static int cmd_dir(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
@@ -80,14 +81,14 @@ static const ksh_command ksh_commands[] = {
 	{ "fetch", "fetch", "show system information", cmd_fetch },
 	{ "modls", "modls", "shows loaded modules", cmd_modls },
 	{ "exec", "exec <path>", "executes executable from path", cmd_exec },
-	{ "readf", "readf <path>", "reads file from path", cmd_readf }
+	{ "readf", "readf <path>", "reads file from path", cmd_readf },
+	{ "dir", "dir [path]", "list directory contents", cmd_dir }
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
 {
 	if (!t || !cpu || !t->process)
 		return false;
-	// Idle threads are encoded as UINT32_MAX - cpu_id and belong to pid 0.
 	return t->process->pid == 0 && t->tid == (uint32_t)(UINT32_MAX - cpu->id);
 }
 
@@ -528,7 +529,23 @@ static int cmd_exec(int argc, char **argv)
 		return 1;
 	}
 
-	uintptr_t entry = elf_load(buf, NULL, NULL, proc->pm);
+	char *name_copy = kmalloc(strlen(path) + 1);
+	if (name_copy)
+		strcpy(name_copy, path);
+	proc->name = (const char *)name_copy;
+
+	uint64_t addr, size = 0;
+	uintptr_t entry = elf_load(buf, &addr, &size, proc->pm);
+	if (entry == 0) {
+		kprintf("ksh: failed to load ELF: %s\n", path);
+		proc_destroy(proc);
+		kfree(buf);
+		return 1;
+	}
+
+	kprintf("ksh: loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path,
+			entry, addr, size);
+
 	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
 	if (!thread) {
 		kprintf("ksh: failed to create thread for: %s\n", path);
@@ -536,7 +553,6 @@ static int cmd_exec(int argc, char **argv)
 		kfree(buf);
 		return 1;
 	}
-
 	return 0;
 }
 
@@ -569,5 +585,101 @@ static int cmd_readf(int argc, char **argv)
 	kprintf("%s\n", buf);
 	kfree(buf);
 	close(f);
+	return 0;
+}
+
+static int cmd_dir(int argc, char **argv)
+{
+	const char *input_path = (argc > 1) ? argv[1] : "/";
+	char full_path[256];
+	if (input_path[0] == '/') {
+		strncpy(full_path, input_path, sizeof(full_path) - 1);
+		full_path[sizeof(full_path) - 1] = '\0';
+	} else {
+		strcpy(full_path, "/");
+		strncpy(full_path + 1, input_path, sizeof(full_path) - 2);
+		full_path[sizeof(full_path) - 1] = '\0';
+	}
+
+	struct vnode *vnode;
+	if (vfs_lookup(full_path, &vnode) != 0) {
+		kprintf("dir: %s: not found\n", full_path);
+		return 1;
+	}
+
+	if (vnode->vtype != VNODE_DIR) {
+		kprintf("dir: %s: not a directory\n", full_path);
+		vnode_unref(vnode);
+		return 1;
+	}
+
+	struct dirent entries[64];
+	size_t count = 64;
+	if (vfs_readdir(vnode, entries, &count) != 0) {
+		kprintf("dir: failed to read directory\n");
+		vnode_unref(vnode);
+		return 1;
+	}
+
+	kprintf("%-20s %8s %s\n", "Name", "Size", "Type");
+	kprintf("%-20s %8s %s\n", "--------------------", "--------", "----");
+
+	for (size_t i = 0; i < count; i++) {
+		char entry_path[512];
+		strcpy(entry_path, full_path);
+		if (strcmp(full_path, "/") != 0) {
+			strcat(entry_path, "/");
+		}
+		strcat(entry_path, entries[i].d_name);
+
+		struct stat st;
+		if (vfs_stat(entry_path, &st) == 0) {
+			char type = '?';
+			switch (entries[i].d_type) {
+			case DT_DIR:
+				type = 'd';
+				break;
+			case DT_REG:
+				type = '-';
+				break;
+			case DT_LNK:
+				type = 'l';
+				break;
+			case DT_CHR:
+				type = 'c';
+				break;
+			case DT_BLK:
+				type = 'b';
+				break;
+			case DT_FIFO:
+				type = 'p';
+				break;
+			case DT_SOCK:
+				type = 's';
+				break;
+			default:
+				type = '?';
+				break;
+			}
+
+			char name[256];
+			strncpy(name, entries[i].d_name, sizeof(name) - 1);
+			name[sizeof(name) - 1] = '\0';
+			if (entries[i].d_type == DT_DIR) {
+				size_t len = strlen(name);
+				if (len < sizeof(name) - 1) {
+					name[len] = '/';
+					name[len + 1] = '\0';
+				}
+			}
+
+			kprintf("%-20s %8llu %c\n", name, (unsigned long long)st.st_size,
+					type);
+		} else {
+			kprintf("%-20s %8s %s\n", entries[i].d_name, "?", "?");
+		}
+	}
+
+	vnode_unref(vnode);
 	return 0;
 }

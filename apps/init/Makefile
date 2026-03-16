@@ -71,7 +71,7 @@ clean:
 $(APP_FILE): $(APP_OBJ)
 	@mkdir -p $(@D)
 	@printf "  LD\t$(notdir $@)\n"
-	$(APP_CC) $(APP_OBJ) $(APP_LDFLAGS) -o $@
+	@$(APP_CC) $(APP_OBJ) $(APP_LDFLAGS) -o $@
 
 ifneq ($(BUILD_TYPE),debug)
 	@printf "  STRIP\t$(notdir $@)\n"
@@ -81,4 +81,4 @@ endif
 $(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(@D)
 	@printf "  CC\t$<\n"
-	$(APP_CC) $(APP_CFLAGS) -c $< -o $@
+	@$(APP_CC) $(APP_CFLAGS) -c $< -o $@

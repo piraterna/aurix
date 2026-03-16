@@ -308,6 +308,8 @@ void proc_destroy(pcb *proc)
 
 	vdestroy(proc->vctx);
 	destroy_pagemap(proc->pm);
+	if (proc->name)
+		kfree((void *)proc->name);
 	kfree(proc);
 
 	trace("Destroyed process, PID=%u\n", proc->pid);
