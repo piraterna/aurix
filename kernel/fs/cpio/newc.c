@@ -120,7 +120,7 @@ static int cpio_reader_next(cpio_reader_t *reader, struct cpio_file *file)
 
 	file->data = kmalloc(file->filesize);
 	if (!file->data) {
-		warn("cpio: Memory allocation failed for file data\n");
+		warn("cpio: Memory allocation failed for file data: %p\n");
 		return -1;
 	}
 

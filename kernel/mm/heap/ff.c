@@ -227,8 +227,10 @@ void heap_init(vctx_t *ctx)
 
 void *kmalloc(size_t size)
 {
-	if (size == 0)
+	if (size == 0) {
+		warn("kmalloc: zero size requested\n");
 		return NULL;
+	}
 
 	spinlock_acquire(&heap_lock);
 

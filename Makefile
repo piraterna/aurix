@@ -201,7 +201,7 @@ endif
 initrd:
 	@printf ">>> Building initrd...\n"
 	@mkdir -p $(SYSROOT_DIR)/System
-	@cd $(INITRD_DIR) && find . -print0 | cpio --null -ov --format=newc > $(INITRD_CPIO)
+	@cd $(INITRD_DIR) && find . -type f | cpio -H newc -o > $(INITRD_CPIO)
 
 .PHONY: install
 ifeq ($(DOCKER_BUILD),y)

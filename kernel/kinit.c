@@ -157,8 +157,6 @@ void _start(struct aurix_parameters *params)
 		kpanic(NULL, "No initrd found, checked \\System\\initrd.cpio");
 	}
 
-	hexdump(initrd_mod->addr, initrd_mod->size);
-
 	struct cpio_fs *fs = kmalloc(sizeof(struct cpio_fs));
 	memset(fs, 0, sizeof(struct cpio_fs));
 	if (cpio_fs_parse(fs, (void *)initrd_mod->addr, initrd_mod->size) != 0) {
