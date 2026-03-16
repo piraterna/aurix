@@ -601,14 +601,14 @@ static int cmd_devices(int argc, char **argv)
 	(void)argv;
 
 	kprintf("Registered devices:\n");
-	kprintf("%-20s %-20s %s\n", "Name", "Path", "Driver");
+	kprintf("%-15s %-25s %s\n", "Name", "Path", "Driver");
 
 	for (int i = 0; i < device_count; i++) {
 		struct device *dev = device_list[i];
 		if (!dev)
 			continue;
 
-		kprintf("%-20s %-20s %s\n", dev->name ? dev->name : "(unnamed)",
+		kprintf("%-15s /dev%-21s %s\n", dev->name ? dev->name : "(unnamed)",
 				dev->dev_node_path ? dev->dev_node_path : "(no path)",
 				dev->bound_driver ? dev->bound_driver->name : "(no driver)");
 	}
