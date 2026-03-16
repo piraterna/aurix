@@ -26,6 +26,7 @@
 #include <sys/sched.h>
 #include <time/time.h>
 #include <util/kprintf.h>
+#include <boot/axprot.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -36,6 +37,8 @@
 #include <mm/heap.h>
 
 extern const char *aurix_banner;
+
+extern struct aurix_parameters *boot_params;
 
 typedef int (*ksh_cmd_fn)(int argc, char **argv);
 
@@ -62,6 +65,7 @@ static int cmd_modls(int argc, char **argv);
 static int cmd_exec(int argc, char **argv);
 static int cmd_readf(int argc, char **argv);
 static int cmd_dir(int argc, char **argv);
+static int cmd_draw(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
@@ -82,7 +86,8 @@ static const ksh_command ksh_commands[] = {
 	{ "modls", "modls", "shows loaded modules", cmd_modls },
 	{ "exec", "exec <path>", "executes executable from path", cmd_exec },
 	{ "readf", "readf <path>", "reads file from path", cmd_readf },
-	{ "dir", "dir [path]", "list directory contents", cmd_dir }
+	{ "dir", "dir [path]", "list directory contents", cmd_dir },
+	{ "draw", "draw <path>", "draw TGA image to framebuffer", cmd_draw }
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
@@ -681,5 +686,171 @@ static int cmd_dir(int argc, char **argv)
 	}
 
 	vnode_unref(vnode);
+	return 0;
+}
+
+static int cmd_draw(int argc, char **argv)
+{
+	if (argc < 2) {
+		kprintf("usage: draw <path>\n");
+		return 1;
+	}
+
+	const char *path = argv[1];
+
+	if (!boot_params || !boot_params->framebuffer.addr) {
+		kprintf("ksh: framebuffer not available\n");
+		return 1;
+	}
+
+	struct fileio *f = open(path, 0, 0);
+	if (!f) {
+		kprintf("ksh: failed to open file: %s\n", path);
+		return 1;
+	}
+
+	uint8_t *buf = (uint8_t *)kmalloc(f->size);
+	if (!buf) {
+		kprintf("ksh: failed to allocate buffer\n");
+		close(f);
+		return 1;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		kprintf("ksh: failed to read file\n");
+		kfree(buf);
+		close(f);
+		return 1;
+	}
+
+	close(f);
+
+	if (f->size < 18) {
+		kprintf("ksh: invalid TGA file\n");
+		kfree(buf);
+		return 1;
+	}
+
+	uint8_t image_type = buf[2];
+	if (image_type != 2 && image_type != 3 && image_type != 10) {
+		kprintf("ksh: unsupported TGA type\n");
+		kfree(buf);
+		return 1;
+	}
+
+	uint16_t width = buf[12] | (buf[13] << 8);
+	uint16_t height = buf[14] | (buf[15] << 8);
+	uint8_t bpp = buf[16];
+
+	size_t data_offset = 18 + buf[0];
+	if (buf[1])
+		data_offset += 5;
+	if (data_offset >= f->size) {
+		kprintf("ksh: invalid TGA data\n");
+		kfree(buf);
+		return 1;
+	}
+
+	uint32_t *fb = (uint32_t *)boot_params->framebuffer.addr;
+	uint32_t fb_width = boot_params->framebuffer.width;
+	uint32_t fb_height = boot_params->framebuffer.height;
+	uint32_t fb_pitch = boot_params->framebuffer.pitch / 4;
+	int fb_format = boot_params->framebuffer.format;
+
+	uint8_t *pixel_data = buf + data_offset;
+	size_t pixel_size = bpp / 8;
+	size_t total_pixels = (size_t)width * height;
+
+	uint32_t *decoded = (uint32_t *)kmalloc(total_pixels * 4);
+	if (!decoded) {
+		kprintf("ksh: failed to allocate decode buffer\n");
+		kfree(buf);
+		return 1;
+	}
+
+	size_t decoded_count = 0;
+
+	if (image_type == 2) {
+		for (size_t i = 0; i < total_pixels; i++) {
+			size_t idx = i * pixel_size;
+			if (idx + pixel_size > f->size - data_offset)
+				break;
+			uint8_t b = pixel_data[idx], g = pixel_data[idx + 1],
+					r = pixel_data[idx + 2],
+					a = pixel_size >= 4 ? pixel_data[idx + 3] : 255;
+			uint32_t color = fb_format == AURIX_FB_BGRA ?
+								 (a << 24) | (r << 16) | (g << 8) | b :
+								 (r << 24) | (g << 16) | (b << 8) | a;
+			decoded[decoded_count++] = color;
+		}
+	} else if (image_type == 3) {
+		for (size_t i = 0; i < total_pixels; i++) {
+			size_t idx = i * pixel_size;
+			if (idx + pixel_size > f->size - data_offset)
+				break;
+			uint8_t gray = pixel_data[idx],
+					a = pixel_size >= 2 ? pixel_data[idx + 1] : 255;
+			uint32_t color = fb_format == AURIX_FB_BGRA ?
+								 (a << 24) | (gray << 16) | (gray << 8) | gray :
+								 (gray << 24) | (gray << 16) | (gray << 8) | a;
+			decoded[decoded_count++] = color;
+		}
+	} else if (image_type == 10) {
+		size_t data_idx = 0;
+		while (decoded_count < total_pixels &&
+			   data_idx < f->size - data_offset) {
+			uint8_t header = pixel_data[data_idx++];
+			uint8_t type = header & 0x80, count = (header & 0x7F) + 1;
+			if (type == 0) {
+				for (uint8_t j = 0; j < count && decoded_count < total_pixels;
+					 j++) {
+					if (data_idx + pixel_size > f->size - data_offset)
+						break;
+					uint8_t b = pixel_data[data_idx],
+							g = pixel_data[data_idx + 1],
+							r = pixel_data[data_idx + 2],
+							a = pixel_size >= 4 ? pixel_data[data_idx + 3] :
+												  255;
+					uint32_t color = fb_format == AURIX_FB_BGRA ?
+										 (a << 24) | (r << 16) | (g << 8) | b :
+										 (r << 24) | (g << 16) | (b << 8) | a;
+					decoded[decoded_count++] = color;
+					data_idx += pixel_size;
+				}
+			} else {
+				if (data_idx + pixel_size > f->size - data_offset)
+					break;
+				uint8_t b = pixel_data[data_idx], g = pixel_data[data_idx + 1],
+						r = pixel_data[data_idx + 2],
+						a = pixel_size >= 4 ? pixel_data[data_idx + 3] : 255;
+				uint32_t color = fb_format == AURIX_FB_BGRA ?
+									 (a << 24) | (r << 16) | (g << 8) | b :
+									 (r << 24) | (g << 16) | (b << 8) | a;
+				for (uint8_t j = 0; j < count && decoded_count < total_pixels;
+					 j++)
+					decoded[decoded_count++] = color;
+				data_idx += pixel_size;
+			}
+		}
+	}
+
+	uint32_t draw_width = width < fb_width ? width : fb_width;
+	uint32_t draw_height = height < fb_height ? height : fb_height;
+
+	for (uint32_t y = 0; y < draw_height; y++) {
+		for (uint32_t x = 0; x < draw_width; x++) {
+			size_t idx = ((uint32_t)height - 1 - y) * width + x;
+			if (idx < decoded_count) {
+				fb[y * fb_pitch + x] = decoded[idx];
+			}
+		}
+	}
+
+	int rows = (height + 15) / 16;
+	for (int i = 0; i < rows; i++)
+		kprintf("\n");
+
+	kfree(decoded);
+	kfree(buf);
 	return 0;
 }
