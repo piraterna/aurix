@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  heap.h */
+/* Module Name:  dummy.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -20,17 +20,32 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _MM_HEAP_H
-#define _MM_HEAP_H
+#include <aurix/axapi.h>
+#include <sys/aurix/mod.h>
+#include <dev/driver.h>
+#include <dummy.h>
 
 #include <stddef.h>
-#include <mm/vmm.h>
+#include <stdint.h>
 
-void heap_init(vctx_t *ctx);
-void heap_switch_ctx(vctx_t *ctx);
+int mod_init(void);
+void mod_exit(void);
 
-void *kmalloc(size_t size);
-void kfree(void *ptr);
-void *krealloc(void *ptr, size_t size);
+__attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
+	.name = "Dummy",
+	.desc = "Dummy module",
+	.author = "Kevin Alavik",
 
-#endif /* _MM_HEAP_H */
+	.mod_init = mod_init,
+	.mod_exit = mod_exit,
+};
+
+int mod_init()
+{
+	kprintf("dummy: This is a dummy module. It does nothing.\n");
+	return 0;
+}
+
+void mod_exit()
+{
+}

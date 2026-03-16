@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  device.h */
+/* Module Name:  types.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,43 +17,17 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _DEV_DEVICE_H
-#define _DEV_DEVICE_H
+// This code was originally from https://github.com/purpleK2/kernel
+// Licensed under the MIT License.
+
+#ifndef _SYS_TYPES_H
+#define _SYS_TYPES_H
 
 #include <stdint.h>
-#include <stddef.h>
 
-struct driver;
-struct device;
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;
+typedef unsigned int mode_t;
+typedef int64_t off_t;
 
-struct device_ops {
-	int (*open)(struct device *dev);
-	int (*close)(struct device *dev);
-	int (*read)(struct device *dev, void *buf, size_t len, size_t offset);
-	int (*write)(struct device *dev, const void *buf, size_t len,
-				 size_t offset);
-	int (*ioctl)(struct device *dev, uint64_t cmd, void *arg);
-	int (*poll)(struct device *dev);
-};
-
-struct device {
-	const char *name;
-	const char *class_name;
-
-	const char *dev_node_path;
-
-	void *driver_data;
-
-	struct driver *bound_driver;
-	struct device_ops *ops;
-
-	struct device *next;
-};
-
-int device_get_count(void);
-
-#define MAX_DEVICES 128
-extern struct device *device_list[MAX_DEVICES];
-extern int device_count;
-
-#endif
+#endif // _SYS_TYPES_H

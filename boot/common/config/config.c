@@ -56,7 +56,7 @@ struct axboot_cfg cfg = { .default_entry = DEFAULT_ENTRY,
 						  .modules = { "\\System\\support\\serial16550.sys",
 									   "\\System\\support\\i8042_ps2.sys",
 									   "\\System\\support\\pci.sys",
-									   NULL } };
+									   "\\System\\initrd.cpio", NULL } };
 
 struct axboot_entry entries[2] = {
 	{ .name = "AurixOS",

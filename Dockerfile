@@ -26,6 +26,7 @@ RUN apt-get update \
   util-linux \
   ffmpeg \
   jq \
+  cpio \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src

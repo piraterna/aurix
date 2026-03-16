@@ -227,8 +227,10 @@ void heap_init(vctx_t *ctx)
 
 void *kmalloc(size_t size)
 {
-	if (size == 0)
+	if (size == 0) {
+		warn("kmalloc: zero size requested\n");
 		return NULL;
+	}
 
 	spinlock_acquire(&heap_lock);
 
@@ -345,6 +347,115 @@ void kfree(void *ptr)
 	}
 
 	spinlock_release(&heap_lock);
+}
+
+void *krealloc(void *ptr, size_t size)
+{
+	if (!ptr)
+		return kmalloc(size);
+
+	if (size == 0) {
+		kfree(ptr);
+		return NULL;
+	}
+
+	spinlock_acquire(&heap_lock);
+
+	block_t *b = (block_t *)((uint8_t *)ptr - CANARY_SIZE - sizeof(block_t));
+
+	if (!validate(b) || !check_canaries(b)) {
+		spinlock_release(&heap_lock);
+		return NULL;
+	}
+
+	size_t new_user = ALIGN_UP(size, USER_ALIGNMENT);
+	size_t new_payload = new_user + 2 * CANARY_SIZE;
+	size_t new_effective = ALIGN_UP(new_payload, ALIGNMENT);
+
+	if (b->size >= new_effective) {
+		size_t min_remain = sizeof(block_t) + ALIGNMENT;
+
+		if (b->size >= new_effective + min_remain) {
+			block_t *rem =
+				(block_t *)((uint8_t *)b + sizeof(block_t) + new_effective);
+
+			rem->size = ALIGN_DOWN(b->size - new_effective - sizeof(block_t),
+								   ALIGNMENT);
+			rem->user_size = 0;
+			rem->alloc_size = 0;
+			rem->prev = rem->next = NULL;
+			set_check(rem);
+
+			freelist_insert(rem);
+			b->size = new_effective;
+		}
+
+		b->user_size = new_user;
+		b->alloc_size = new_effective;
+		write_canaries(b);
+		set_check(b);
+
+		spinlock_release(&heap_lock);
+		return ptr;
+	}
+
+	block_t *next = (block_t *)((uint8_t *)b + sizeof(block_t) + b->size);
+
+	if ((uint8_t *)next < (uint8_t *)pool + pool_pages * PAGE_SIZE &&
+		validate(next)) {
+		block_t *cur = freelist;
+		while (cur) {
+			if (cur == next)
+				break;
+			cur = cur->next;
+		}
+
+		if (cur) {
+			size_t combined = b->size + sizeof(block_t) + next->size;
+
+			if (combined >= new_effective) {
+				freelist_remove(next);
+
+				b->size = combined;
+
+				size_t min_remain = sizeof(block_t) + ALIGNMENT;
+
+				if (b->size >= new_effective + min_remain) {
+					block_t *rem = (block_t *)((uint8_t *)b + sizeof(block_t) +
+											   new_effective);
+
+					rem->size = ALIGN_DOWN(
+						b->size - new_effective - sizeof(block_t), ALIGNMENT);
+					rem->user_size = 0;
+					rem->alloc_size = 0;
+					rem->prev = rem->next = NULL;
+					set_check(rem);
+
+					freelist_insert(rem);
+					b->size = new_effective;
+				}
+
+				b->user_size = new_user;
+				b->alloc_size = new_effective;
+				write_canaries(b);
+				set_check(b);
+
+				spinlock_release(&heap_lock);
+				return ptr;
+			}
+		}
+	}
+
+	spinlock_release(&heap_lock);
+
+	void *new_ptr = kmalloc(size);
+	if (!new_ptr)
+		return NULL;
+
+	memcpy(new_ptr, ptr, b->user_size);
+	kfree(ptr);
+
+	return new_ptr;
 }
 
 void heap_switch_ctx(vctx_t *ctx)

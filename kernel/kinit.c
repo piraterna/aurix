@@ -18,6 +18,7 @@
 /*********************************************************************************/
 
 #include <boot/axprot.h>
+#include <aurix.h>
 #include <arch/cpu/cpu.h>
 #include <arch/apic/apic.h>
 #include <arch/cpu/irq.h>
@@ -44,6 +45,8 @@
 #include <sys/panic.h>
 #include <fs/devfs.h>
 #include <ksh/ksh.h>
+#include <fs/ramfs.h>
+#include <fs/cpio/newc.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -129,17 +132,6 @@ void _start(struct aurix_parameters *params)
 	kvctx = vinit(kernel_pm, 0xffffffff90000000ULL);
 	heap_init(kvctx);
 
-	struct devfs *devfs = devfs_create();
-	if (!devfs) {
-		kpanic(NULL, "Failed to  create devfs");
-	}
-	if (devfs_vfs_init(devfs, "/dev") != 0) {
-		kpanic(NULL, "Failed to init devfs");
-	}
-	debug("devfs initialized at /dev\n");
-
-	driver_core_init(devfs);
-
 	// TODO: Add kernel cmdline parsing
 	if (1) {
 		test_run(10);
@@ -152,17 +144,65 @@ void _start(struct aurix_parameters *params)
 #warning No clock implemented, the scheduler will not fire!
 #endif
 
+	// setup fs
+	struct aurix_module *initrd_mod = NULL;
+	for (uint32_t m = 0; m < boot_params->module_count; m++) {
+		struct aurix_module *mod = &boot_params->modules[m];
+		if (strcmp(mod->filename, "initrd.cpio") == 0) {
+			initrd_mod = mod;
+			break;
+		}
+	}
+
+	if (!initrd_mod) {
+		kpanic(NULL, "No initrd found, checked \\System\\initrd.cpio");
+	}
+
+	struct cpio_fs *cpio = kmalloc(sizeof(struct cpio_fs));
+	memset(cpio, 0, sizeof(struct cpio_fs));
+	if (cpio_fs_parse(cpio, (void *)PHYS_TO_VIRT((uintptr_t)initrd_mod->addr),
+					  initrd_mod->size) != 0) {
+		kpanic(NULL, "Failed to parse initrd file.");
+	}
+
+	ramfs_init();
+	struct ramfs *ramfs = ramfs_create_fs();
+
+	if (ramfs_vfs_init(ramfs, "/") != 0) {
+		kpanic(NULL, "Failed to initialize ramfs");
+	}
+
+	if (cpio_extract(cpio, "/") != 0) {
+		kpanic(NULL, "Failed to parse initrd file on second pass.");
+	}
+
+	vfs_mkdir("/dev", 0755);
+
+	devfs_init();
+	struct devfs *devfs = devfs_create_fs();
+	if (devfs_vfs_init(devfs, "/dev") != 0)
+		kpanic(NULL, "Failed to initialize devfs");
+
+	driver_core_init(devfs);
 	cpu_init_mp();
 	sched_init();
 
 	platform_timekeeper_init();
 
 	for (uint32_t m = 0; m < boot_params->module_count; m++) {
-		trace("Loading module '%s'...\n", boot_params->modules[m].filename);
+		const char *name = boot_params->modules[m].filename;
+		size_t len = strlen(name);
+
+		if (len < 4 || strcmp(name + len - 4, ".sys") != 0) {
+			warn("skipping module '%s' (not a .sys module)\n", name);
+			continue;
+		}
+
+		trace("Loading module '%s'...\n", name);
+
 		if (!module_load(boot_params->modules[m].addr,
 						 boot_params->modules[m].size)) {
-			kpanicf(NULL, "Module '%s' failed to load",
-					boot_params->modules[m].filename);
+			kpanicf(NULL, "Module '%s' failed to load", name);
 		}
 	}
 
@@ -181,6 +221,8 @@ void _start(struct aurix_parameters *params)
 
 	debug("launching ksh (builtin debug shell)\n");
 	pcb *p = proc_create();
+	p->pm = kernel_pm;
+	p->vctx = kvctx;
 	struct tcb *ksh = thread_create(p, ksh_thread);
 	ksh->process->name = strdup("ksh");
 

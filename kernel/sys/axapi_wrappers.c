@@ -52,6 +52,26 @@ void ax_outb(uint16_t port, uint8_t val)
 	outb(port, val);
 }
 
+uint16_t ax_inw(uint16_t port)
+{
+	return inw(port);
+}
+
+void ax_outw(uint16_t port, uint16_t val)
+{
+	outw(port, val);
+}
+
+uint32_t ax_indw(uint16_t port)
+{
+	return indw(port);
+}
+
+void ax_outdw(uint16_t port, uint32_t val)
+{
+	outdw(port, val);
+}
+
 void ax_io_wait(void)
 {
 	io_wait();

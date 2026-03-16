@@ -18,24 +18,31 @@
 /*********************************************************************************/
 
 #include <ksh/cmd.h>
-
 #include <arch/cpu/cpu.h>
 #include <arch/sys/irqlock.h>
-
 #include <aurix.h>
 #include <lib/string.h>
 #include <mm/pmm.h>
 #include <sys/sched.h>
 #include <time/time.h>
 #include <util/kprintf.h>
-
+#include <boot/axprot.h>
+#include <cpu/trace.h>
+#include <mm/vmm.h>
+#include <dev/driver.h>
+#include <sys/ksyms.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
 #include <loader/module.h>
+#include <vfs/fileio.h>
+#include <vfs/vfs.h>
+#include <loader/elf.h>
+#include <mm/heap.h>
 
 extern const char *aurix_banner;
+
+extern struct aurix_parameters *boot_params;
 
 typedef int (*ksh_cmd_fn)(int argc, char **argv);
 
@@ -57,12 +64,22 @@ static int cmd_hexdump(int argc, char **argv);
 static int cmd_sched(int argc, char **argv);
 static int cmd_free(int argc, char **argv);
 static int cmd_clear(int argc, char **argv);
-static int cmd_fetch(int argc, char **argv);
 static int cmd_modls(int argc, char **argv);
+static int cmd_exec(int argc, char **argv);
+static int cmd_readf(int argc, char **argv);
+static int cmd_dir(int argc, char **argv);
+static int cmd_backtrace(int argc, char **argv);
+static int cmd_registers(int argc, char **argv);
+static int cmd_devices(int argc, char **argv);
+static int cmd_kconfig(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
 	{ "about", "about", "print system banner", cmd_about },
+	{ "backtrace", "backtrace [depth]", "show stack backtrace", cmd_backtrace },
+	{ "registers", "registers", "show current CPU registers", cmd_registers },
+	{ "devices", "devices", "list registered devices", cmd_devices },
+	{ "kconfig", "kconfig", "show kernel configuration", cmd_kconfig },
 	{ "cpuinfo", "cpuinfo", "show CPU vendor/name and scheduler stats",
 	  cmd_cpuinfo },
 	{ "threads", "threads [cpu]", "list threads (optionally for one CPU)",
@@ -71,19 +88,20 @@ static const ksh_command ksh_commands[] = {
 	{ "uptime", "uptime", "show time since boot in ms", cmd_uptime },
 	{ "whoami", "whoami", "show current thread/process/cpu", cmd_whoami },
 	{ "free", "free", "show physical memory usage", cmd_free },
+	{ "sched", "sched", "show scheduler enabled state", cmd_sched },
+	{ "modls", "modls", "shows loaded modules", cmd_modls },
 	{ "hexdump", "hexdump <addr> <len>", "dump memory (unsafe if unmapped)",
 	  cmd_hexdump },
-	{ "sched", "sched", "show scheduler enabled state", cmd_sched },
+	{ "readf", "readf <path>", "reads file from path", cmd_readf },
+	{ "dir", "dir [path]", "list directory contents", cmd_dir },
 	{ "clear", "clear", "clears screen", cmd_clear },
-	{ "fetch", "fetch", "show system information", cmd_fetch },
-	{ "modls", "modls", "shows loaded modules", cmd_modls },
+	{ "exec", "exec <path>", "executes executable from path", cmd_exec }
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
 {
 	if (!t || !cpu || !t->process)
 		return false;
-	// Idle threads are encoded as UINT32_MAX - cpu_id and belong to pid 0.
 	return t->process->pid == 0 && t->tid == (uint32_t)(UINT32_MAX - cpu->id);
 }
 
@@ -438,38 +456,6 @@ static int cmd_clear(int argc, char **argv)
 	return 0;
 }
 
-static int cmd_fetch(int argc, char **argv)
-{
-	(void)argc;
-	(void)argv;
-
-	struct cpu *c = &cpuinfo[0];
-
-	uint64_t uptime_ms = get_ms();
-
-	uint64_t total_pages = bitmap_pages;
-	uint64_t usable_pages = pmm_usable_pages();
-	uint64_t free_pages = pmm_free_pages();
-	uint64_t used_pages = usable_pages - free_pages;
-
-	uint64_t total_mem = total_pages * (uint64_t)PAGE_SIZE;
-	uint64_t used_mem = used_pages * (uint64_t)PAGE_SIZE;
-
-	uint64_t mib = 1024ull * 1024ull;
-
-	kprintf("        /\\        aurix-" AURIX_VERSION "-" AURIX_GITREV
-			" (" AURIX_CODENAME ")\n"
-			"       /  \\       -------------------\n"
-			"      / /\\ \\      cpu: %s (%zu)\n"
-			"     / ____ \\     uptime: %llu ms\n"
-			"    /_/    \\_\\    memory: %llu / %llu MiB\n",
-			c->name_ext, cpu_count, (unsigned long long)uptime_ms,
-			(unsigned long long)(used_mem / mib),
-			(unsigned long long)(total_mem / mib));
-
-	return 0;
-}
-
 static int cmd_modls(int argc, char **argv)
 {
 	(void)argc;
@@ -489,5 +475,363 @@ static int cmd_modls(int argc, char **argv)
 
 		m = m->next;
 	}
+	return 0;
+}
+
+static int cmd_backtrace(int argc, char **argv)
+{
+	uint16_t depth = 16;
+	if (argc >= 2) {
+		uint64_t d;
+		if (ksh_parse_u64(argv[1], &d) && d > 0 && d <= 64) {
+			depth = (uint16_t)d;
+		} else {
+			kprintf("usage: backtrace [depth] (1-64, default 16)\n");
+			return 1;
+		}
+	}
+
+	kprintf("Stack backtrace:\n");
+	stack_trace(depth);
+	return 0;
+}
+
+static int cmd_registers(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+
+	struct cpu *cpu = cpu_get_current();
+	if (!cpu) {
+		kprintf("ksh: failed to get current CPU\n");
+		return 1;
+	}
+
+	kprintf("CPU %u registers:\n", cpu->id);
+
+	// Show CPUID information
+	kprintf("CPUID: vendor='%s' name='%s'\n", cpu->vendor_str, cpu->name_ext);
+	kprintf("Features: sse=%u sse2=%u apic=%u tsc=%u\n",
+			cpu->cpuid.edx_bits.sse, cpu->cpuid.edx_bits.sse2,
+			cpu->cpuid.edx_bits.apic, cpu->cpuid.edx_bits.tsc);
+
+	// Read actual register values using inline assembly
+	uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp;
+	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
+	uint64_t rip, rflags;
+	uint16_t cs, ds, es, ss;
+	uint64_t cr0, cr2, cr3, cr4;
+
+	// Read general purpose registers in groups to avoid constraint conflicts
+	__asm__ volatile("mov %%rax, %0" : "=r"(rax)::);
+	__asm__ volatile("mov %%rbx, %0" : "=r"(rbx)::);
+	__asm__ volatile("mov %%rcx, %0" : "=r"(rcx)::);
+	__asm__ volatile("mov %%rdx, %0" : "=r"(rdx)::);
+	__asm__ volatile("mov %%rsi, %0" : "=r"(rsi)::);
+	__asm__ volatile("mov %%rdi, %0" : "=r"(rdi)::);
+	__asm__ volatile("mov %%rbp, %0" : "=r"(rbp)::);
+	__asm__ volatile("mov %%rsp, %0" : "=r"(rsp)::);
+	__asm__ volatile("mov %%r8, %0" : "=r"(r8)::);
+	__asm__ volatile("mov %%r9, %0" : "=r"(r9)::);
+	__asm__ volatile("mov %%r10, %0" : "=r"(r10)::);
+	__asm__ volatile("mov %%r11, %0" : "=r"(r11)::);
+	__asm__ volatile("mov %%r12, %0" : "=r"(r12)::);
+	__asm__ volatile("mov %%r13, %0" : "=r"(r13)::);
+	__asm__ volatile("mov %%r14, %0" : "=r"(r14)::);
+	__asm__ volatile("mov %%r15, %0" : "=r"(r15)::);
+
+	// Read segment registers
+	__asm__ volatile("movw %%cs, %0" : "=r"(cs)::);
+	__asm__ volatile("movw %%ds, %0" : "=r"(ds)::);
+	__asm__ volatile("movw %%es, %0" : "=r"(es)::);
+	__asm__ volatile("movw %%ss, %0" : "=r"(ss)::);
+
+	// Read flags
+	__asm__ volatile("pushfq\n\tpopq %0" : "=r"(rflags)::);
+
+	// Read instruction pointer (approximate)
+	__asm__ volatile("call 1f\n\t1: popq %0" : "=r"(rip)::);
+
+	// Read control registers
+	__asm__ volatile("mov %%cr0, %%rax\n\tmov %%rax, %0" : "=r"(cr0)::);
+	__asm__ volatile("mov %%cr2, %%rax\n\tmov %%rax, %0" : "=r"(cr2)::);
+	__asm__ volatile("mov %%cr3, %%rax\n\tmov %%rax, %0" : "=r"(cr3)::);
+	__asm__ volatile("mov %%cr4, %%rax\n\tmov %%rax, %0" : "=r"(cr4)::);
+
+	kprintf("General Purpose Registers:\n");
+	kprintf("  RAX: 0x%016llx  RBX: 0x%016llx  RCX: 0x%016llx\n", rax, rbx,
+			rcx);
+	kprintf("  RDX: 0x%016llx  RSI: 0x%016llx  RDI: 0x%016llx\n", rdx, rsi,
+			rdi);
+	kprintf("  RBP: 0x%016llx  RSP: 0x%016llx  RIP: 0x%016llx\n", rbp, rsp,
+			rip);
+	kprintf("  R8:  0x%016llx  R9:  0x%016llx  R10: 0x%016llx\n", r8, r9, r10);
+	kprintf("  R11: 0x%016llx  R12: 0x%016llx  R13: 0x%016llx\n", r11, r12,
+			r13);
+	kprintf("  R14: 0x%016llx  R15: 0x%016llx\n", r14, r15);
+
+	kprintf("Segment Registers:\n");
+	kprintf("  CS: 0x%04x  DS: 0x%04x  ES: 0x%04x  SS: 0x%04x\n", cs, ds, es,
+			ss);
+
+	kprintf("Flags: 0x%016llx\n", rflags);
+
+	kprintf("Control Registers:\n");
+	kprintf(
+		"  CR0: 0x%016llx  CR2: 0x%016llx  CR3: 0x%016llx  CR4: 0x%016llx\n",
+		cr0, cr2, cr3, cr4);
+
+	// Show current thread info
+	tcb *current = thread_current();
+	if (current) {
+		kprintf("Current thread: tid=%u\n", current->tid);
+		if (current->process) {
+			kprintf("Current process: pid=%u name=%s\n", current->process->pid,
+					current->process->name ? current->process->name :
+											 "(unnamed)");
+		}
+	}
+
+	return 0;
+}
+
+static int cmd_devices(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+
+	kprintf("Registered devices:\n");
+	kprintf("%-20s %-20s %s\n", "Name", "Path", "Driver");
+
+	for (int i = 0; i < device_count; i++) {
+		struct device *dev = device_list[i];
+		if (!dev)
+			continue;
+
+		kprintf("%-20s %-20s %s\n", dev->name ? dev->name : "(unnamed)",
+				dev->dev_node_path ? dev->dev_node_path : "(no path)",
+				dev->bound_driver ? dev->bound_driver->name : "(no driver)");
+	}
+
+	return 0;
+}
+
+static int cmd_kconfig(int argc, char **argv)
+{
+	(void)argc;
+	(void)argv;
+
+	kprintf("Kernel configuration:\n");
+
+	kprintf("CONFIG_CPU_MAX_COUNT=%d\n", CONFIG_CPU_MAX_COUNT);
+	kprintf("CONFIG_IRQ_MAX_CALLBACKS=%d\n", CONFIG_IRQ_MAX_CALLBACKS);
+	kprintf("CONFIG_IOAPIC_MAX_COUNT=%d\n", CONFIG_IOAPIC_MAX_COUNT);
+#ifdef CONFIG_BUILD_TESTS
+	kprintf("CONFIG_BUILD_TESTS=y\n");
+#else
+	kprintf("CONFIG_BUILD_TESTS=n\n");
+#endif
+#ifdef CONFIG_USE_HOSTTOOLCHAIN
+	kprintf("CONFIG_USE_HOSTTOOLCHAIN=y\n");
+#else
+	kprintf("CONFIG_USE_HOSTTOOLCHAIN=n\n");
+#endif
+
+	return 0;
+}
+
+static int cmd_exec(int argc, char **argv)
+{
+	if (argc < 2) {
+		kprintf("usage: exec <path>\n");
+		return 1;
+	}
+
+	const char *path = argv[1];
+	struct fileio *f = open(path, 0, 0);
+	if (!f) {
+		kprintf("ksh: failed to open file: %s\n", path);
+		return 1;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		kprintf("ksh: failed to allocate buffer for file: %s\n", path);
+		return 1;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		kprintf("ksh: failed to read file: %s\n", path);
+		return 1;
+	}
+
+	struct pcb *proc = proc_create();
+	if (!proc) {
+		kprintf("ksh: failed to create process for: %s\n", path);
+		kfree(buf);
+		return 1;
+	}
+
+	char *name_copy = kmalloc(strlen(path) + 1);
+	if (name_copy)
+		strcpy(name_copy, path);
+	proc->name = (const char *)name_copy;
+
+	uint64_t addr, size = 0;
+	uintptr_t entry = elf_load(buf, &addr, &size, proc->pm);
+	if (entry == 0) {
+		kprintf("ksh: failed to load ELF: %s\n", path);
+		proc_destroy(proc);
+		kfree(buf);
+		return 1;
+	}
+
+	kprintf("ksh: loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path,
+			entry, addr, size);
+
+	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
+	if (!thread) {
+		kprintf("ksh: failed to create thread for: %s\n", path);
+		proc_destroy(proc);
+		kfree(buf);
+		return 1;
+	}
+	return 0;
+}
+
+static int cmd_readf(int argc, char **argv)
+{
+	if (argc < 2) {
+		kprintf("usage: exec <path>\n");
+		return 1;
+	}
+
+	const char *path = (argc > 1) ? argv[1] : "/";
+	char full_path[256];
+	if (path[0] == '/') {
+		strncpy(full_path, path, sizeof(full_path) - 1);
+		full_path[sizeof(full_path) - 1] = '\0';
+	} else {
+		strcpy(full_path, "/");
+		strncpy(full_path + 1, path, sizeof(full_path) - 2);
+		full_path[sizeof(full_path) - 1] = '\0';
+	}
+	struct fileio *f = open(full_path, 0, 0);
+	if (!f) {
+		kprintf("ksh: failed to open file: %s\n", full_path);
+		return 1;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		kprintf("ksh: failed to allocate buffer for file: %s\n", full_path);
+		return 1;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		kprintf("ksh: failed to read file: %s\n", full_path);
+		kfree(buf);
+		return 1;
+	}
+
+	kprintf("%s\n", buf);
+	kfree(buf);
+	close(f);
+	return 0;
+}
+
+static int cmd_dir(int argc, char **argv)
+{
+	const char *input_path = (argc > 1) ? argv[1] : "/";
+	char full_path[256];
+	if (input_path[0] == '/') {
+		strncpy(full_path, input_path, sizeof(full_path) - 1);
+		full_path[sizeof(full_path) - 1] = '\0';
+	} else {
+		strcpy(full_path, "/");
+		strncpy(full_path + 1, input_path, sizeof(full_path) - 2);
+		full_path[sizeof(full_path) - 1] = '\0';
+	}
+
+	struct vnode *vnode;
+	if (vfs_lookup(full_path, &vnode) != 0) {
+		kprintf("dir: %s: not found\n", full_path);
+		return 1;
+	}
+
+	if (vnode->vtype != VNODE_DIR) {
+		kprintf("dir: %s: not a directory\n", full_path);
+		vnode_unref(vnode);
+		return 1;
+	}
+
+	struct dirent entries[64];
+	size_t count = 64;
+	if (vfs_readdir(vnode, entries, &count) != 0) {
+		kprintf("dir: failed to read directory\n");
+		vnode_unref(vnode);
+		return 1;
+	}
+
+	kprintf("%-20s %8s %s\n", "Name", "Size", "Type");
+	kprintf("%-20s %8s %s\n", "--------------------", "--------", "----");
+
+	for (size_t i = 0; i < count; i++) {
+		char entry_path[512];
+		strcpy(entry_path, full_path);
+		if (strcmp(full_path, "/") != 0) {
+			strcat(entry_path, "/");
+		}
+		strcat(entry_path, entries[i].d_name);
+
+		struct stat st;
+		if (vfs_stat(entry_path, &st) == 0) {
+			char type = '?';
+			switch (entries[i].d_type) {
+			case DT_DIR:
+				type = 'd';
+				break;
+			case DT_REG:
+				type = '-';
+				break;
+			case DT_LNK:
+				type = 'l';
+				break;
+			case DT_CHR:
+				type = 'c';
+				break;
+			case DT_BLK:
+				type = 'b';
+				break;
+			case DT_FIFO:
+				type = 'p';
+				break;
+			case DT_SOCK:
+				type = 's';
+				break;
+			default:
+				type = '?';
+				break;
+			}
+
+			char name[256];
+			strncpy(name, entries[i].d_name, sizeof(name) - 1);
+			name[sizeof(name) - 1] = '\0';
+			if (entries[i].d_type == DT_DIR) {
+				size_t len = strlen(name);
+				if (len < sizeof(name) - 1) {
+					name[len] = '/';
+					name[len + 1] = '\0';
+				}
+			}
+
+			kprintf("%-20s %8llu %c\n", name, (unsigned long long)st.st_size,
+					type);
+		} else {
+			kprintf("%-20s %8s %s\n", entries[i].d_name, "?", "?");
+		}
+	}
+
+	vnode_unref(vnode);
 	return 0;
 }

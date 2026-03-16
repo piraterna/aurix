@@ -66,53 +66,111 @@ static char *kstrdup(const char *s)
 
 static void devfs_publish_device(struct device *dev)
 {
-	if (!dev || !dev->dev_node_path)
+	if (!dev || !dev->dev_node_path) {
+		trace("devfs_publish_device: invalid device or dev_node_path\n");
 		return;
+	}
 
-	if (!global_devfs)
+	if (!devfs || !devfs->root_node) {
+		trace("devfs_publish_device: devfs or root_node not initialized\n");
 		return;
+	}
 
 	char *path = strdup(dev->dev_node_path);
-	char *saveptr;
-	char *token;
+	if (!path) {
+		trace("devfs_publish_device: strdup failed for %s\n",
+			  dev->dev_node_path);
+		return;
+	}
 
-	struct devfs_node *current = global_devfs->root_node;
+	trace("devfs_publish_device: publishing device %s at path %s\n", dev->name,
+		  dev->dev_node_path);
 
+	struct devfs_node *current = devfs->root_node;
 	bool ends_with_slash = path[strlen(path) - 1] == '/';
 
-	token = strtok_r(path, "/", &saveptr);
+	char *saveptr = NULL;
+	char *token = strtok_r(path, "/", &saveptr);
 
 	while (token) {
 		char *next = strtok_r(NULL, "/", &saveptr);
 		bool is_last = (next == NULL);
 
 		if (is_last && !ends_with_slash) {
-			struct devfs_node *node = devfs_create_node(DEVFS_TYPE_CHAR);
+			// Last token, create device node
+			struct devfs_node *node = devfs_create_fs_node(DEVFS_TYPE_CHAR);
+			if (!node) {
+				trace("devfs_publish_device: failed to create node for %s\n",
+					  token);
+				break;
+			}
 			node->name = strdup(token);
+			if (!node->name) {
+				kfree(node);
+				trace("devfs_publish_device: strdup failed for %s\n", token);
+				break;
+			}
 			node->device = dev;
 
-			if (devfs_append_child(current, node) != 0) {
-				error("driver: failed to publish device\n");
-				kfree(path);
-				return;
+			if (!current || devfs_append_child(current, node) != 0) {
+				trace("devfs_publish_device: failed to append device node %s\n",
+					  dev->name);
+				kfree(node->name);
+				kfree(node);
+				break;
 			}
 
-			debug("driver: published device %s -> %s\n", dev->name,
-				  dev->dev_node_path);
-		} else {
-			struct devfs_node *dir = devfs_find_child(current, token);
+			trace("devfs_publish_device: published device node %s -> %s\n",
+				  dev->name, dev->dev_node_path);
 
+		} else {
+			// Directory token
+			struct devfs_node *dir = NULL;
+			// Find existing child with this name
+			for (struct devfs_node *child = current->child; child;
+				 child = child->sibling) {
+				if (strcmp(child->name, token) == 0) {
+					dir = child;
+					break;
+				}
+			}
 			if (!dir) {
-				dir = devfs_create_node(DEVFS_TYPE_DIR);
+				dir = devfs_create_fs_node(DEVFS_TYPE_DIR);
+				if (!dir) {
+					trace(
+						"devfs_publish_device: failed to create directory %s\n",
+						token);
+					break;
+				}
 				dir->name = strdup(token);
-				devfs_append_child(current, dir);
+				if (!dir->name) {
+					kfree(dir);
+					trace(
+						"devfs_publish_device: strdup failed for directory %s\n",
+						token);
+					break;
+				}
+				if (!current || devfs_append_child(current, dir) != 0) {
+					trace(
+						"devfs_publish_device: failed to append directory %s\n",
+						token);
+					kfree(dir->name);
+					kfree(dir);
+					break;
+				}
+				trace("devfs_publish_device: created directory node %s\n",
+					  token);
+			} else {
+				trace(
+					"devfs_publish_device: found existing directory node %s\n",
+					token);
 			}
 
 			current = dir;
 
 			if (is_last && ends_with_slash) {
-				warn(
-					"driver: device path ends with '/', treating as directory: %s\n",
+				trace(
+					"devfs_publish_device: device path ends with '/', treating as directory: %s\n",
 					dev->dev_node_path);
 			}
 		}
@@ -121,6 +179,7 @@ static void devfs_publish_device(struct device *dev)
 	}
 
 	kfree(path);
+	trace("devfs_publish_device: finished publishing %s\n", dev->name);
 }
 
 static int class_match(const char *a, const char *b)

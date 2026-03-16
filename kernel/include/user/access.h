@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  device.h */
+/* Module Name:  access.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,43 +17,41 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _DEV_DEVICE_H
-#define _DEV_DEVICE_H
+// This code was originally from https://github.com/purpleK2/kernel
+// Licensed under the MIT License.
 
-#include <stdint.h>
-#include <stddef.h>
+#ifndef _USER_ACCESS_H
+#define _USER_ACCESS_H
 
-struct driver;
-struct device;
+#define R_OK 0x4
+#define W_OK 0x2
+#define X_OK 0x1
 
-struct device_ops {
-	int (*open)(struct device *dev);
-	int (*close)(struct device *dev);
-	int (*read)(struct device *dev, void *buf, size_t len, size_t offset);
-	int (*write)(struct device *dev, const void *buf, size_t len,
-				 size_t offset);
-	int (*ioctl)(struct device *dev, uint64_t cmd, void *arg);
-	int (*poll)(struct device *dev);
-};
+#define S_IRUSR 0400
+#define S_IWUSR 0200
+#define S_IXUSR 0100
 
-struct device {
-	const char *name;
-	const char *class_name;
+#define S_IRGRP 0040
+#define S_IWGRP 0020
+#define S_IXGRP 0010
 
-	const char *dev_node_path;
+#define S_IROTH 0004
+#define S_IWOTH 0002
+#define S_IXOTH 0001
 
-	void *driver_data;
+#define S_IFDIR 0040000 /* Directory.  */
+#define S_IFCHR 0020000 /* Character device.  */
+#define S_IFBLK 0060000 /* Block device.  */
+#define S_IFREG 0100000 /* Regular file.  */
+#define S_IFIFO 0010000 /* FIFO.  */
+#define S_IFLNK 0120000 /* Symbolic link.  */
+#define S_IFSOCK 0140000 /* Socket.  */
 
-	struct driver *bound_driver;
-	struct device_ops *ops;
+#define S_IFMT 0170000 /* Type of file.  */
 
-	struct device *next;
-};
+#define S_ISUID 0x800
+#define S_ISGID 0x400
 
-int device_get_count(void);
+// TODO: check perms
 
-#define MAX_DEVICES 128
-extern struct device *device_list[MAX_DEVICES];
-extern int device_count;
-
-#endif
+#endif // _USER_ACCESS_H

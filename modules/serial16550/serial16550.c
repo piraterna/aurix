@@ -40,8 +40,10 @@ static struct serial_ctx serial_ctxs[8];
 
 static int serial_open(struct device *dev);
 static int serial_close(struct device *dev);
-static int serial_read(struct device *dev, void *buf, uint64_t len);
-static int serial_write(struct device *dev, const void *buf, uint64_t len);
+static int serial_read(struct device *dev, void *buf, size_t len,
+					   size_t offset);
+static int serial_write(struct device *dev, const void *buf, size_t len,
+						size_t offset);
 static int serial_poll(struct device *dev);
 
 static struct device_ops serial_ops = {
@@ -143,8 +145,9 @@ static int serial_close(struct device *dev)
 	return 0;
 }
 
-static int serial_read(struct device *dev, void *buf, uint64_t len)
+static int serial_read(struct device *dev, void *buf, size_t len, size_t offset)
 {
+	(void)offset;
 	if (!dev || !dev->driver_data || !buf)
 		return -1;
 	struct serial_ctx *ctx = dev->driver_data;
@@ -166,8 +169,10 @@ static int serial_poll(struct device *dev)
 	return (ax_inb(ctx->base + 5) & LSR_DATA_READY) != 0;
 }
 
-static int serial_write(struct device *dev, const void *buf, uint64_t len)
+static int serial_write(struct device *dev, const void *buf, size_t len,
+						size_t offset)
 {
+	(void)offset;
 	if (!dev || !dev->driver_data || !buf)
 		return -1;
 	struct serial_ctx *ctx = dev->driver_data;

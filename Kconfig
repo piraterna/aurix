@@ -7,3 +7,4 @@ menu "Build"
 endmenu
 
 source "kernel/Kconfig"
+source "modules/Kconfig"

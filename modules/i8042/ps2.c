@@ -22,6 +22,7 @@
 #include <sys/aurix/mod.h>
 
 #include <dev/device.h>
+#include <dev/driver.h>
 
 #include <ps2.h>
 
@@ -374,13 +375,13 @@ static int kbd_close(struct device *dev)
 	return 0;
 }
 
-static int kbd_read(struct device *dev, void *buf, uint64_t len)
+static int kbd_read(struct device *dev, void *buf, size_t len, size_t offset)
 {
 	(void)dev;
 	if (!buf)
 		return -1;
 	uint8_t *dst = buf;
-	uint64_t n = 0;
+	size_t n = 0;
 	while (n < len) {
 		uint8_t b;
 		if (!rb_pop(&kbd_out, &b))
@@ -390,11 +391,13 @@ static int kbd_read(struct device *dev, void *buf, uint64_t len)
 	return (int)n;
 }
 
-static int kbd_write(struct device *dev, const void *buf, uint64_t len)
+static int kbd_write(struct device *dev, const void *buf, size_t len,
+					 size_t offset)
 {
 	(void)dev;
 	(void)buf;
 	(void)len;
+	(void)offset;
 	return -1;
 }
 
@@ -412,15 +415,6 @@ static int kbd_poll(struct device *dev)
 	return rb_count(&kbd_out) > 0;
 }
 
-static struct device_ops kbd_ops = {
-	.open = kbd_open,
-	.close = kbd_close,
-	.read = kbd_read,
-	.write = kbd_write,
-	.ioctl = kbd_ioctl,
-	.poll = kbd_poll,
-};
-
 static int mouse_open(struct device *dev)
 {
 	(void)dev;
@@ -433,13 +427,13 @@ static int mouse_close(struct device *dev)
 	return 0;
 }
 
-static int mouse_read(struct device *dev, void *buf, uint64_t len)
+static int mouse_read(struct device *dev, void *buf, size_t len, size_t offset)
 {
 	(void)dev;
 	if (!buf)
 		return -1;
 	uint8_t *dst = buf;
-	uint64_t n = 0;
+	size_t n = 0;
 	while (n < len) {
 		uint8_t b;
 		if (!rb_pop(&mouse_out, &b))
@@ -449,11 +443,13 @@ static int mouse_read(struct device *dev, void *buf, uint64_t len)
 	return (int)n;
 }
 
-static int mouse_write(struct device *dev, const void *buf, uint64_t len)
+static int mouse_write(struct device *dev, const void *buf, size_t len,
+					   size_t offset)
 {
 	(void)dev;
 	(void)buf;
 	(void)len;
+	(void)offset;
 	return -1;
 }
 
@@ -471,6 +467,31 @@ static int mouse_poll(struct device *dev)
 	return rb_count(&mouse_out) > 0;
 }
 
+static int kbd_open(struct device *dev);
+static int kbd_close(struct device *dev);
+static int kbd_read(struct device *dev, void *buf, size_t len, size_t offset);
+static int kbd_write(struct device *dev, const void *buf, size_t len,
+					 size_t offset);
+static int kbd_ioctl(struct device *dev, uint64_t cmd, void *arg);
+static int kbd_poll(struct device *dev);
+
+static struct device_ops kbd_ops = {
+	.open = kbd_open,
+	.close = kbd_close,
+	.read = kbd_read,
+	.write = kbd_write,
+	.ioctl = kbd_ioctl,
+	.poll = kbd_poll,
+};
+
+static int mouse_open(struct device *dev);
+static int mouse_close(struct device *dev);
+static int mouse_read(struct device *dev, void *buf, size_t len, size_t offset);
+static int mouse_write(struct device *dev, const void *buf, size_t len,
+					   size_t offset);
+static int mouse_ioctl(struct device *dev, uint64_t cmd, void *arg);
+static int mouse_poll(struct device *dev);
+
 static struct device_ops mouse_ops = {
 	.open = mouse_open,
 	.close = mouse_close,
@@ -480,6 +501,34 @@ static struct device_ops mouse_ops = {
 	.poll = mouse_poll,
 };
 
+static int ps2_probe(struct device *dev)
+{
+	if (!dev || !dev->name)
+		return -1;
+
+	if (streq(dev->name, "kbd0")) {
+		dev->ops = &kbd_ops;
+		dev->driver_data = NULL;
+		mod_log("PS/2 keyboard probed: %s\n", dev->name);
+		return 0;
+	} else if (streq(dev->name, "mouse0")) {
+		dev->ops = &mouse_ops;
+		dev->driver_data = NULL;
+		mod_log("PS/2 mouse probed: %s\n", dev->name);
+		return 0;
+	}
+
+	mod_log("PS/2 probe: unknown device %s\n", dev->name);
+	return -1;
+}
+
+static struct driver ps2_driver = {
+	.name = "i8042_ps2",
+	.class_name = "input",
+	.probe = ps2_probe,
+	.remove = NULL,
+};
+
 int mod_init(void)
 {
 	memset(&raw_kbd, 0, sizeof(raw_kbd));
@@ -487,28 +536,101 @@ int mod_init(void)
 	memset(&kbd_out, 0, sizeof(kbd_out));
 	memset(&mouse_out, 0, sizeof(mouse_out));
 
-	(void)ps2_controller_init();
+	if (!ps2_controller_init()) {
+		mod_log("PS/2 controller initialization failed\n");
+		return -1;
+	}
 	ps2_flush_output();
 
-	struct device kbddev;
-	memset(&kbddev, 0, sizeof(kbddev));
-	kbddev.name = "kbd0";
-	kbddev.class_name = "input";
-	kbddev.dev_node_path = "/raw/ps2/kbd0";
-	kbddev.driver_data = NULL;
-	kbddev.ops = &kbd_ops;
-	if (device_register(&kbddev) != 0)
-		mod_log("failed to publish /raw/ps2/kbd0\n");
+	if (driver_register(&ps2_driver) != 0) {
+		mod_log("failed to register PS/2 driver\n");
+		return -1;
+	}
 
-	struct device mousedev;
-	memset(&mousedev, 0, sizeof(mousedev));
-	mousedev.name = "mouse0";
-	mousedev.class_name = "input";
-	mousedev.dev_node_path = "/raw/ps2/mouse0";
-	mousedev.driver_data = NULL;
-	mousedev.ops = &mouse_ops;
-	if (device_register(&mousedev) != 0)
-		mod_log("failed to publish /raw/ps2/mouse0\n");
+	bool p1_ok = ps2_test_port(PS2_PORT1);
+	bool p2_ok = ps2_test_port(PS2_PORT2);
+
+	if (p1_ok) {
+		struct device *kbd_dev = kmalloc(sizeof(*kbd_dev));
+		if (kbd_dev) {
+			memset(kbd_dev, 0, sizeof(*kbd_dev));
+			kbd_dev->name = kmalloc(5);
+			if (kbd_dev->name) {
+				memcpy(kbd_dev->name, "kbd0", 5);
+				kbd_dev->class_name = kmalloc(6);
+				if (kbd_dev->class_name) {
+					memcpy(kbd_dev->class_name, "input", 6);
+					kbd_dev->dev_node_path = kmalloc(13);
+					if (kbd_dev->dev_node_path) {
+						memcpy(kbd_dev->dev_node_path, "/raw/ps2/kbd0", 13);
+						kbd_dev->driver_data = NULL;
+						kbd_dev->ops = NULL;
+
+						if (device_register(kbd_dev) != 0) {
+							mod_log("failed to register keyboard device\n");
+							kfree(kbd_dev->dev_node_path);
+							kfree(kbd_dev->class_name);
+							kfree(kbd_dev->name);
+							kfree(kbd_dev);
+						} else {
+							mod_log("registered PS/2 keyboard device\n");
+						}
+					} else {
+						kfree(kbd_dev->class_name);
+						kfree(kbd_dev->name);
+						kfree(kbd_dev);
+					}
+				} else {
+					kfree(kbd_dev->name);
+					kfree(kbd_dev);
+				}
+			} else {
+				kfree(kbd_dev);
+			}
+		}
+	}
+
+	if (p2_ok) {
+		struct device *mouse_dev = kmalloc(sizeof(*mouse_dev));
+		if (mouse_dev) {
+			memset(mouse_dev, 0, sizeof(*mouse_dev));
+			mouse_dev->name = kmalloc(6);
+			if (mouse_dev->name) {
+				memcpy(mouse_dev->name, "mouse0", 6);
+				mouse_dev->class_name = kmalloc(6);
+				if (mouse_dev->class_name) {
+					memcpy(mouse_dev->class_name, "input", 6);
+					mouse_dev->dev_node_path = kmalloc(14);
+					if (mouse_dev->dev_node_path) {
+						memcpy(mouse_dev->dev_node_path, "/raw/ps2/mouse0", 14);
+						mouse_dev->driver_data = NULL;
+						mouse_dev->ops = NULL;
+
+						if (device_register(mouse_dev) != 0) {
+							mod_log("failed to register mouse device\n");
+							kfree((void *)mouse_dev->dev_node_path);
+							kfree((void *)mouse_dev->class_name);
+							kfree((void *)mouse_dev->name);
+							kfree(mouse_dev);
+						} else {
+							mod_log("registered PS/2 mouse device\n");
+						}
+					} else {
+						kfree((void *)mouse_dev->class_name);
+						kfree((void *)mouse_dev->name);
+						kfree(mouse_dev);
+					}
+				} else {
+					kfree((void *)mouse_dev->name);
+					kfree(mouse_dev);
+				}
+			} else {
+				kfree(mouse_dev);
+			}
+		}
+	}
+
+	driver_bind_all();
 
 	bool kbd_worker = false;
 	bool mouse_worker = false;
@@ -540,6 +662,8 @@ int mod_init(void)
 		if (got == 0)
 			sleep_ms(1);
 	}
+
+	return 0;
 }
 
 void mod_exit(void)

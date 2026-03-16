@@ -1,0 +1,7 @@
+menu "PCI"
+
+config PCI_MAX_DEVICES
+    int "Maximum amount of PCI devices"
+    default 32
+
+endmenu

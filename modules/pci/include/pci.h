@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  heap.h */
+/* Module Name:  pci.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -20,17 +20,7 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _MM_HEAP_H
-#define _MM_HEAP_H
+#ifndef _PCI_H
+#define _PCI_H
 
-#include <stddef.h>
-#include <mm/vmm.h>
-
-void heap_init(vctx_t *ctx);
-void heap_switch_ctx(vctx_t *ctx);
-
-void *kmalloc(size_t size);
-void kfree(void *ptr);
-void *krealloc(void *ptr, size_t size);
-
-#endif /* _MM_HEAP_H */
+#endif /* _PCI_H */

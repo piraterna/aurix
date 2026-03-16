@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  device.h */
+/* Module Name:  newc.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,43 +17,49 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _DEV_DEVICE_H
-#define _DEV_DEVICE_H
+// This code was originally from https://github.com/purpleK2/kernel
+// Licensed under the MIT License.
 
-#include <stdint.h>
+#ifndef _FS_CPIO_NEWC_H
+#define _FS_CPIO_NEWC_H
+
 #include <stddef.h>
+#include <stdint.h>
+#include <fs/ramfs.h>
 
-struct driver;
-struct device;
-
-struct device_ops {
-	int (*open)(struct device *dev);
-	int (*close)(struct device *dev);
-	int (*read)(struct device *dev, void *buf, size_t len, size_t offset);
-	int (*write)(struct device *dev, const void *buf, size_t len,
-				 size_t offset);
-	int (*ioctl)(struct device *dev, uint64_t cmd, void *arg);
-	int (*poll)(struct device *dev);
+struct cpio_file {
+	char cmagic[6];
+	uint64_t ino;
+	uint64_t mode;
+	uint64_t uid;
+	uint64_t gid;
+	uint64_t nlink;
+	uint64_t mtime;
+	uint64_t filesize;
+	uint64_t devmajor;
+	uint64_t devminor;
+	uint64_t rdevmajor;
+	uint64_t rdevminor;
+	uint64_t namesize;
+	uint64_t check;
+	char *filename;
+	void *data;
 };
 
-struct device {
-	const char *name;
-	const char *class_name;
-
-	const char *dev_node_path;
-
-	void *driver_data;
-
-	struct driver *bound_driver;
-	struct device_ops *ops;
-
-	struct device *next;
+struct cpio_fs {
+	struct cpio_file *files;
+	size_t file_count;
+	void *archive_data;
+	size_t archive_size;
 };
 
-int device_get_count(void);
+int cpio_fs_parse(struct cpio_fs *fs, void *data, size_t size);
+size_t cpio_fs_read(struct cpio_fs *fs, const char *filename, void *buffer,
+					size_t bufsize);
+void cpio_fs_free(struct cpio_fs *fs);
+struct cpio_file *cpio_fs_get_file(struct cpio_fs *fs, const char *filename);
 
-#define MAX_DEVICES 128
-extern struct device *device_list[MAX_DEVICES];
-extern int device_count;
+int cpio_extract(struct cpio_fs *cpio, char *dest_path);
+int cpio_ramfs_init(struct cpio_fs *fs, struct ramfs *ramfs);
 
-#endif
+#endif // _FS_CPIO_NEWC_H

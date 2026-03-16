@@ -27,19 +27,19 @@
 #include <vfs/fileio.h>
 #include <vfs/vfs.h>
 
-enum devfs_ftype {
+typedef enum devfs_ftype {
 	DEVFS_TYPE_DIR,
 	DEVFS_TYPE_CHAR,
 	DEVFS_TYPE_BLOCK,
 	DEVFS_TYPE_FILE,
-};
+} devfs_ftype_t;
 
 struct devfs_node {
 	char *name;
-
-	enum devfs_ftype type;
-
+	devfs_ftype_t type;
 	struct device *device;
+
+	mode_t mode;
 
 	struct devfs_node *sibling;
 	struct devfs_node *child;
@@ -47,37 +47,30 @@ struct devfs_node {
 
 struct devfs {
 	struct devfs_node *root_node;
-
-	size_t devfs_size; // node count?
+	size_t devfs_size;
 };
 
-extern struct devfs *global_devfs;
-extern struct vfs_vops devfs_vnops;
-
-struct devfs *devfs_create();
-struct devfs_node *devfs_create_node(enum devfs_ftype ftype);
+struct devfs *devfs_create_fs();
+struct devfs_node *devfs_create_fs_node(devfs_ftype_t ftype);
 int devfs_find_node(struct devfs *devfs, char *path, struct devfs_node **out);
 int devfs_find_or_create_node(struct devfs *ramfs, char *path,
-							  enum devfs_ftype ramfs_ftype,
+							  devfs_ftype_t ramfs_ftype,
 							  struct devfs_node **out);
-struct devfs_node *devfs_find_child(struct devfs_node *parent,
-									const char *name);
-
 int devfs_append_child(struct devfs_node *parent, struct devfs_node *child);
 int devfs_node_add(struct devfs *ramfs, char *path, struct devfs_node **out);
-
-int devfs_vfs_init(struct devfs *ramfs, char *mount_path);
-
 int devfs_print(struct devfs_node *devfs, int lvl);
+int devfs_refresh(void);
+
+void devfs_init(void);
+int devfs_vfs_init(struct devfs *devfs, char *mount_path);
 
 int devfs_open(struct vnode **vnode_r, int flags, bool clone,
 			   struct fileio **fio_out);
 int devfs_close(struct vnode *vnode, int flags, bool clone);
-
 int devfs_ioctl(struct vnode *vnode, int request, void *arg);
 int devfs_read(struct vnode *vn, size_t *bytes, size_t *offset, void *out);
 int devfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset);
-
-int devfs_refresh(struct devfs *devfs);
+int devfs_lookup(struct vnode *parent, const char *name, struct vnode **out);
+int devfs_readdir(struct vnode *vnode, struct dirent *entries, size_t *count);
 
 #endif // _FS_DEVFS_H
