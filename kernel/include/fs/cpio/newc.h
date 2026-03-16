@@ -58,6 +58,8 @@ size_t cpio_fs_read(struct cpio_fs *fs, const char *filename, void *buffer,
 					size_t bufsize);
 void cpio_fs_free(struct cpio_fs *fs);
 struct cpio_file *cpio_fs_get_file(struct cpio_fs *fs, const char *filename);
+
+int cpio_extract(struct cpio_fs *cpio, char *dest_path);
 int cpio_ramfs_init(struct cpio_fs *fs, struct ramfs *ramfs);
 
 #endif // _FS_CPIO_NEWC_H

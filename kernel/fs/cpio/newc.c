@@ -212,6 +212,115 @@ void cpio_fs_free(struct cpio_fs *fs)
 	fs->file_count = 0;
 }
 
+static const char *normalize_dest(const char *dest)
+{
+	if (strcmp(dest, "/") == 0)
+		return "";
+	return dest;
+}
+
+int cpio_extract(struct cpio_fs *cpio, char *dest_path)
+{
+	if (!cpio || !dest_path) {
+		warn("Missing CPIO archive, or destination path (%p, %p).\n", cpio,
+			 dest_path);
+		return -1;
+	}
+
+	const char *base = normalize_dest(dest_path);
+
+	size_t s = 20;
+	char *path = kmalloc(s);
+	memset(path, 0, s);
+	if ((strlen(dest_path) + 1) > s) {
+		path = krealloc(path, (strlen(dest_path) + 1));
+		s = (strlen(dest_path) + 1);
+	}
+
+	trace("Extracting CPIO to %s\n", dest_path);
+
+	if (strcmp(dest_path, "/") != 0) {
+		vfs_mkdir(dest_path, 0755);
+	}
+
+	for (size_t i = 0; i < cpio->file_count; i++) {
+		memset(path, 0, s);
+		strcat(path, base);
+
+		struct cpio_file *file = &cpio->files[i];
+
+		debug("CPIO path %s\n", file->filename);
+
+		char *fname = file->filename;
+		if (fname[0] == '/')
+			fname++;
+
+		char *name_dup = strdup(fname);
+
+		if (file->namesize + 1 > s) {
+			s = file->namesize + 1;
+			path = krealloc(path, s);
+		}
+
+		char *save;
+		char *dir = strtok_r(name_dup, "/", &save);
+
+		while (dir) {
+			if (*dir == '\0') {
+				dir = strtok_r(NULL, "/", &save);
+				continue;
+			}
+
+			if (strlen(path) + strlen(dir) + 2 > s) {
+				s = strlen(path) + strlen(dir) + 2;
+				path = krealloc(path, s);
+			}
+
+			strcat(path, "/");
+			strcat(path, dir);
+
+			int flags = V_CREATE;
+			if (save && *save)
+				flags |= V_DIR;
+
+			struct vnode *v;
+			struct fileio *f;
+
+			if (vfs_lookup(path, &v) != 0) {
+				char *dup = strdup(path);
+				if (flags & V_DIR) {
+					vfs_mkdir(dup, 0755);
+					if (vfs_lookup(dup, &v) != 0) {
+						return -1;
+					} else {
+						v->gid = file->gid;
+						v->uid = file->uid;
+					}
+				} else {
+					if (vfs_create(dup, file->mode) == 0) {
+						if (vfs_open(dup, 0, &f) == 0) {
+							write(f, file->data, file->filesize);
+							close(f);
+						}
+						if (vfs_lookup(dup, &v) != 0) {
+							return -1;
+						} else {
+							v->gid = file->gid;
+							v->uid = file->uid;
+						}
+					}
+				}
+			}
+
+			dir = strtok_r(NULL, "/", &save);
+		}
+
+		kfree(name_dup);
+	}
+
+	return 0;
+}
+
 int cpio_ramfs_init(struct cpio_fs *fs, struct ramfs *ramfs)
 {
 	if (!fs || !ramfs) {

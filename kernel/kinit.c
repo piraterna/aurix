@@ -157,9 +157,9 @@ void _start(struct aurix_parameters *params)
 		kpanic(NULL, "No initrd found, checked \\System\\initrd.cpio");
 	}
 
-	struct cpio_fs *fs = kmalloc(sizeof(struct cpio_fs));
-	memset(fs, 0, sizeof(struct cpio_fs));
-	if (cpio_fs_parse(fs, (void *)initrd_mod->addr, initrd_mod->size) != 0) {
+	struct cpio_fs *cpio = kmalloc(sizeof(struct cpio_fs));
+	memset(cpio, 0, sizeof(struct cpio_fs));
+	if (cpio_fs_parse(cpio, (void *)initrd_mod->addr, initrd_mod->size) != 0) {
 		kpanic(NULL, "Failed to parse initrd file.");
 	}
 
@@ -168,6 +168,10 @@ void _start(struct aurix_parameters *params)
 
 	if (ramfs_vfs_init(ramfs, "/") != 0) {
 		kpanic(NULL, "Failed to initialize ramfs");
+	}
+
+	if (cpio_extract(cpio, "/") != 0) {
+		kpanic(NULL, "Failed to parse initrd file on second pass.");
 	}
 
 	vfs_mkdir("/dev", 0755);

@@ -60,6 +60,7 @@ static int cmd_clear(int argc, char **argv);
 static int cmd_fetch(int argc, char **argv);
 static int cmd_modls(int argc, char **argv);
 static int cmd_exec(int argc, char **argv);
+static int cmd_readf(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
@@ -79,6 +80,7 @@ static const ksh_command ksh_commands[] = {
 	{ "fetch", "fetch", "show system information", cmd_fetch },
 	{ "modls", "modls", "shows loaded modules", cmd_modls },
 	{ "exec", "exec <path>", "executes executable from path", cmd_exec },
+	{ "readf", "readf <path>", "reads file from path", cmd_readf }
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
@@ -535,5 +537,37 @@ static int cmd_exec(int argc, char **argv)
 		return 1;
 	}
 
+	return 0;
+}
+
+static int cmd_readf(int argc, char **argv)
+{
+	if (argc < 2) {
+		kprintf("usage: exec <path>\n");
+		return 1;
+	}
+
+	const char *path = argv[1];
+	struct fileio *f = open(path, 0, 0);
+	if (!f) {
+		kprintf("ksh: failed to open file: %s\n", path);
+		return 1;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		kprintf("ksh: failed to allocate buffer for file: %s\n", path);
+		return 1;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		kprintf("ksh: failed to read file: %s\n", path);
+		kfree(buf);
+		return 1;
+	}
+
+	kprintf("%s\n", buf);
+	kfree(buf);
+	close(f);
 	return 0;
 }

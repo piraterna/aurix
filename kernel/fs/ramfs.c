@@ -53,16 +53,22 @@ struct ramfs_node *ramfs_create_node(enum ramfs_ftype ftype)
 
 	return node;
 }
-
 int ramfs_find_node(struct ramfs *ramfs, char *path, struct ramfs_node **out)
 {
-	struct ramfs_node *cur_node = ramfs->root_node->child; // root node is /
+	if (!ramfs || !path || !out) {
+		warn("ramfs_find_node: invalid arguments");
+		return -1;
+	}
+
 	*out = NULL;
 
-	// use this to check for parents, and eventually create them
-	if (path[0] == '/') {
-		path++;
+	if (!ramfs->root_node) {
+		warn("ramfs_find_node: root node missing");
+		return -1;
 	}
+
+	if (path[0] == '/')
+		path++;
 
 	if (path[0] == '\0') {
 		*out = ramfs->root_node;
@@ -70,35 +76,40 @@ int ramfs_find_node(struct ramfs *ramfs, char *path, struct ramfs_node **out)
 	}
 
 	char *name_dup = strdup(path);
-	char *temp = name_dup;
-	char *dir;
+	if (!name_dup) {
+		warn("ramfs_find_node: strdup failed");
+		return -1;
+	}
 
-	// j = level of current node
-	for (int j = 0; *temp; j++) {
-		(void)(j);
-		dir = strtok_r(NULL, "/", &temp);
+	char *saveptr = NULL;
+	char *dir = strtok_r(name_dup, "/", &saveptr);
 
-		for (; cur_node != NULL; cur_node = cur_node->sibling) {
-			if (strcmp(cur_node->name, dir) != 0)
-				continue;
+	struct ramfs_node *cur_node = ramfs->root_node;
 
-			// if there's more to parse, go to the child
-			if (*temp) {
-				cur_node = cur_node->child;
+	while (dir) {
+		struct ramfs_node *child = cur_node->child;
+		struct ramfs_node *match = NULL;
+
+		while (child) {
+			if (strcmp(child->name, dir) == 0) {
+				match = child;
 				break;
 			}
-
-			// we should be fine and we can exit the loop
-			break;
+			child = child->sibling;
 		}
+
+		if (!match) {
+			warn("ramfs_find_node: component '%s' not found", dir);
+			kfree(name_dup);
+			return -1;
+		}
+
+		cur_node = match;
+		dir = strtok_r(NULL, "/", &saveptr);
 	}
 
 	kfree(name_dup);
 	*out = cur_node;
-
-	if (!cur_node) {
-		return -1;
-	}
 
 	return 0;
 }
