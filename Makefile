@@ -121,6 +121,9 @@ LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
+INITRD_DIR := $(ROOT_DIR)/initrd
+INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
+
 QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
@@ -161,7 +164,7 @@ ifeq ($(DOCKER_BUILD),y)
 all:
 	@$(call docker_make,all)
 else
-all: genconfig boot kernel kmodules
+all: genconfig boot kernel kmodules initrd
 	@:
 endif
 
@@ -194,12 +197,18 @@ kmodules:
 	@$(MAKE) -C $(MODULE_DIR)
 endif
 
+.PHONY: initrd
+initrd:
+	@printf ">>> Building initrd...\n"
+	@mkdir -p $(SYSROOT_DIR)/System
+	@cd $(INITRD_DIR) && find . -print0 | cpio --null -ov --format=newc > $(INITRD_CPIO)
+
 .PHONY: install
 ifeq ($(DOCKER_BUILD),y)
 install:
 	@$(call docker_make,install)
 else
-install: boot kernel kmodules
+install: boot kernel kmodules initrd
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
 ifneq (,$(filter $(ARCH),i686 x86_64))

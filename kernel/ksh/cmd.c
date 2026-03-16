@@ -18,22 +18,22 @@
 /*********************************************************************************/
 
 #include <ksh/cmd.h>
-
 #include <arch/cpu/cpu.h>
 #include <arch/sys/irqlock.h>
-
 #include <aurix.h>
 #include <lib/string.h>
 #include <mm/pmm.h>
 #include <sys/sched.h>
 #include <time/time.h>
 #include <util/kprintf.h>
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
 #include <loader/module.h>
+#include <vfs/fileio.h>
+#include <vfs/vfs.h>
+#include <loader/elf.h>
+#include <mm/heap.h>
 
 extern const char *aurix_banner;
 
@@ -59,6 +59,7 @@ static int cmd_free(int argc, char **argv);
 static int cmd_clear(int argc, char **argv);
 static int cmd_fetch(int argc, char **argv);
 static int cmd_modls(int argc, char **argv);
+static int cmd_exec(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
@@ -77,6 +78,7 @@ static const ksh_command ksh_commands[] = {
 	{ "clear", "clear", "clears screen", cmd_clear },
 	{ "fetch", "fetch", "show system information", cmd_fetch },
 	{ "modls", "modls", "shows loaded modules", cmd_modls },
+	{ "exec", "exec <path>", "executes executable from path", cmd_exec },
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
@@ -489,5 +491,49 @@ static int cmd_modls(int argc, char **argv)
 
 		m = m->next;
 	}
+	return 0;
+}
+
+static int cmd_exec(int argc, char **argv)
+{
+	if (argc < 2) {
+		kprintf("usage: exec <path>\n");
+		return 1;
+	}
+
+	const char *path = argv[1];
+	struct fileio *f = open(path, 0, 0);
+	if (!f) {
+		kprintf("ksh: failed to open file: %s\n", path);
+		return 1;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		kprintf("ksh: failed to allocate buffer for file: %s\n", path);
+		return 1;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		kprintf("ksh: failed to read file: %s\n", path);
+		return 1;
+	}
+
+	struct pcb *proc = proc_create();
+	if (!proc) {
+		kprintf("ksh: failed to create process for: %s\n", path);
+		kfree(buf);
+		return 1;
+	}
+
+	uintptr_t entry = elf_load(buf, NULL, NULL, proc->pm);
+	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
+	if (!thread) {
+		kprintf("ksh: failed to create thread for: %s\n", path);
+		proc_destroy(proc);
+		kfree(buf);
+		return 1;
+	}
+
 	return 0;
 }

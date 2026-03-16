@@ -42,5 +42,6 @@ char *strchr(const char *s, int c);
 int streq(const char *a, const char *b);
 char *strcat(char *restrict dest, const char *restrict src);
 char *strrchr(const char *s, int c);
+unsigned long long strtoull(const char *nptr, char **endptr, int base);
 
 #endif /* _LIB_STRING_H */
