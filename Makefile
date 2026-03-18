@@ -238,6 +238,7 @@ endif
 endif
 	@$(MAKE) -C kernel install
 	@$(MAKE) -C $(MODULE_DIR) install
+	@$(MAKE) -C $(APPS_DIR) install
 endif
 
 .PHONY: livecd

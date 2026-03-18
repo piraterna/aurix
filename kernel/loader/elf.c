@@ -57,6 +57,12 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 	uintptr_t end_vaddr = 0;
 
 	for (uint16_t i = 0; i < header->e_phnum; i++) {
+		if (ph[i].p_type == PT_INTERP) {
+			error("elf64_load(): dynamic interpreter not supported (%s)\n",
+				  (char *)((uintptr_t)data + ph[i].p_offset));
+			return 0;
+		}
+
 		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
 			continue;
 
@@ -118,8 +124,13 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 
 	elf64_apply_relocations_ex(header, phys_base, base_vaddr, base_vaddr);
 
-	debug("ELF loaded successfully, entry point: 0x%llx\n", header->e_entry);
-	return (uintptr_t)header->e_entry;
+	uintptr_t entry_addr = (uintptr_t)header->e_entry;
+	if (header->e_type == ET_DYN) {
+		entry_addr = base_vaddr + (uintptr_t)header->e_entry;
+	}
+
+	debug("ELF loaded successfully, entry point: 0x%llx\n", entry_addr);
+	return entry_addr;
 }
 
 bool elf_get_load_range(char *data, uintptr_t *link_base_out, size_t *size_out)

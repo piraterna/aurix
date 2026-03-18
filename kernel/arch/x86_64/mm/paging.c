@@ -354,6 +354,10 @@ void destroy_pagemap(pagetable *pm)
 	pagetable *pml4 = (pagetable *)PHYS_TO_VIRT((uintptr_t)pm);
 
 	for (size_t p4 = 0; p4 < 512; p4++) {
+		/* Kernel half is shared with kernel_pm and must not be freed. */
+		if (p4 >= 256)
+			continue;
+
 		if (!(pml4->entries[p4] & VMM_PRESENT))
 			continue;
 

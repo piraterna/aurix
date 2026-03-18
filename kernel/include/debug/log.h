@@ -47,11 +47,23 @@
 #define LOG_OUTPUT_SCREEN 0
 #endif
 
+#ifndef LOG_ERROR_SCREEN
+#define LOG_ERROR_SCREEN 1
+#endif
+
 #if LOG_OUTPUT_SCREEN == 1
 #define LOG_PRINTF kprintf
 #else
 #define LOG_PRINTF serial_kprintf
 #endif
+
+#if LOG_ERROR_SCREEN == 1
+#define LOG_PRINTF_ERROR kprintf
+#else
+#define LOG_PRINTF_ERROR LOG_PRINTF
+#endif
+
+#define LOG_PRINTF_CRITICAL kprintf
 
 /* end todo */
 
@@ -115,18 +127,40 @@
 				   level, ##__VA_ARGS__);                                  \
 	} while (0)
 
-#define critical(fmt, ...)                                                   \
-	do {                                                                     \
-		if (LOG_LEVEL_CRITICAL <= LOG_VERBOSITY)                             \
-			_log_callback(LOG_TAG_CRITICAL, LOG_LINE_CRITICAL, "crit ", fmt, \
-						  ##__VA_ARGS__);                                    \
+#define _log_callback_error(tag_style, line_style, level, fmt, ...)         \
+	do {                                                                    \
+		uint64_t __ms = get_ms();                                           \
+		LOG_PRINTF_ERROR(LOG_STYLE_PREFIX                                   \
+						 "[%u.%03u] " LOG_STYLE_RESET tag_style             \
+						 " %s " LOG_STYLE_RESET                             \
+						 " " line_style fmt LOG_STYLE_RESET,                \
+						 (uint32_t)(__ms / 1000ull),                        \
+						 (uint32_t)(__ms % 1000ull), level, ##__VA_ARGS__); \
 	} while (0)
 
-#define error(fmt, ...)                                                \
-	do {                                                               \
-		if (LOG_LEVEL_ERROR <= LOG_VERBOSITY)                          \
-			_log_callback(LOG_TAG_ERROR, LOG_LINE_ERROR, "error", fmt, \
-						  ##__VA_ARGS__);                              \
+#define _log_callback_critical(tag_style, line_style, level, fmt, ...)         \
+	do {                                                                       \
+		uint64_t __ms = get_ms();                                              \
+		LOG_PRINTF_CRITICAL(LOG_STYLE_PREFIX                                   \
+							"[%u.%03u] " LOG_STYLE_RESET tag_style             \
+							" %s " LOG_STYLE_RESET                             \
+							" " line_style fmt LOG_STYLE_RESET,                \
+							(uint32_t)(__ms / 1000ull),                        \
+							(uint32_t)(__ms % 1000ull), level, ##__VA_ARGS__); \
+	} while (0)
+
+#define critical(fmt, ...)                                              \
+	do {                                                                \
+		if (LOG_LEVEL_CRITICAL <= LOG_VERBOSITY)                        \
+			_log_callback_critical(LOG_TAG_CRITICAL, LOG_LINE_CRITICAL, \
+								   "crit ", fmt, ##__VA_ARGS__);        \
+	} while (0)
+
+#define error(fmt, ...)                                                      \
+	do {                                                                     \
+		if (LOG_LEVEL_ERROR <= LOG_VERBOSITY)                                \
+			_log_callback_error(LOG_TAG_ERROR, LOG_LINE_ERROR, "error", fmt, \
+								##__VA_ARGS__);                              \
 	} while (0)
 
 #define warn(fmt, ...)                                               \

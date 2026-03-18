@@ -662,8 +662,12 @@ static int cmd_exec(int argc, char **argv)
 
 	if (read(f, f->size, buf) != f->size) {
 		kprintf("ksh: failed to read file: %s\n", path);
+		close(f);
+		kfree(buf);
 		return 1;
 	}
+
+	close(f);
 
 	struct pcb *proc = proc_create();
 	if (!proc) {
@@ -696,6 +700,7 @@ static int cmd_exec(int argc, char **argv)
 		kfree(buf);
 		return 1;
 	}
+	kfree(buf);
 	return 0;
 }
 

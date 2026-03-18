@@ -1,7 +1,6 @@
 void _start(void)
 {
-	volatile int *ptr = (int *)0xDEADBEEF;
-	*ptr = 69;
+	__asm__ volatile("int $0x01");
 	for (;;)
 		;
 }

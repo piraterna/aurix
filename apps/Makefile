@@ -28,9 +28,9 @@ export BUILD_DIR := $(BUILD_DIR)/apps
 export APP_INSTALL_DIR := $(INITRD_DIR)/bin
 
 export APP_CFLAGS := -Wall -Wextra -ffreestanding \
-                     -fno-stack-protector -fPIE \
+                     -fno-stack-protector -fno-pie \
                      -I$(abspath ../libs/include)
-export APP_LDFLAGS := -nostdlib -nostartfiles -nodefaultlibs -pie -Wl,-e,_start
+export APP_LDFLAGS := -nostdlib -nostartfiles -nodefaultlibs -static -Wl,-e,_start
 
 export APP_DEFINES := __$(ARCH)__
 
