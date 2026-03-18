@@ -213,6 +213,11 @@ void sched_enable(void)
 	sched_ipi_all_excluding_self(0xfe);
 }
 
+void sched_disable(void)
+{
+	atomic_store(&sched_enabled, false);
+}
+
 bool sched_is_enabled(void)
 {
 	return atomic_load(&sched_enabled);
@@ -496,4 +501,31 @@ tcb *thread_get_by_tid(uint32_t tid)
 	}
 
 	return NULL;
+}
+
+bool proc_has_threads(uint32_t pid)
+{
+	if (pid == 0 || pid == UINT32_MAX)
+		return false;
+
+	for (size_t cpu_idx = 0; cpu_idx < cpu_count; cpu_idx++) {
+		struct cpu *cpu = &cpuinfo[cpu_idx];
+		if (!cpu)
+			continue;
+
+		irqlock_acquire(&cpu->sched_lock);
+
+		tcb *t = cpu->thread_list;
+		while (t) {
+			if (t->process && t->process->pid == pid) {
+				irqlock_release(&cpu->sched_lock);
+				return true;
+			}
+			t = t->cpu_next;
+		}
+
+		irqlock_release(&cpu->sched_lock);
+	}
+
+	return false;
 }

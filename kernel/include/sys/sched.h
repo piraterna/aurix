@@ -70,10 +70,12 @@ void sched_init(void);
 void sched_tick(void);
 void sched_yield(void);
 void sched_enable(void);
+void sched_disable(void);
 bool sched_is_enabled(void);
 
 pcb *proc_create(void);
 void proc_destroy(pcb *proc);
+bool proc_has_threads(uint32_t pid);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);

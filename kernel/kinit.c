@@ -47,6 +47,7 @@
 #include <ksh/ksh.h>
 #include <fs/ramfs.h>
 #include <fs/cpio/newc.h>
+#include <loader/elf.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -88,6 +89,62 @@ const char *aurix_banner =
 	"  / _ \\| | | | '__| \\ \\/ / | | \\___ \\\n"
 	" / ___ \\ |_| | |  | |>  <| |_| |___) |\n"
 	"/_/   \\_\\__,_|_|  |_/_/ \\_\\___/|____/  (c) Copyright 2024-2026 Jozef Nagy";
+
+pcb *load_init(const char *path)
+{
+	struct fileio *f = open(path, 0, 0);
+	if (!f) {
+		error("failed to open file: %s\n", path);
+		return NULL;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		error("failed to allocate buffer for file: %s\n", path);
+		close(f);
+		return NULL;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		error("failed to read file: %s\n", path);
+		close(f);
+		kfree(buf);
+		return NULL;
+	}
+
+	close(f);
+
+	struct pcb *proc = proc_create();
+	if (!proc) {
+		error("failed to create process for: %s\n", path);
+		kfree(buf);
+		return NULL;
+	}
+
+	proc->name = strdup("init");
+
+	uint64_t addr, size = 0;
+	uintptr_t entry = elf_load(buf, &addr, &size, proc->pm);
+	if (entry == 0) {
+		error("failed to load ELF: %s\n", path);
+		proc_destroy(proc);
+		kfree(buf);
+		return NULL;
+	}
+
+	info("loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path, entry,
+		 addr, size);
+
+	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
+	if (!thread) {
+		error("failed to create thread for: %s\n", path);
+		proc_destroy(proc);
+		kfree(buf);
+		return NULL;
+	}
+	kfree(buf);
+	return proc;
+}
 
 void _start(struct aurix_parameters *params)
 {
@@ -219,15 +276,35 @@ void _start(struct aurix_parameters *params)
 				cpu_get_current()->name_ext);
 	}
 
-	debug("launching ksh (builtin debug shell)\n");
-	pcb *p = proc_create();
-	p->pm = kernel_pm;
-	p->vctx = kvctx;
-	struct tcb *ksh = thread_create(p, ksh_thread);
-	ksh->process->name = strdup("ksh");
+	pcb *init_proc = load_init("/bin/init");
+	if (!init_proc) {
+		error(
+			"launching ksh (builtin debug shell), reason: failed to load init\n");
+		pcb *p = proc_create();
+		p->pm = kernel_pm;
+		p->vctx = kvctx;
+		struct tcb *ksh = thread_create(p, ksh_thread);
+		ksh->process->name = strdup("ksh");
+	}
 
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();
+
+	uint64_t last_check_ms = get_ms();
+	bool ksh_launched = (init_proc == NULL);
+	uint32_t init_pid = init_proc ? init_proc->pid : 0;
+
+	while (!ksh_launched) {
+		uint64_t now = get_ms();
+		if (!ksh_launched && now - last_check_ms >= 1000) {
+			last_check_ms = now;
+			if (!proc_has_threads(init_pid)) {
+				warn("init process pid=%u exited, launching ksh\n", init_pid);
+				ksh_thread();
+				ksh_launched = true;
+			}
+		}
+	}
 
 	for (;;) {
 #ifdef __x86_64__
