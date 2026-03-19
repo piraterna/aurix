@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ksh.h */
+/* Module Name:  builtin.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,12 +17,37 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _KSH_KSH_H
-#define _KSH_KSH_H
+#include <user/syscall.h>
+#include <util/kprintf.h>
+#include <sys/sched.h>
+#include <stdarg.h>
 
-void ksh_thread(void);
+#define SYS_EXIT 0
+#define SYS_PRINT 1 // replace with stdio and fileio
 
-void ksh_block(void);
-void ksh_unblock(void);
+int64_t sys_exit(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	int64_t code = (int64_t)sys_args->rdi;
+	info("TID=%u (%s) exited with code %lld\n", thread_current()->tid,
+		 thread_current()->process->name ? thread_current()->process->name :
+										   "unknown",
+		 code);
+	thread_exit(thread_current(), (int)code);
+	return 0;
+}
 
-#endif /* _KSH_KSH_H */
+int64_t sys_print(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	const char *str = (const char *)sys_args->rdi;
+	size_t len = (size_t)sys_args->rsi;
+	kprintf("%.*s", (int)len, str);
+	return 0;
+}
+
+void syscall_builtin_init(void)
+{
+	register_syscall(SYS_EXIT, sys_exit);
+	register_syscall(SYS_PRINT, sys_print);
+}

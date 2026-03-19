@@ -468,11 +468,10 @@ void thread_destroy(tcb *thread)
 	kfree(thread);
 }
 
-void thread_exit(tcb *thread)
+void thread_exit(tcb *thread, int code)
 {
 	if (!thread)
 		thread = thread_current();
-
 	if (!thread)
 		return;
 
@@ -482,18 +481,18 @@ void thread_exit(tcb *thread)
 	}
 
 	struct cpu *cpu = thread->cpu;
+	pcb *proc = thread->process;
 
 	debug("Thread TID=%u exiting\n", thread->tid);
 
 	tcb *next = NULL;
+
 	if (cpu) {
 		irqlock_acquire(&cpu->sched_lock);
 
 		next = thread->cpu_next;
-		if (!next)
-			next = cpu->thread_list;
-		if (next == thread)
-			next = NULL;
+		if (!next || next == thread)
+			next = cpu->thread_list != thread ? cpu->thread_list : NULL;
 
 		tcb **link = &cpu->thread_list;
 		while (*link) {
@@ -509,8 +508,8 @@ void thread_exit(tcb *thread)
 		thread->cpu = NULL;
 	}
 
-	if (thread->process) {
-		tcb **link = &thread->process->threads;
+	if (proc) {
+		tcb **link = &proc->threads;
 		while (*link) {
 			if (*link == thread) {
 				*link = thread->proc_next;
@@ -521,22 +520,28 @@ void thread_exit(tcb *thread)
 		thread->process = NULL;
 	}
 
+	thread->exit_code = code;
 	thread->magic = TCB_MAGIC_DEAD;
-	thread->proc_next = (tcb *)0xDEADDEAD;
-	thread->cpu_next = (tcb *)0xDEADDEAD;
+	atomic_store(&thread->finished, true);
 
-	if (!next) {
-		debug("No threads left on CPU=%u, halting\n",
-			  cpu ? cpu->id : (uint32_t)-1);
+	if (!thread->joinable) {
 		kfree(thread);
-		while (1)
-			cpu_halt();
+		if (!next) {
+			while (1)
+				cpu_halt();
+		}
+		struct kthread dead_ctx = thread->kthread;
+		switch_task(&dead_ctx, &next->kthread);
+		__builtin_unreachable();
+	} else {
+		if (!next) {
+			while (1)
+				cpu_halt();
+		}
+		struct kthread dead_ctx = thread->kthread;
+		switch_task(&dead_ctx, &next->kthread);
+		__builtin_unreachable();
 	}
-
-	struct kthread dead_ctx = thread->kthread;
-	kfree(thread);
-	switch_task(&dead_ctx, &next->kthread);
-	__builtin_unreachable();
 }
 
 tcb *thread_current(void)
@@ -600,4 +605,21 @@ bool proc_has_threads(uint32_t pid)
 	}
 
 	return false;
+}
+
+int thread_wait(tcb *thread)
+{
+	if (!thread) {
+		error("thread_wait: NULL thread\n");
+		return -1;
+	}
+
+	thread->joinable = true;
+
+	while (!atomic_load(&thread->finished))
+		sched_yield();
+
+	int code = thread->exit_code;
+	kfree(thread);
+	return code;
 }

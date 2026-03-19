@@ -48,6 +48,7 @@
 #include <fs/ramfs.h>
 #include <fs/cpio/newc.h>
 #include <loader/elf.h>
+#include <user/syscall.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -242,6 +243,7 @@ void _start(struct aurix_parameters *params)
 
 	driver_core_init(devfs);
 	cpu_init_mp();
+	syscall_builtin_init();
 	sched_init();
 
 	platform_timekeeper_init();

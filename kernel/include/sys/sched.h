@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <mm/vmm.h>
+#include <stdatomic.h>
 
 #define STACK_SIZE 4096 * 4 // ~16KB
 
@@ -49,6 +50,9 @@ typedef struct tcb {
 	struct tcb *proc_next;
 	struct tcb *cpu_next;
 
+	bool joinable;
+	int exit_code;
+	atomic_bool finished;
 } tcb;
 
 typedef struct pcb {
@@ -79,8 +83,9 @@ bool proc_has_threads(uint32_t pid);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
-void thread_exit(tcb *thread);
+void thread_exit(tcb *thread, int code);
 tcb *thread_current(void);
 tcb *thread_get_by_tid(uint32_t tid);
+int thread_wait(tcb *thread);
 
 #endif // _SYS_SCHED_H

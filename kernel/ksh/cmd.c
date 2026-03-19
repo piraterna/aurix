@@ -39,6 +39,7 @@
 #include <vfs/vfs.h>
 #include <loader/elf.h>
 #include <mm/heap.h>
+#include <ksh/ksh.h>
 
 extern const char *aurix_banner;
 
@@ -690,9 +691,6 @@ static int cmd_exec(int argc, char **argv)
 		return 1;
 	}
 
-	kprintf("ksh: loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path,
-			entry, addr, size);
-
 	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
 	if (!thread) {
 		kprintf("ksh: failed to create thread for: %s\n", path);
@@ -701,6 +699,13 @@ static int cmd_exec(int argc, char **argv)
 		return 1;
 	}
 	kfree(buf);
+
+	// wait until thread has exited
+	ksh_block();
+	thread_wait(thread);
+	ksh_unblock();
+
+	proc_destroy(proc);
 	return 0;
 }
 

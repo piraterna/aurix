@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ksh.h */
+/* Module Name:  syscall.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,12 +17,38 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _KSH_KSH_H
-#define _KSH_KSH_H
+#include <user/syscall.h>
+#include <debug/log.h>
 
-void ksh_thread(void);
+syscall_entry_t syscall_table[MAX_SYSCALLS] = { 0 };
 
-void ksh_block(void);
-void ksh_unblock(void);
+int register_syscall(uint32_t id, syscall_handler_t handler)
+{
+	if (id >= MAX_SYSCALLS || !handler) {
+		error("Failed to register syscall with invalid ID %u\n", id);
+		return -1;
+	}
+	syscall_table[id].handler = handler;
+	syscall_table[id].valid = 1;
+	return 0;
+}
 
-#endif /* _KSH_KSH_H */
+int unregister_syscall(uint32_t id)
+{
+	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
+		error("Failed to unregister syscall with invalid ID %u\n", id);
+		return -1;
+	}
+	syscall_table[id].handler = NULL;
+	syscall_table[id].valid = 0;
+	return 0;
+}
+
+int32_t syscall_dispatch(uint32_t id, void *args)
+{
+	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
+		warn("Invalid syscall ID %u\n", id);
+		return -1;
+	}
+	return syscall_table[id].handler(args);
+}
