@@ -1,4 +1,5 @@
 AXAPI_SYM(int, kprintf, (const char *, ...))
+AXAPI_SYM(int, serial_kprintf, (const char *, ...))
 AXAPI_SYM(int, snprintf, (char *, size_t, const char *, ...))
 
 AXAPI_SYM(void, sched_yield, (void))
