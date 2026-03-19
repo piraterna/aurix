@@ -70,8 +70,12 @@ static void ksh_handle_ascii(char ch, char *line, size_t *len, size_t *cursor,
 			for (size_t i = *cursor; i < *len; i++)
 				kprintf("%c", line[i]);
 			kprintf(" ");
-			for (size_t i = *len; i >= *cursor; i--)
+			if (*len > *cursor) {
+				for (size_t i = *len + 1; i > *cursor; i--)
+					kprintf("\b");
+			} else {
 				kprintf("\b");
+			}
 		}
 		return;
 	}
