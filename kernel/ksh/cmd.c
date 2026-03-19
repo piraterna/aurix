@@ -39,6 +39,7 @@
 #include <vfs/vfs.h>
 #include <loader/elf.h>
 #include <mm/heap.h>
+#include <ksh/ksh.h>
 
 extern const char *aurix_banner;
 
@@ -601,14 +602,14 @@ static int cmd_devices(int argc, char **argv)
 	(void)argv;
 
 	kprintf("Registered devices:\n");
-	kprintf("%-20s %-20s %s\n", "Name", "Path", "Driver");
+	kprintf("%-15s %-25s %s\n", "Name", "Path", "Driver");
 
 	for (int i = 0; i < device_count; i++) {
 		struct device *dev = device_list[i];
 		if (!dev)
 			continue;
 
-		kprintf("%-20s %-20s %s\n", dev->name ? dev->name : "(unnamed)",
+		kprintf("%-15s /dev%-21s %s\n", dev->name ? dev->name : "(unnamed)",
 				dev->dev_node_path ? dev->dev_node_path : "(no path)",
 				dev->bound_driver ? dev->bound_driver->name : "(no driver)");
 	}
@@ -662,8 +663,12 @@ static int cmd_exec(int argc, char **argv)
 
 	if (read(f, f->size, buf) != f->size) {
 		kprintf("ksh: failed to read file: %s\n", path);
+		close(f);
+		kfree(buf);
 		return 1;
 	}
+
+	close(f);
 
 	struct pcb *proc = proc_create();
 	if (!proc) {
@@ -686,9 +691,6 @@ static int cmd_exec(int argc, char **argv)
 		return 1;
 	}
 
-	kprintf("ksh: loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path,
-			entry, addr, size);
-
 	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
 	if (!thread) {
 		kprintf("ksh: failed to create thread for: %s\n", path);
@@ -696,6 +698,14 @@ static int cmd_exec(int argc, char **argv)
 		kfree(buf);
 		return 1;
 	}
+	kfree(buf);
+
+	// wait until thread has exited
+	ksh_block();
+	thread_wait(thread);
+	ksh_unblock();
+
+	proc_destroy(proc);
 	return 0;
 }
 

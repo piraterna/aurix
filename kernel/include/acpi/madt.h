@@ -196,5 +196,6 @@ struct madt {
 } __attribute__((packed));
 
 void acpi_madt_init();
+size_t get_actual_cpus(void);
 
 #endif /* _ACPI_MADT_H */

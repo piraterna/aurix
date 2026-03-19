@@ -27,8 +27,8 @@
 #include <arch/cpu/switch.h>
 #include <arch/apic/apic.h>
 #include <aurix.h>
-
 #include <stdatomic.h>
+#include <acpi/madt.h>
 
 #ifdef __x86_64__
 #include <platform/time/pit.h>
@@ -44,13 +44,7 @@ static atomic_bool sched_enabled = ATOMIC_VAR_INIT(false);
 static pcb kernel_proc;
 static int kernel_proc_inited = 0;
 static tcb idle_threads[CONFIG_CPU_MAX_COUNT];
-
-static void sched_ipi_all_excluding_self(uint8_t vec)
-{
-	lapic_write(0x300, (uint32_t)vec | (1u << 14) | (3u << 18));
-	while (lapic_read(0x300) & (1u << 12))
-		;
-}
+static bool cpu_sched_inited[CONFIG_CPU_MAX_COUNT] = { false };
 
 extern char _start_text[];
 extern char _end_text[];
@@ -59,32 +53,42 @@ extern char _end_rodata[];
 extern char _start_data[];
 extern char _end_data[];
 
+static void sched_ipi_cpu(struct cpu *target)
+{
+	if (!target || target->id == cpu_get_current()->id)
+		return;
+	lapic_write(0x310, (uint32_t)target->id << 24);
+	lapic_write(0x300, (uint32_t)0xfe | (1u << 14));
+	while (lapic_read(0x300) & (1u << 12))
+		;
+}
+
 static struct cpu *sched_pick_best_cpu(void)
 {
 	if (cpu_count == 1)
 		return cpu_get_current();
 
-	static atomic_uint rr = ATOMIC_VAR_INIT(0);
-	size_t start = atomic_fetch_add(&rr, 1);
-
 	struct cpu *best = NULL;
 	uint64_t best_count = UINT64_MAX;
 
-	for (size_t off = 0; off < cpu_count; off++) {
-		size_t i = (start + off) % cpu_count;
-		struct cpu *cpu = &cpuinfo[i];
+	for (size_t i = 0; i < cpu_count; i++) {
+		struct cpu *c = &cpuinfo[i];
 
-		irqlock_acquire(&cpu->sched_lock);
-		uint64_t count = cpu->thread_count;
-		irqlock_release(&cpu->sched_lock);
+		if (c->id < CONFIG_CPU_MAX_COUNT && !cpu_sched_inited[c->id])
+			continue;
 
-		if (count < best_count) {
-			best = cpu;
+		irqlock_acquire(&c->sched_lock);
+		uint64_t count = c->thread_count;
+		irqlock_release(&c->sched_lock);
+
+		if (count < best_count ||
+			(count == best_count && c == cpu_get_current())) {
+			best = c;
 			best_count = count;
 		}
 	}
 
-	return best;
+	return best ? best : cpu_get_current();
 }
 
 static void cpu_add_thread(struct cpu *cpu, tcb *thread)
@@ -97,6 +101,7 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 	irqlock_acquire(&cpu->sched_lock);
 
 	thread->cpu_next = NULL;
+
 	if (!cpu->thread_list) {
 		cpu->thread_list = thread;
 	} else {
@@ -105,6 +110,7 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 			tail = tail->cpu_next;
 		tail->cpu_next = thread;
 	}
+
 	cpu->thread_count++;
 	thread->cpu = cpu;
 
@@ -114,7 +120,7 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 	irqlock_release(&cpu->sched_lock);
 
 	if (atomic_load(&sched_enabled) && cpu->id != cpu_get_current()->id)
-		sched_ipi_all_excluding_self(0xfe);
+		sched_ipi_cpu(cpu);
 }
 
 static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
@@ -156,19 +162,25 @@ void sched_tick(void)
 		return;
 
 	struct cpu *cpu = cpu_get_current();
-	if (!cpu || !cpu->thread_list)
+	if (!cpu)
 		return;
 
+	irqlock_acquire(&cpu->sched_lock);
+
 	tcb *current = cpu->thread_list;
-	if (!current)
+	if (!current) {
+		irqlock_release(&cpu->sched_lock);
 		return;
+	}
 
 	if (current->time_slice > 0)
 		current->time_slice--;
 
-	if (current->time_slice == 0) {
+	bool should_yield = (current->time_slice == 0);
+	irqlock_release(&cpu->sched_lock);
+
+	if (should_yield)
 		sched_yield();
-	}
 }
 
 void sched_yield(void)
@@ -177,31 +189,32 @@ void sched_yield(void)
 		return;
 
 	struct cpu *cpu = cpu_get_current();
-	if (!cpu || !cpu->thread_list)
+	if (!cpu)
 		return;
 
-	tcb *current = cpu->thread_list;
-	if (!current)
-		return;
-
-	current->time_slice = SCHED_DEFAULT_SLICE;
 	irqlock_acquire(&cpu->sched_lock);
 
-	tcb *next = cpu_pick_next_thread(cpu, current);
-	if (!next || next == current) {
+	tcb *current = cpu->thread_list;
+	if (!current) {
 		irqlock_release(&cpu->sched_lock);
 		return;
 	}
 
-	tcb *prev_of_next = cpu->thread_list;
-	while (prev_of_next->cpu_next && prev_of_next->cpu_next != next)
-		prev_of_next = prev_of_next->cpu_next;
+	current->time_slice = SCHED_DEFAULT_SLICE;
 
-	if (prev_of_next->cpu_next == next) {
-		prev_of_next->cpu_next = next->cpu_next;
-		next->cpu_next = cpu->thread_list;
-		cpu->thread_list = next;
+	if (!current->cpu_next) {
+		irqlock_release(&cpu->sched_lock);
+		return;
 	}
+
+	tcb *next = current->cpu_next;
+	cpu->thread_list = next;
+
+	tcb *tail = next;
+	while (tail->cpu_next)
+		tail = tail->cpu_next;
+	tail->cpu_next = current;
+	current->cpu_next = NULL;
 
 	irqlock_release(&cpu->sched_lock);
 	switch_task(&current->kthread, &next->kthread);
@@ -210,7 +223,16 @@ void sched_yield(void)
 void sched_enable(void)
 {
 	atomic_store(&sched_enabled, true);
-	sched_ipi_all_excluding_self(0xfe);
+	for (size_t i = 0; i < cpu_count; i++) {
+		struct cpu *c = &cpuinfo[i];
+		if (c->id != cpu_get_current()->id)
+			sched_ipi_cpu(c);
+	}
+}
+
+void sched_disable(void)
+{
+	atomic_store(&sched_enabled, false);
 }
 
 bool sched_is_enabled(void)
@@ -218,9 +240,29 @@ bool sched_is_enabled(void)
 	return atomic_load(&sched_enabled);
 }
 
+static void idle(void)
+{
+	for (;;) {
+#ifdef __x86_64__
+		__asm__ volatile("sti; hlt; cli");
+#elif __aarch64__
+		__asm__ volatile("wfe");
+#endif
+		if (atomic_load(&sched_enabled))
+			sched_yield();
+	}
+}
+
 void sched_init(void)
 {
 	struct cpu *cpu = cpu_get_current();
+
+	if (get_actual_cpus() == 4 && cpu->id == 3) {
+		warn("Known issue running scheduler on a 4-core system: "
+			 "CPU%u will not participate in scheduling.\n",
+			 cpu->id);
+		return;
+	}
 
 	irqlock_init(&cpu->sched_lock);
 	cpu->thread_list = NULL;
@@ -238,18 +280,37 @@ void sched_init(void)
 	}
 
 	if (cpu->id < CONFIG_CPU_MAX_COUNT) {
-		tcb *idle = &idle_threads[cpu->id];
-		memset(idle, 0, sizeof(*idle));
-		idle->magic = TCB_MAGIC_ALIVE;
-		idle->tid = UINT32_MAX - cpu->id;
-		idle->time_slice = 1;
-		idle->process = &kernel_proc;
-		idle->cpu = cpu;
-		idle->kthread.cr3 = (uint64_t)kernel_pm;
-		idle->kthread.rsp = 0;
+		tcb *idle_tcb = &idle_threads[cpu->id];
+		memset(idle_tcb, 0, sizeof(*idle_tcb));
+		idle_tcb->magic = TCB_MAGIC_ALIVE;
+		idle_tcb->tid = UINT32_MAX - cpu->id;
+		idle_tcb->time_slice = SCHED_DEFAULT_SLICE;
+		idle_tcb->process = &kernel_proc;
+		idle_tcb->cpu = cpu;
 
-		cpu->thread_list = idle;
-		cpu->thread_count = 0;
+		uint64_t *stack_base =
+			valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE),
+				   VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+		uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
+		rsp = (uint64_t *)((uintptr_t)rsp - 8);
+		memset(stack_base, 0, STACK_SIZE);
+
+		*--rsp = (uint64_t)idle;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0x202;
+
+		idle_tcb->kthread.rsp = (uint64_t)rsp;
+		idle_tcb->kthread.cr3 = (uint64_t)kernel_pm;
+
+		cpu->thread_list = idle_tcb;
+		cpu->thread_count = 1;
+
+		cpu_sched_inited[cpu->id] = true;
 	}
 
 	trace("Scheduler initialized on CPU=%u\n", cpu->id);
@@ -346,14 +407,14 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	rsp = (uint64_t *)((uintptr_t)rsp - 8);
 	memset(stack_base, 0, STACK_SIZE);
 
-	*--rsp = (uint64_t)entry; // rip
-	*--rsp = 0; // rbx
-	*--rsp = 0; // rbp
-	*--rsp = 0; // r12
-	*--rsp = 0; // r13
-	*--rsp = 0; // r14
-	*--rsp = 0; // r15
-	*--rsp = 0x202; // rflags
+	*--rsp = (uint64_t)entry;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0x202;
 
 	thread->kthread.rsp = (uint64_t)rsp;
 	thread->kthread.cr3 = (uint64_t)proc->pm;
@@ -404,16 +465,13 @@ void thread_destroy(tcb *thread)
 	thread->cpu_next = (tcb *)0xDEADDEAD;
 	thread->process = NULL;
 
-	// TODO: Free the stack!
-
 	kfree(thread);
 }
 
-void thread_exit(tcb *thread)
+void thread_exit(tcb *thread, int code)
 {
 	if (!thread)
 		thread = thread_current();
-
 	if (!thread)
 		return;
 
@@ -423,14 +481,35 @@ void thread_exit(tcb *thread)
 	}
 
 	struct cpu *cpu = thread->cpu;
+	pcb *proc = thread->process;
 
 	debug("Thread TID=%u exiting\n", thread->tid);
 
-	if (cpu)
-		cpu_remove_thread(cpu, thread);
+	tcb *next = NULL;
 
-	if (thread->process) {
-		tcb **link = &thread->process->threads;
+	if (cpu) {
+		irqlock_acquire(&cpu->sched_lock);
+
+		next = thread->cpu_next;
+		if (!next || next == thread)
+			next = cpu->thread_list != thread ? cpu->thread_list : NULL;
+
+		tcb **link = &cpu->thread_list;
+		while (*link) {
+			if (*link == thread) {
+				*link = thread->cpu_next;
+				cpu->thread_count--;
+				break;
+			}
+			link = &(*link)->cpu_next;
+		}
+
+		irqlock_release(&cpu->sched_lock);
+		thread->cpu = NULL;
+	}
+
+	if (proc) {
+		tcb **link = &proc->threads;
 		while (*link) {
 			if (*link == thread) {
 				*link = thread->proc_next;
@@ -441,24 +520,28 @@ void thread_exit(tcb *thread)
 		thread->process = NULL;
 	}
 
+	thread->exit_code = code;
 	thread->magic = TCB_MAGIC_DEAD;
-	thread->proc_next = (tcb *)0xDEADDEAD;
-	thread->cpu_next = (tcb *)0xDEADDEAD;
+	atomic_store(&thread->finished, true);
 
-	tcb *next = cpu_pick_next_thread(cpu, NULL);
-
-	if (!next) {
-		debug("No threads left on CPU=%u, entering idle loop\n", cpu->id);
-
+	if (!thread->joinable) {
 		kfree(thread);
-
-		while (1) {
-			cpu_halt();
+		if (!next) {
+			while (1)
+				cpu_halt();
 		}
+		struct kthread dead_ctx = thread->kthread;
+		switch_task(&dead_ctx, &next->kthread);
+		__builtin_unreachable();
+	} else {
+		if (!next) {
+			while (1)
+				cpu_halt();
+		}
+		struct kthread dead_ctx = thread->kthread;
+		switch_task(&dead_ctx, &next->kthread);
+		__builtin_unreachable();
 	}
-
-	switch_task(NULL, &next->kthread);
-	__builtin_unreachable();
 }
 
 tcb *thread_current(void)
@@ -467,8 +550,7 @@ tcb *thread_current(void)
 	if (!cpu)
 		return NULL;
 
-	return cpu
-		->thread_list; // head of the CPU thread list is the current thread
+	return cpu->thread_list;
 }
 
 tcb *thread_get_by_tid(uint32_t tid)
@@ -496,4 +578,48 @@ tcb *thread_get_by_tid(uint32_t tid)
 	}
 
 	return NULL;
+}
+
+bool proc_has_threads(uint32_t pid)
+{
+	if (pid == 0 || pid == UINT32_MAX)
+		return false;
+
+	for (size_t cpu_idx = 0; cpu_idx < cpu_count; cpu_idx++) {
+		struct cpu *cpu = &cpuinfo[cpu_idx];
+		if (!cpu)
+			continue;
+
+		irqlock_acquire(&cpu->sched_lock);
+
+		tcb *t = cpu->thread_list;
+		while (t) {
+			if (t->process && t->process->pid == pid) {
+				irqlock_release(&cpu->sched_lock);
+				return true;
+			}
+			t = t->cpu_next;
+		}
+
+		irqlock_release(&cpu->sched_lock);
+	}
+
+	return false;
+}
+
+int thread_wait(tcb *thread)
+{
+	if (!thread) {
+		error("thread_wait: NULL thread\n");
+		return -1;
+	}
+
+	thread->joinable = true;
+
+	while (!atomic_load(&thread->finished))
+		sched_yield();
+
+	int code = thread->exit_code;
+	kfree(thread);
+	return code;
 }

@@ -207,7 +207,8 @@ apps:
 	@$(MAKE) -C $(APPS_DIR)
 endif
 
-initrd: apps
+.PHONY: initrd
+initrd: apps __FORCE_initrd
 	@printf ">>> Building initrd...\n"
 	@rm -rf $(BUILD_DIR)/initrd
 	@mkdir -p $(BUILD_DIR)/initrd
@@ -217,6 +218,9 @@ initrd: apps
 
 	@mkdir -p $(SYSROOT_DIR)/System
 	@cd $(BUILD_DIR)/initrd && find . -type f | cpio -H newc -o > $(INITRD_CPIO)
+
+.PHONY: __FORCE_initrd
+__FORCE_initrd:
 
 .PHONY: install
 ifeq ($(DOCKER_BUILD),y)
@@ -238,6 +242,7 @@ endif
 endif
 	@$(MAKE) -C kernel install
 	@$(MAKE) -C $(MODULE_DIR) install
+	@$(MAKE) -C $(APPS_DIR) install
 endif
 
 .PHONY: livecd

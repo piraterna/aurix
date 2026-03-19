@@ -17,54 +17,47 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-## Project:      AurixOS - Apps Build System
-## Root Makefile
-###################################################################################
+APP_NAME := test
 
-MAKE_TARGETS := all install clean
-APP_DIRS = $(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v))
+BUILD_DIR := $(BUILD_DIR)/$(APP_NAME)
+APP_FILE := $(BUILD_DIR)/$(APP_NAME)
 
-export BUILD_DIR := $(BUILD_DIR)/apps
-export APP_INSTALL_DIR := $(INITRD_DIR)/bin
+APP_INCLUDE_DIRS := include
+APP_DEFINES := __$(ARCH)__
+APP_DEFINES += APP_NAME=$(APP_NAME)
 
-export APP_CFLAGS := -Wall -Wextra -ffreestanding \
-                     -fno-stack-protector -fno-pie \
-                     -I$(abspath ../libs/include)
-export APP_LDFLAGS := -nostdlib -nostartfiles -nodefaultlibs -static -Wl,-e,_start
+APP_CFLAGS += $(foreach d,$(APP_INCLUDE_DIRS),-I$d) \
+              $(foreach d,$(APP_DEFINES),-D$d)
 
-export APP_DEFINES := __$(ARCH)__
+APP_LDFLAGS +=
 
-ifeq ($(USE_HOST_TOOLCHAIN),y)
-export APP_AS := gcc
-export APP_CC := gcc
-export APP_LD := $(APP_CC)
-export APP_AR := ar
-export APP_OBJCOPY := objcopy
-else
-export APP_AS := $(ARCH)-elf-gcc
-export APP_CC := $(ARCH)-elf-gcc
-export APP_LD := $(APP_CC)
-export APP_AR := $(ARCH)-elf-ar
-export APP_OBJCOPY := $(ARCH)-elf-objcopy
+APP_CFILES := $(shell find . -name '*.c')
+APP_OBJ := $(APP_CFILES:%.c=$(BUILD_DIR)/%.c.o)
+APP_DEP := $(APP_OBJ:.o=.d)
+
+.PHONY: all clean install
+
+all: $(APP_FILE)
+
+install: all
+	@mkdir -p $(APP_INSTALL_DIR)
+	@cp $(APP_FILE) $(APP_INSTALL_DIR)
+
+clean:
+	@rm -rf $(BUILD_DIR)
+
+-include $(APP_DEP)
+
+$(APP_FILE): $(APP_OBJ)
+	@mkdir -p $(@D)
+	@printf "  LD\t$(notdir $@)\n"
+	@$(APP_CC) $(APP_OBJ) $(APP_LDFLAGS) -o $@
+ifneq ($(BUILD_TYPE),debug)
+	@printf "  STRIP\t$(notdir $@)\n"
+	@$(APP_OBJCOPY) --strip-unneeded $@
 endif
 
-ifeq ($(BUILD_TYPE),debug)
-export APP_CFLAGS += -O0 -g3 -D_DEBUG
-else
-export APP_CFLAGS += -O2
-endif
-
-$(MAKE_TARGETS): $(APP_DIRS)
-
-$(APP_DIRS):
-ifeq ($(MAKECMDGOALS),)
-	@printf ">>> Building app '%s'...\n" "$(patsubst %/,%,$(dir $(@)))"
-endif
-	@$(MAKE) -C "$@" $(MAKECMDGOALS) \
-	    APP_CFLAGS="$(APP_CFLAGS)" \
-	    APP_LDFLAGS="$(APP_LDFLAGS)" \
-	    APP_CC="$(APP_CC)" \
-	    APP_OBJCOPY="$(APP_OBJCOPY)" \
-	    APP_INSTALL_DIR="$(APP_INSTALL_DIR)"
-
-.PHONY: $(MAKE_TARGETS) $(APP_DIRS)
+$(BUILD_DIR)/%.c.o: %.c
+	@mkdir -p $(@D)
+	@printf "  CC\t$<\n"
+	@$(APP_CC) $(APP_CFLAGS) -MMD -MP -c $< -o $@

@@ -186,3 +186,39 @@ void acpi_madt_init()
 		  lapic_count, ioapic_count, iso_count, nmi_count);
 #endif
 }
+
+size_t get_actual_cpus(void)
+{
+	struct madt *madt_tbl = (struct madt *)find_sdt("APIC");
+	if (!madt_tbl) {
+		error("MADT not found\n");
+		return 0;
+	}
+
+	size_t cpu_count = 0;
+
+	for (uint64_t i = 0; i < (madt_tbl->hdr.len - sizeof(struct madt));) {
+		struct madt_header *entry =
+			(struct madt_header *)(madt_tbl->structures + i);
+
+		if (entry->type == MADT_LAPIC) {
+			struct madt_lapic *lapic = (struct madt_lapic *)entry;
+
+			if (lapic->flags & 1) {
+				if (cpu_count >= CONFIG_CPU_MAX_COUNT) {
+					warn("Maximum CPU count reached, skipping processor #%u\n",
+						 lapic->id);
+				} else {
+					lapics[cpu_count++] = lapic;
+					debug("Registered CPU #%u with _UID %u\n", lapic->id,
+						  lapic->uid);
+				}
+			}
+		}
+
+		i += entry->len;
+	}
+
+	trace("Actual CPUs detected: %zu\n", cpu_count);
+	return cpu_count;
+}

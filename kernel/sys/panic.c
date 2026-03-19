@@ -25,6 +25,7 @@
 #include <mm/vmm.h>
 #include <sys/sched.h>
 #include <util/kprintf.h>
+#include <vfs/fileio.h>
 #include <nanoprintf.h>
 
 #include <stdbool.h>
@@ -109,6 +110,64 @@ static void panic_backtrace(uintptr_t pm_phys, uintptr_t rbp, uint16_t depth)
 	}
 }
 
+void panic_dump_to_file(const struct interrupt_frame *frame, const char *reason)
+{
+	struct fileio *f = open("/panic.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (!f)
+		return;
+
+	char buf[256];
+	int n = 0;
+
+	n = npf_snprintf(buf, sizeof(buf), "KERNEL PANIC: %s\n",
+					 reason ? reason : "panic");
+	if (n > 0)
+		write(f, buf, (size_t)n);
+
+	struct cpu *cpu = cpu_get_current();
+	uint32_t cpu_id = cpu ? cpu->id : 0;
+	tcb *t = thread_current();
+	pcb *p = t ? t->process : NULL;
+	uint32_t pid = p ? p->pid : 0;
+	uint32_t tid = t ? t->tid : 0;
+	const char *pname = (p && p->name) ? p->name : "";
+
+	n = npf_snprintf(buf, sizeof(buf), "where: cpu=%u pid=%u tid=%u proc=%s\n",
+					 (unsigned)cpu_id, (unsigned)pid, (unsigned)tid, pname);
+	if (n > 0)
+		write(f, buf, (size_t)n);
+
+	if (frame) {
+		n = npf_snprintf(
+			buf, sizeof(buf),
+			"fault: vec=%llu err=0x%llx rip=0x%llx cr2=0x%llx cr3=0x%llx\n",
+			(unsigned long long)frame->vector, (unsigned long long)frame->err,
+			(unsigned long long)frame->rip, (unsigned long long)frame->cr2,
+			(unsigned long long)frame->cr3);
+		if (n > 0)
+			write(f, buf, (size_t)n);
+
+		n = npf_snprintf(
+			buf, sizeof(buf),
+			"regs: rax=%016llx rbx=%016llx rcx=%016llx rdx=%016llx\n"
+			"      rsi=%016llx rdi=%016llx rbp=%016llx rsp=%016llx\n"
+			"      r8=%016llx r9=%016llx r10=%016llx r11=%016llx\n"
+			"      r12=%016llx r13=%016llx r14=%016llx r15=%016llx\n",
+			(unsigned long long)frame->rax, (unsigned long long)frame->rbx,
+			(unsigned long long)frame->rcx, (unsigned long long)frame->rdx,
+			(unsigned long long)frame->rsi, (unsigned long long)frame->rdi,
+			(unsigned long long)frame->rbp, (unsigned long long)frame->rsp,
+			(unsigned long long)frame->r8, (unsigned long long)frame->r9,
+			(unsigned long long)frame->r10, (unsigned long long)frame->r11,
+			(unsigned long long)frame->r12, (unsigned long long)frame->r13,
+			(unsigned long long)frame->r14, (unsigned long long)frame->r15);
+		if (n > 0)
+			write(f, buf, (size_t)n);
+	}
+
+	close(f);
+}
+
 void kpanic(const struct interrupt_frame *frame, const char *reason)
 {
 	cpu_disable_interrupts();
@@ -125,6 +184,7 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 	uint8_t cpu_id = cpu ? cpu->id : 0;
 
 	panic_stop_other_cpus(cpu_id);
+	panic_dump_to_file(frame, reason);
 
 	tcb *t = thread_current();
 	pcb *p = t ? t->process : NULL;
@@ -143,7 +203,7 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u pid=%u tid=%u",
 				cpu_id, pid, tid);
 		if (pname)
-			kprintf(" module=%s", pname);
+			kprintf(" proc=%s", pname);
 		kprintf("\n");
 	} else {
 		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u\n", cpu_id);

@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  ksh.h */
+/* Module Name:  syscall.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,12 +17,37 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _KSH_KSH_H
-#define _KSH_KSH_H
+#ifndef _USER_SYSCALL_H
+#define _USER_SYSCALL_H
 
-void ksh_thread(void);
+#include <stdint.h>
+#include <stddef.h>
 
-void ksh_block(void);
-void ksh_unblock(void);
+#define MAX_SYSCALLS 1024
 
-#endif /* _KSH_KSH_H */
+typedef int64_t (*syscall_handler_t)(void *args);
+
+typedef struct {
+	syscall_handler_t handler;
+	uint8_t valid;
+} syscall_entry_t;
+
+typedef struct {
+	uint64_t rdi;
+	uint64_t rsi;
+	uint64_t rdx;
+	uint64_t r10;
+	uint64_t r8;
+	uint64_t r9;
+	uint64_t rsp;
+} syscall_args_t;
+
+extern syscall_entry_t syscall_table[MAX_SYSCALLS];
+
+int register_syscall(uint32_t id, syscall_handler_t handler);
+int unregister_syscall(uint32_t id);
+int32_t syscall_dispatch(uint32_t id, void *args);
+
+void syscall_builtin_init(void);
+
+#endif // _USER_SYSCALL_H

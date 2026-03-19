@@ -12,7 +12,7 @@
 /* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
 /* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
 /* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
-/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
+/* LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
 /* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
 /* SOFTWARE. */
 /*********************************************************************************/
@@ -35,6 +35,19 @@
 static char history[KSH_HISTORY_SIZE][KSH_LINE_MAX];
 static int history_count = 0;
 static int history_index = -1;
+
+/* --- Global block flag --- */
+static volatile bool ksh_blocked = false;
+
+void ksh_block(void)
+{
+	ksh_blocked = true;
+}
+
+void ksh_unblock(void)
+{
+	ksh_blocked = false;
+}
 
 static void ksh_handle_ascii(char ch, char *line, size_t *len, size_t *cursor,
 							 size_t cap)
@@ -70,8 +83,12 @@ static void ksh_handle_ascii(char ch, char *line, size_t *len, size_t *cursor,
 			for (size_t i = *cursor; i < *len; i++)
 				kprintf("%c", line[i]);
 			kprintf(" ");
-			for (size_t i = *len; i >= *cursor; i--)
+			if (*len > *cursor) {
+				for (size_t i = *len + 1; i > *cursor; i--)
+					kprintf("\b");
+			} else {
 				kprintf("\b");
+			}
 		}
 		return;
 	}
@@ -152,7 +169,6 @@ static char ksh_scancode_to_ascii(uint8_t sc, int shift)
 
 void ksh_thread(void)
 {
-	sleep_ms(1000);
 	char com1_path[] = "/dev/raw/serial/com1";
 	struct fileio *com1 = open(com1_path, 0, 0);
 	struct device *com1_dev = NULL;
@@ -186,6 +202,12 @@ void ksh_thread(void)
 	line[0] = 0;
 
 	for (;;) {
+		/* --- Check if blocked --- */
+		if (ksh_blocked) {
+			sleep_ms(10);
+			continue;
+		}
+
 		bool did_work = false;
 
 		if (com1 && com1_dev && ksh_dev_has_data(com1_dev)) {
@@ -250,9 +272,7 @@ void ksh_thread(void)
 			strcpy(line, history[history_index % KSH_HISTORY_SIZE]);
 			len = strlen(line);
 			cursor = len;
-			kprintf("\r\x1b[K"
-					"ksh> %s",
-					line);
+			kprintf("\r\x1b[Kksh> %s", line);
 			break;
 		case 0x50:
 			if (history_index < history_count - 1)
@@ -267,9 +287,7 @@ void ksh_thread(void)
 							 "");
 			len = strlen(line);
 			cursor = len;
-			kprintf("\r\x1b[K"
-					"ksh> %s",
-					line);
+			kprintf("\r\x1b[Kksh> %s", line);
 			break;
 		default: {
 			char ch = ksh_scancode_to_ascii(sc, 0);
@@ -286,5 +304,5 @@ void ksh_thread(void)
 		close(com1);
 
 out:
-	thread_exit(thread_current());
+	thread_exit(thread_current(), 0);
 }

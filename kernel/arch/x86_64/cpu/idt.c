@@ -30,6 +30,7 @@
 #include <aurix.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <user/syscall.h>
 
 #define IDT_TRAP 0xF
 #define IDT_INTERRUPT 0xE
@@ -89,6 +90,10 @@ void idt_init()
 		idt_set_desc(&idt[v], (uint64_t)isr_stubs[v], IDT_INTERRUPT, 0);
 	}
 
+	// syscall handler
+	idt_set_desc(&idt[0x80], (uint64_t)isr_stubs[0x80], IDT_TRAP,
+				 3); // DPL=3 for user access
+
 	__asm__ volatile("lidt %0" ::"m"(idtr));
 }
 
@@ -104,10 +109,59 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 	desc->reserved = 0;
 }
 
+static void isr_handle_user_exception(const struct interrupt_frame *frame)
+{
+	tcb *current = thread_current();
+	if (!current || !current->process || current->process->pid == 0) {
+		kpanic(frame, exception_str[frame->vector]);
+	}
+
+	error("exception %s (0x%llx) occured in %s (PID=%u, TID=%u)\n",
+		  exception_str[frame->vector], frame->rip,
+		  current->process->name ? current->process->name : "<unknown>",
+		  current->process->pid, current->tid);
+
+	panic_dump_to_file(frame, exception_str[frame->vector]);
+
+	thread_exit(current, -1);
+
+	struct cpu *cpu = cpu_get_current();
+	tcb *next = cpu ? cpu->thread_list : NULL;
+
+	if (!next) {
+		cpu_halt();
+		UNREACHABLE();
+	}
+
+	switch_task(NULL, &next->kthread);
+	UNREACHABLE();
+}
+
+static void isr_syscall_handler(struct interrupt_frame *frame)
+{
+	tcb *current = thread_current();
+	if (!current || !current->process) {
+		kpanic(frame, "syscall from invalid context");
+	}
+
+	syscall_args_t args = { .rdi = frame->rdi,
+							.rsi = frame->rsi,
+							.rdx = frame->rdx,
+							.r10 = frame->r10,
+							.r8 = frame->r8,
+							.r9 = frame->r9,
+							.rsp = frame->rsp };
+
+	uint32_t syscall_id = (uint32_t)frame->rax;
+	int64_t ret = syscall_dispatch(syscall_id, &args);
+
+	frame->rax = ret;
+}
+
 void isr_common_handler(struct interrupt_frame frame)
 {
 	if (frame.vector < 0x20) {
-		kpanic(&frame, exception_str[frame.vector]);
+		isr_handle_user_exception(&frame);
 	} else if (frame.vector < 0x80) {
 		uint8_t irq = frame.vector - 0x20;
 		irq_dispatch(irq);
@@ -122,6 +176,8 @@ void isr_common_handler(struct interrupt_frame frame)
 		// shutdown
 		cpu_halt();
 		UNREACHABLE();
+	} else if (frame.vector == 0x80) {
+		isr_syscall_handler(&frame);
 	} else {
 		warn("Unhandled interrupt %u\n", frame.vector);
 	}
