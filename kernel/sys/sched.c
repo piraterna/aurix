@@ -64,22 +64,18 @@ static struct cpu *sched_pick_best_cpu(void)
 	if (cpu_count == 1)
 		return cpu_get_current();
 
-	static atomic_uint rr = ATOMIC_VAR_INIT(0);
-	size_t start = atomic_fetch_add(&rr, 1);
-
 	struct cpu *best = NULL;
 	uint64_t best_count = UINT64_MAX;
 
-	for (size_t off = 0; off < cpu_count; off++) {
-		size_t i = (start + off) % cpu_count;
-		struct cpu *cpu = &cpuinfo[i];
+	for (size_t i = 0; i < cpu_count; i++) {
+		struct cpu *c = &cpuinfo[i];
 
-		irqlock_acquire(&cpu->sched_lock);
-		uint64_t count = cpu->thread_count;
-		irqlock_release(&cpu->sched_lock);
+		irqlock_acquire(&c->sched_lock);
+		uint64_t count = c->thread_count;
+		irqlock_release(&c->sched_lock);
 
 		if (count < best_count) {
-			best = cpu;
+			best = c;
 			best_count = count;
 		}
 	}
@@ -177,31 +173,28 @@ void sched_yield(void)
 		return;
 
 	struct cpu *cpu = cpu_get_current();
-	if (!cpu || !cpu->thread_list)
+	if (!cpu)
 		return;
 
-	tcb *current = cpu->thread_list;
-	if (!current)
-		return;
-
-	current->time_slice = SCHED_DEFAULT_SLICE;
 	irqlock_acquire(&cpu->sched_lock);
 
-	tcb *next = cpu_pick_next_thread(cpu, current);
-	if (!next || next == current) {
+	tcb *current = cpu->thread_list;
+	if (!current || !current->cpu_next) {
 		irqlock_release(&cpu->sched_lock);
 		return;
 	}
 
-	tcb *prev_of_next = cpu->thread_list;
-	while (prev_of_next->cpu_next && prev_of_next->cpu_next != next)
-		prev_of_next = prev_of_next->cpu_next;
+	current->time_slice = SCHED_DEFAULT_SLICE;
 
-	if (prev_of_next->cpu_next == next) {
-		prev_of_next->cpu_next = next->cpu_next;
-		next->cpu_next = cpu->thread_list;
-		cpu->thread_list = next;
-	}
+	tcb *next = current->cpu_next;
+
+	cpu->thread_list = next;
+
+	tcb *tail = next;
+	while (tail->cpu_next)
+		tail = tail->cpu_next;
+	tail->cpu_next = current;
+	current->cpu_next = NULL;
 
 	irqlock_release(&cpu->sched_lock);
 	switch_task(&current->kthread, &next->kthread);
@@ -247,14 +240,14 @@ void sched_init(void)
 		memset(idle, 0, sizeof(*idle));
 		idle->magic = TCB_MAGIC_ALIVE;
 		idle->tid = UINT32_MAX - cpu->id;
-		idle->time_slice = 1;
+		idle->time_slice = SCHED_DEFAULT_SLICE;
 		idle->process = &kernel_proc;
 		idle->cpu = cpu;
 		idle->kthread.cr3 = (uint64_t)kernel_pm;
 		idle->kthread.rsp = 0;
 
 		cpu->thread_list = idle;
-		cpu->thread_count = 0;
+		cpu->thread_count = 1;
 	}
 
 	trace("Scheduler initialized on CPU=%u\n", cpu->id);
