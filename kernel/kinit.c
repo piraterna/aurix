@@ -300,7 +300,11 @@ void _start(struct aurix_parameters *params)
 			last_check_ms = now;
 			if (!proc_has_threads(init_pid)) {
 				warn("init process pid=%u exited, launching ksh\n", init_pid);
-				ksh_thread();
+				pcb *p = proc_create();
+				p->pm = kernel_pm;
+				p->vctx = kvctx;
+				struct tcb *ksh = thread_create(p, ksh_thread);
+				ksh->process->name = strdup("ksh");
 				ksh_launched = true;
 			}
 		}
