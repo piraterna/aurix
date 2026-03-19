@@ -23,8 +23,8 @@
 #include <util/kprintf.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <time/time.h>
 
-/* TODO: Use boot args */
 #ifndef LOG_COLOR
 #define LOG_COLOR 1
 #endif
@@ -39,43 +39,17 @@
 #define LOG_LEVEL_TEST 7
 #define LOG_LEVEL_ALL 8
 
-#ifndef LOG_VERBOSITY
-#define LOG_VERBOSITY LOG_LEVEL_ALL
+#ifndef LOG_VERBOSITY_SERIAL
+#define LOG_VERBOSITY_SERIAL LOG_LEVEL_ALL
 #endif
 
-#ifndef LOG_OUTPUT_SCREEN
-#define LOG_OUTPUT_SCREEN 0
+#ifndef LOG_VERBOSITY_DISPLAY
+#define LOG_VERBOSITY_DISPLAY LOG_LEVEL_WARN
 #endif
-
-#ifndef LOG_ERROR_SCREEN
-#define LOG_ERROR_SCREEN 1
-#endif
-
-#if LOG_OUTPUT_SCREEN == 1
-#define LOG_PRINTF kprintf
-#else
-#define LOG_PRINTF serial_kprintf
-#endif
-
-#if LOG_ERROR_SCREEN == 1
-#define LOG_PRINTF_ERROR kprintf
-#else
-#define LOG_PRINTF_ERROR LOG_PRINTF
-#endif
-
-#define LOG_PRINTF_CRITICAL kprintf
-
-/* end todo */
 
 #if LOG_COLOR
-
 #define LOG_STYLE_RESET "\033[0m"
 #define LOG_STYLE_PREFIX "\033[38;2;90;95;105m"
-
-#define LOG_BG_R 13
-#define LOG_BG_G 15
-#define LOG_BG_B 18
-
 #define LOG_TAG_INFO "\033[1;38;2;13;15;18;48;2;100;150;200m"
 #define LOG_TAG_WARN "\033[1;38;2;13;15;18;48;2;200;160;60m"
 #define LOG_TAG_ERROR "\033[1;38;2;13;15;18;48;2;190;70;70m"
@@ -84,7 +58,6 @@
 #define LOG_TAG_TRACE "\033[1;38;2;13;15;18;48;2;110;130;160m"
 #define LOG_TAG_CRITICAL "\033[1;38;2;13;15;18;48;2;220;50;50m"
 #define LOG_TAG_SUCCESS "\033[1;38;2;13;15;18;48;2;100;180;100m"
-
 #define LOG_LINE_INFO "\033[38;2;170;180;190m"
 #define LOG_LINE_WARN "\033[38;2;210;170;80m"
 #define LOG_LINE_ERROR "\033[38;2;210;100;100m"
@@ -93,7 +66,6 @@
 #define LOG_LINE_TRACE "\033[38;2;130;150;180m"
 #define LOG_LINE_CRITICAL "\033[1;38;2;255;120;120m"
 #define LOG_LINE_SUCCESS "\033[38;2;140;210;140m"
-
 #else
 #define LOG_STYLE_RESET ""
 #define LOG_STYLE_PREFIX ""
@@ -115,98 +87,71 @@
 #define LOG_LINE_SUCCESS ""
 #endif
 
-#include <time/time.h>
+typedef int (*log_sink_fn_t)(const char *fmt, ...);
 
-#define _log_callback(tag_style, line_style, level, fmt, ...)              \
-	do {                                                                   \
-		uint64_t __ms = get_ms();                                          \
-		LOG_PRINTF(LOG_STYLE_PREFIX "[%u.%03u] " LOG_STYLE_RESET tag_style \
-									" %s " LOG_STYLE_RESET                 \
-									" " line_style fmt LOG_STYLE_RESET,    \
-				   (uint32_t)(__ms / 1000ull), (uint32_t)(__ms % 1000ull), \
-				   level, ##__VA_ARGS__);                                  \
-	} while (0)
+typedef struct {
+	log_sink_fn_t fn;
+	uint8_t verbosity;
+} log_sink_t;
 
-#define _log_callback_error(tag_style, line_style, level, fmt, ...)         \
-	do {                                                                    \
-		uint64_t __ms = get_ms();                                           \
-		LOG_PRINTF_ERROR(LOG_STYLE_PREFIX                                   \
-						 "[%u.%03u] " LOG_STYLE_RESET tag_style             \
-						 " %s " LOG_STYLE_RESET                             \
-						 " " line_style fmt LOG_STYLE_RESET,                \
-						 (uint32_t)(__ms / 1000ull),                        \
-						 (uint32_t)(__ms % 1000ull), level, ##__VA_ARGS__); \
-	} while (0)
+#define LOG_SINK_SERIAL 0
+#define LOG_SINK_DISPLAY 1
+#define LOG_SINK_MAX 2
 
-#define _log_callback_critical(tag_style, line_style, level, fmt, ...)         \
-	do {                                                                       \
-		uint64_t __ms = get_ms();                                              \
-		LOG_PRINTF_CRITICAL(LOG_STYLE_PREFIX                                   \
-							"[%u.%03u] " LOG_STYLE_RESET tag_style             \
-							" %s " LOG_STYLE_RESET                             \
-							" " line_style fmt LOG_STYLE_RESET,                \
-							(uint32_t)(__ms / 1000ull),                        \
-							(uint32_t)(__ms % 1000ull), level, ##__VA_ARGS__); \
-	} while (0)
+static log_sink_t g_log_sinks[LOG_SINK_MAX] = {
+	{ serial_kprintf, LOG_VERBOSITY_SERIAL },
+	{ kprintf, LOG_VERBOSITY_DISPLAY }
+};
 
-#define critical(fmt, ...)                                              \
-	do {                                                                \
-		if (LOG_LEVEL_CRITICAL <= LOG_VERBOSITY)                        \
-			_log_callback_critical(LOG_TAG_CRITICAL, LOG_LINE_CRITICAL, \
-								   "crit ", fmt, ##__VA_ARGS__);        \
-	} while (0)
-
-#define error(fmt, ...)                                                      \
+#define _log_dispatch(tag_style, line_style, level_str, level_val, fmt, ...) \
 	do {                                                                     \
-		if (LOG_LEVEL_ERROR <= LOG_VERBOSITY)                                \
-			_log_callback_error(LOG_TAG_ERROR, LOG_LINE_ERROR, "error", fmt, \
-								##__VA_ARGS__);                              \
+		uint64_t __ms = get_ms();                                            \
+		uint32_t __s = (uint32_t)(__ms / 1000ull);                           \
+		uint32_t __msr = (uint32_t)(__ms % 1000ull);                         \
+		for (int __i = 0; __i < LOG_SINK_MAX; __i++) {                       \
+			if (level_val <= g_log_sinks[__i].verbosity) {                   \
+				g_log_sinks[__i].fn(LOG_STYLE_PREFIX                         \
+									"[%u.%03u] " LOG_STYLE_RESET tag_style   \
+									" %s " LOG_STYLE_RESET                   \
+									" " line_style fmt LOG_STYLE_RESET,      \
+									__s, __msr, level_str, ##__VA_ARGS__);   \
+			}                                                                \
+		}                                                                    \
 	} while (0)
 
-#define warn(fmt, ...)                                               \
-	do {                                                             \
-		if (LOG_LEVEL_WARN <= LOG_VERBOSITY)                         \
-			_log_callback(LOG_TAG_WARN, LOG_LINE_WARN, "warn ", fmt, \
-						  ##__VA_ARGS__);                            \
-	} while (0)
+#define critical(fmt, ...)                                      \
+	_log_dispatch(LOG_TAG_CRITICAL, LOG_LINE_CRITICAL, "crit ", \
+				  LOG_LEVEL_CRITICAL, fmt, ##__VA_ARGS__)
+#define error(fmt, ...)                                                    \
+	_log_dispatch(LOG_TAG_ERROR, LOG_LINE_ERROR, "error", LOG_LEVEL_ERROR, \
+				  fmt, ##__VA_ARGS__)
+#define warn(fmt, ...)                                                       \
+	_log_dispatch(LOG_TAG_WARN, LOG_LINE_WARN, "warn ", LOG_LEVEL_WARN, fmt, \
+				  ##__VA_ARGS__)
+#define info(fmt, ...)                                                       \
+	_log_dispatch(LOG_TAG_INFO, LOG_LINE_INFO, "info ", LOG_LEVEL_INFO, fmt, \
+				  ##__VA_ARGS__)
+#define debug(fmt, ...)                                                    \
+	_log_dispatch(LOG_TAG_DEBUG, LOG_LINE_DEBUG, "debug", LOG_LEVEL_DEBUG, \
+				  fmt, ##__VA_ARGS__)
+#define trace(fmt, ...)                                                    \
+	_log_dispatch(LOG_TAG_TRACE, LOG_LINE_TRACE, "trace", LOG_LEVEL_TRACE, \
+				  fmt, ##__VA_ARGS__)
+#define test(fmt, ...)                                                       \
+	_log_dispatch(LOG_TAG_TEST, LOG_LINE_TEST, "test ", LOG_LEVEL_TEST, fmt, \
+				  ##__VA_ARGS__)
+#define success(fmt, ...)                                                     \
+	_log_dispatch(LOG_TAG_SUCCESS, LOG_LINE_SUCCESS, "ok   ", LOG_LEVEL_INFO, \
+				  fmt, ##__VA_ARGS__)
 
-#define info(fmt, ...)                                               \
-	do {                                                             \
-		if (LOG_LEVEL_INFO <= LOG_VERBOSITY)                         \
-			_log_callback(LOG_TAG_INFO, LOG_LINE_INFO, "info ", fmt, \
-						  ##__VA_ARGS__);                            \
-	} while (0)
+static inline void log_set_sink_verbosity(int sink, uint8_t level)
+{
+	if (sink < LOG_SINK_MAX) {
+		g_log_sinks[sink].verbosity = level;
+	}
+}
 
-#define debug(fmt, ...)                                                \
-	do {                                                               \
-		if (LOG_LEVEL_DEBUG <= LOG_VERBOSITY)                          \
-			_log_callback(LOG_TAG_DEBUG, LOG_LINE_DEBUG, "debug", fmt, \
-						  ##__VA_ARGS__);                              \
-	} while (0)
-
-#define trace(fmt, ...)                                                \
-	do {                                                               \
-		if (LOG_LEVEL_TRACE <= LOG_VERBOSITY)                          \
-			_log_callback(LOG_TAG_TRACE, LOG_LINE_TRACE, "trace", fmt, \
-						  ##__VA_ARGS__);                              \
-	} while (0)
-
-#define test(fmt, ...)                                              \
-	do {                                                            \
-		if (LOG_LEVEL_TEST <= LOG_VERBOSITY)                        \
-			_log_callback(LOG_TAG_TEST, LOG_LINE_TEST, "test", fmt, \
-						  ##__VA_ARGS__);                           \
-	} while (0)
-
-#define success(fmt, ...)                                                  \
-	do {                                                                   \
-		if (LOG_LEVEL_INFO <= LOG_VERBOSITY)                               \
-			_log_callback(LOG_TAG_SUCCESS, LOG_LINE_SUCCESS, "ok   ", fmt, \
-						  ##__VA_ARGS__);                                  \
-	} while (0)
-
-static inline __attribute__((
-	deprecated("klog is deprecated, use specific log macros instead"))) void
+static inline __attribute__((deprecated("klog is deprecated"))) void
 klog(const char *fmt, ...)
 {
 	va_list args;
