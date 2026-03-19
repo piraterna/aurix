@@ -556,13 +556,13 @@ int mod_init(void)
 			memset(kbd_dev, 0, sizeof(*kbd_dev));
 			kbd_dev->name = kmalloc(5);
 			if (kbd_dev->name) {
-				memcpy(kbd_dev->name, "kbd0", 5);
+				memcpy(kbd_dev->name, "kbd0\0", 5);
 				kbd_dev->class_name = kmalloc(6);
 				if (kbd_dev->class_name) {
-					memcpy(kbd_dev->class_name, "input", 6);
-					kbd_dev->dev_node_path = kmalloc(13);
+					memcpy(kbd_dev->class_name, "input\0", 6);
+					kbd_dev->dev_node_path = kmalloc(14);
 					if (kbd_dev->dev_node_path) {
-						memcpy(kbd_dev->dev_node_path, "/raw/ps2/kbd0", 13);
+						memcpy(kbd_dev->dev_node_path, "/raw/ps2/kbd0\0", 14);
 						kbd_dev->driver_data = NULL;
 						kbd_dev->ops = NULL;
 
@@ -594,15 +594,16 @@ int mod_init(void)
 		struct device *mouse_dev = kmalloc(sizeof(*mouse_dev));
 		if (mouse_dev) {
 			memset(mouse_dev, 0, sizeof(*mouse_dev));
-			mouse_dev->name = kmalloc(6);
+			mouse_dev->name = kmalloc(7);
 			if (mouse_dev->name) {
-				memcpy(mouse_dev->name, "mouse0", 6);
+				memcpy(mouse_dev->name, "mouse0\0", 7);
 				mouse_dev->class_name = kmalloc(6);
 				if (mouse_dev->class_name) {
-					memcpy(mouse_dev->class_name, "input", 6);
-					mouse_dev->dev_node_path = kmalloc(14);
+					memcpy(mouse_dev->class_name, "input\0", 6);
+					mouse_dev->dev_node_path = kmalloc(16);
 					if (mouse_dev->dev_node_path) {
-						memcpy(mouse_dev->dev_node_path, "/raw/ps2/mouse0", 14);
+						memcpy(mouse_dev->dev_node_path, "/raw/ps2/mouse0\0",
+							   16);
 						mouse_dev->driver_data = NULL;
 						mouse_dev->ops = NULL;
 
