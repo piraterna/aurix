@@ -132,8 +132,7 @@ void panic_dump_to_file(const struct interrupt_frame *frame, const char *reason)
 	uint32_t tid = t ? t->tid : 0;
 	const char *pname = (p && p->name) ? p->name : "";
 
-	n = npf_snprintf(buf, sizeof(buf),
-					 "where: cpu=%u pid=%u tid=%u module=%s\n",
+	n = npf_snprintf(buf, sizeof(buf), "where: cpu=%u pid=%u tid=%u proc=%s\n",
 					 (unsigned)cpu_id, (unsigned)pid, (unsigned)tid, pname);
 	if (n > 0)
 		write(f, buf, (size_t)n);
@@ -204,7 +203,7 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u pid=%u tid=%u",
 				cpu_id, pid, tid);
 		if (pname)
-			kprintf(" module=%s", pname);
+			kprintf(" proc=%s", pname);
 		kprintf("\n");
 	} else {
 		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u\n", cpu_id);
