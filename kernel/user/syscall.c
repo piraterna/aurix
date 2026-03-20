@@ -47,7 +47,7 @@ int unregister_syscall(uint32_t id)
 int32_t syscall_dispatch(uint32_t id, void *args)
 {
 	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
-		warn("Invalid syscall ID %u\n", id);
+		trace("Unknown syscall: %u\n", id);
 		return -1;
 	}
 	return syscall_table[id].handler(args);

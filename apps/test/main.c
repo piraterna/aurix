@@ -1,20 +1,31 @@
 #include <syscalls.h>
 
-void _start(void)
+int print(const char *str)
 {
-	const char *msg = "Hello, world!\n";
-
 	file_t *f = sys_open("/dev/stdout", 0, 0);
 	if (!f) {
 		sys_exit(1);
 	}
 
-	if (sys_write(f, msg, 14) < 0) {
+	int len = 0;
+	while (str[len])
+		len++;
+
+	if (sys_write(f, str, len) < 0) {
 		sys_close(f);
 		sys_exit(1);
 	}
 
 	sys_close(f);
+	return len;
+}
+
+void _start(void)
+{
+	print("Hello, World!\n");
+	print("now imma page fault >:D\n");
+	volatile int *ptr = (int *)0xDEADBEEF;
+	(void)*ptr;
 	sys_exit(0);
 	__builtin_unreachable();
 }
