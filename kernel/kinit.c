@@ -349,6 +349,8 @@ void _start(struct aurix_parameters *params)
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();
 
+#if CONFIG_KSH
+
 	uint64_t last_check_ms = get_ms();
 	bool ksh_launched = (init_proc == NULL);
 	uint32_t init_pid = init_proc ? init_proc->pid : 0;
@@ -370,6 +372,7 @@ void _start(struct aurix_parameters *params)
 			}
 		}
 	}
+#endif // CONFIG_KSH
 
 	for (;;) {
 #ifdef __x86_64__

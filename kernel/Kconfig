@@ -20,4 +20,10 @@ config BUILD_TESTS
     help
     This includes a test suite for internal kernel components in the build. To run these tests, see the documentation.
 
+config KSH
+    bool "Enable debug shell"
+    default false
+    help
+    Adds a kernel debug shell if init fails
+
 endmenu

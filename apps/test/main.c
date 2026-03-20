@@ -23,9 +23,6 @@ int print(const char *str)
 void _start(void)
 {
 	print("Hello, World!\n");
-	print("now imma page fault >:D\n");
-	volatile int *ptr = (int *)0xDEADBEEF;
-	(void)*ptr;
 	sys_exit(0);
 	__builtin_unreachable();
 }

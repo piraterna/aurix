@@ -77,6 +77,8 @@ void _start(void)
 
 	load_modules(f);
 	print_line(f, "init: module load phase complete\n");
+	print_line(f, "init: launching /bin/test\n");
+	sys_exec("/bin/test");
 
 	sys_close(f);
 	sys_exit(0);
