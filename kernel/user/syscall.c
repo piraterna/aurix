@@ -19,6 +19,7 @@
 
 #include <user/syscall.h>
 #include <debug/log.h>
+#include <sys/errno.h>
 
 syscall_entry_t syscall_table[MAX_SYSCALLS] = { 0 };
 
@@ -44,11 +45,11 @@ int unregister_syscall(uint32_t id)
 	return 0;
 }
 
-int32_t syscall_dispatch(uint32_t id, void *args)
+int64_t syscall_dispatch(uint32_t id, void *args)
 {
 	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
 		trace("Unknown syscall: %u\n", id);
-		return -1;
+		return -ENOSYS;
 	}
 	return syscall_table[id].handler(args);
 }

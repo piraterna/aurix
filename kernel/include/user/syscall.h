@@ -46,7 +46,7 @@ extern syscall_entry_t syscall_table[MAX_SYSCALLS];
 
 int register_syscall(uint32_t id, syscall_handler_t handler);
 int unregister_syscall(uint32_t id);
-int32_t syscall_dispatch(uint32_t id, void *args);
+int64_t syscall_dispatch(uint32_t id, void *args);
 
 void syscall_builtin_init(void);
 

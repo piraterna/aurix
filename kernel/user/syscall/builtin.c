@@ -24,6 +24,7 @@
 #include <vfs/fileio.h>
 #include <mm/heap.h>
 #include <lib/string.h>
+#include <sys/errno.h>
 
 #define SYS_EXIT 0
 #define SYS_OPEN 1
@@ -50,10 +51,15 @@ int64_t sys_open(void *args)
 	int flags = (int)sys_args->rsi;
 	mode_t mode = (mode_t)sys_args->rdx;
 
+	if (!path) {
+		error("open(): invalid path (%s)\n", ERRNO_NAME(EFAULT));
+		return -EFAULT;
+	}
+
 	struct fileio *f = open(path, flags, mode);
 	if (!f) {
-		error("open(): failed to open %s\n", path);
-		return (int64_t)NULL; // todo: proper errno
+		error("open(): failed to open %s (%s)\n", path, ERRNO_NAME(ENOENT));
+		return -ENOENT;
 	}
 
 	trace("open(): opened %s with flags %d and mode %o\n", path, flags, mode);
@@ -65,18 +71,18 @@ int64_t sys_read(void *args)
 	syscall_args_t *sys_args = (syscall_args_t *)args;
 	struct fileio *f = (struct fileio *)sys_args->rdi;
 	if (!f) {
-		error("read(): invalid file descriptor\n");
-		return -1; // todo: proper errno
+		error("read(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
+		return -EBADF;
 	}
 
 	void *buf = (void *)sys_args->rsi;
 	size_t count = (size_t)sys_args->rdx;
-
-	if (read(f, count, buf) == 0) {
-		error("read(): failed to read from file descriptor %p\n", f);
-		return -1; // todo: proper errno
+	if (!buf && count) {
+		error("read(): invalid buffer (%s)\n", ERRNO_NAME(EFAULT));
+		return -EFAULT;
 	}
-	return 0;
+
+	return (int64_t)read(f, count, buf);
 }
 
 int64_t sys_write(void *args)
@@ -84,18 +90,23 @@ int64_t sys_write(void *args)
 	syscall_args_t *sys_args = (syscall_args_t *)args;
 	struct fileio *f = (struct fileio *)sys_args->rdi;
 	if (!f) {
-		error("write(): invalid file descriptor\n");
-		return -1; // todo: proper errno
+		error("write(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
+		return -EBADF;
 	}
 
 	const void *buf = (const void *)sys_args->rsi;
 	size_t count = (size_t)sys_args->rdx;
+	if (!buf && count) {
+		error("write(): invalid buffer (%s)\n", ERRNO_NAME(EFAULT));
+		return -EFAULT;
+	}
 
 	int r = write(f, (void *)buf, count);
 
 	if (r < 0) {
-		error("write(): failed to write to file descriptor %p\n", f);
-		return -1; // todo: proper errno
+		error("write(): failed to write to file descriptor %p (%s)\n", f,
+			  ERRNO_NAME(-r));
+		return r;
 	}
 	return r;
 }
@@ -105,13 +116,15 @@ int64_t sys_close(void *args)
 	syscall_args_t *sys_args = (syscall_args_t *)args;
 	struct fileio *f = (struct fileio *)sys_args->rdi;
 	if (!f) {
-		error("close(): invalid file descriptor\n");
-		return -1; // todo: proper errno
+		error("close(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
+		return -EBADF;
 	}
 
-	if (close(f) < 0) {
-		error("close(): failed to close file descriptor %p\n", f);
-		return -1; // todo: proper errno
+	int r = close(f);
+	if (r < 0) {
+		error("close(): failed to close file descriptor %p (%s)\n", f,
+			  ERRNO_NAME(-r));
+		return r;
 	}
 
 	return 0;

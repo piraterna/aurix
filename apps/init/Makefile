@@ -33,6 +33,7 @@ APP_LDFLAGS +=
 APP_CFILES := $(wildcard *.c) $(wildcard */*.c)
 APP_OBJ := $(APP_CFILES:%.c=$(BUILD_DIR)/%.c.o)
 APP_DEP := $(APP_OBJ:.o=.d)
+APP_GLOBAL_DEPS := Makefile ../Makefile $(wildcard ../include/*.h)
 
 .PHONY: all clean install rebuild
 
@@ -49,7 +50,7 @@ ifneq ($(BUILD_TYPE),debug)
 	@$(APP_OBJCOPY) --strip-unneeded $@
 endif
 
-$(APP_OBJ): Makefile
+$(APP_OBJ): $(APP_GLOBAL_DEPS)
 
 $(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(@D)
