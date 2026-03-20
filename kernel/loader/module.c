@@ -125,7 +125,7 @@ static int axmod_get_current_cpuid(void)
 	return c ? (int)c->id : 0;
 }
 
-bool module_load(void *addr, uint32_t size)
+bool module_load_image(void *image, uint32_t size)
 {
 	uint32_t file_size = size;
 	uintptr_t entry_point = 0;
@@ -136,7 +136,7 @@ bool module_load(void *addr, uint32_t size)
 		return false;
 	}
 
-	char *virt_data = (char *)PHYS_TO_VIRT(addr);
+	char *virt_data = (char *)image;
 	mod->image_elf = virt_data;
 	mod->image_size = file_size;
 
@@ -247,6 +247,15 @@ bool module_load(void *addr, uint32_t size)
 		  img.phys_base, img.load_base, entry_point);
 
 	return true;
+}
+
+bool module_load(void *addr, uint32_t size)
+{
+	if (!addr) {
+		return false;
+	}
+
+	return module_load_image((void *)PHYS_TO_VIRT(addr), size);
 }
 
 struct module_info_node *module_get_list(void)

@@ -327,8 +327,8 @@ pagetable *create_pagemap(void)
 	memset((void *)PHYS_TO_VIRT(pm_phys), 0, PAGE_SIZE);
 
 	for (size_t i = 256; i < 512; i++) {
-		((pagetable *)PHYS_TO_VIRT(pm_phys))->entries[i] =
-			kernel_pm->entries[i];
+		pagetable *kpm = (pagetable *)PHYS_TO_VIRT((uintptr_t)kernel_pm);
+		((pagetable *)PHYS_TO_VIRT(pm_phys))->entries[i] = kpm->entries[i];
 	}
 
 	return (pagetable *)pm_phys;

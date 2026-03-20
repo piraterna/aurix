@@ -66,4 +66,38 @@ int sys_close(file_t *file)
 	return (int)syscall_ret(result);
 }
 
+int sys_mount(const char *source, const char *target, const char *fstype,
+			  unsigned long flags, void *data)
+{
+	long result;
+	register unsigned long r10 __asm__("r10") = flags;
+	register void *r8 __asm__("r8") = data;
+
+	__asm__ volatile("int $0x80"
+					 : "=a"(result)
+					 : "a"(5), "D"(source), "S"(target), "d"(fstype), "r"(r10),
+					   "r"(r8)
+					 : "memory");
+
+	return (int)syscall_ret(result);
+}
+
+int sys_ioctl(file_t *file, int request, void *arg)
+{
+	long result;
+	__asm__ volatile("int $0x80"
+					 : "=a"(result)
+					 : "a"(6), "D"(file), "S"(request), "d"(arg));
+
+	return (int)syscall_ret(result);
+}
+
+int sys_load_module(const char *path)
+{
+	long result;
+	__asm__ volatile("int $0x80" : "=a"(result) : "a"(7), "D"(path));
+
+	return (int)syscall_ret(result);
+}
+
 #endif // _SYSCALL_H

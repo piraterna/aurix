@@ -25,6 +25,7 @@
 #include <sys/sched.h>
 
 bool module_load(void *addr, uint32_t size);
+bool module_load_image(void *image, uint32_t size);
 
 bool module_lookup_image(uintptr_t addr, char **elf_out,
 						 uintptr_t *load_base_out, uintptr_t *link_base_out);

@@ -22,15 +22,20 @@
 #include <sys/sched.h>
 #include <stdarg.h>
 #include <vfs/fileio.h>
+#include <vfs/vfs.h>
 #include <mm/heap.h>
 #include <lib/string.h>
 #include <sys/errno.h>
+#include <loader/module.h>
 
 #define SYS_EXIT 0
 #define SYS_OPEN 1
 #define SYS_READ 2
 #define SYS_WRITE 3
 #define SYS_CLOSE 4
+#define SYS_MOUNT 5
+#define SYS_IOCTL 6
+#define SYS_LOAD_MODULE 7
 
 int64_t sys_exit(void *args)
 {
@@ -130,6 +135,95 @@ int64_t sys_close(void *args)
 	return 0;
 }
 
+int64_t sys_mount(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	const char *source = (const char *)sys_args->rdi;
+	const char *target = (const char *)sys_args->rsi;
+	const char *fstype = (const char *)sys_args->rdx;
+	uint64_t flags = sys_args->r10;
+	void *data = (void *)sys_args->r8;
+
+	if (!target || !fstype) {
+		return -EFAULT;
+	}
+
+	if (flags != 0) {
+		return -EINVAL;
+	}
+
+	(void)source;
+
+	struct vfs *mounted = vfs_mount(NULL, fstype, (char *)target, data);
+	if (!mounted) {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+int64_t sys_ioctl(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	struct fileio *f = (struct fileio *)sys_args->rdi;
+	int request = (int)sys_args->rsi;
+	void *arg = (void *)sys_args->rdx;
+
+	if (!f || !f->private) {
+		return -EBADF;
+	}
+
+	int ret = vfs_ioctl((struct vnode *)f->private, request, arg);
+	if (ret == -1) {
+		return -ENOTTY;
+	}
+
+	return ret;
+}
+
+int64_t sys_load_module(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	const char *path = (const char *)sys_args->rdi;
+
+	if (!path) {
+		return -EFAULT;
+	}
+
+	struct fileio *f = open(path, O_RDONLY, 0);
+	if (!f) {
+		return -ENOENT;
+	}
+
+	if (f->size == 0) {
+		close(f);
+		return -EINVAL;
+	}
+
+	size_t image_size = f->size;
+
+	void *image = kmalloc(image_size);
+	if (!image) {
+		close(f);
+		return -ENOMEM;
+	}
+
+	size_t bytes = read(f, image_size, image);
+	close(f);
+
+	if (bytes != image_size) {
+		kfree(image);
+		return -EIO;
+	}
+
+	if (!module_load_image(image, (uint32_t)image_size)) {
+		kfree(image);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 void syscall_builtin_init(void)
 {
 	register_syscall(SYS_EXIT, sys_exit);
@@ -137,4 +231,7 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_READ, sys_read);
 	register_syscall(SYS_WRITE, sys_write);
 	register_syscall(SYS_CLOSE, sys_close);
+	register_syscall(SYS_MOUNT, sys_mount);
+	register_syscall(SYS_IOCTL, sys_ioctl);
+	register_syscall(SYS_LOAD_MODULE, sys_load_module);
 }

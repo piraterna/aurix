@@ -148,6 +148,77 @@ pcb *load_init(const char *path)
 	return proc;
 }
 
+static bool stage_module_file(const char *name, void *phys_addr, size_t size,
+							  struct fileio *manifest)
+{
+	if (!name || !phys_addr || size == 0) {
+		return false;
+	}
+
+	char path[64];
+	int path_len = snprintf(path, sizeof(path), "/sys/%s", name);
+	if (path_len <= 1 || (size_t)path_len >= sizeof(path)) {
+		return false;
+	}
+
+	struct fileio *out = open(path, O_CREATE | O_WRONLY | O_TRUNC, 0644);
+	if (!out) {
+		return false;
+	}
+
+	int written = write(out, (void *)PHYS_TO_VIRT((uintptr_t)phys_addr), size);
+	close(out);
+	if (written < 0 || (size_t)written != size) {
+		return false;
+	}
+
+	if (manifest) {
+		int list_written = write(manifest, path, (size_t)path_len);
+		if (list_written < 0 || list_written != path_len) {
+			return false;
+		}
+
+		list_written = write(manifest, "\n", 1);
+		if (list_written != 1) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static void stage_boot_modules_to_ramfs(void)
+{
+	if (vfs_mkdir("/sys", 0755) != 0) {
+		kpanic(NULL, "Failed to create /sys directory");
+	}
+
+	struct fileio *manifest =
+		open("/sys/modules.list", O_CREATE | O_WRONLY | O_TRUNC, 0644);
+	if (!manifest) {
+		kpanic(NULL, "Failed to create /sys/modules.list");
+	}
+
+	for (uint32_t m = 0; m < boot_params->module_count; m++) {
+		struct aurix_module *mod = &boot_params->modules[m];
+		const char *name = mod->filename;
+		size_t len = strlen(name);
+
+		if (len < 4 || strcmp(name + len - 4, ".sys") != 0) {
+			continue;
+		}
+
+		if (!stage_module_file(name, mod->addr, mod->size, manifest)) {
+			close(manifest);
+			kpanicf(NULL, "Failed to stage module '%s'", name);
+		}
+
+		trace("Staged module '%s' to ramfs\n", name);
+	}
+
+	close(manifest);
+}
+
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
@@ -249,23 +320,7 @@ void _start(struct aurix_parameters *params)
 	sched_init();
 
 	platform_timekeeper_init();
-
-	for (uint32_t m = 0; m < boot_params->module_count; m++) {
-		const char *name = boot_params->modules[m].filename;
-		size_t len = strlen(name);
-
-		if (len < 4 || strcmp(name + len - 4, ".sys") != 0) {
-			warn("skipping module '%s' (not a .sys module)\n", name);
-			continue;
-		}
-
-		trace("Loading module '%s'...\n", name);
-
-		if (!module_load(boot_params->modules[m].addr,
-						 boot_params->modules[m].size)) {
-			kpanicf(NULL, "Module '%s' failed to load", name);
-		}
-	}
+	stage_boot_modules_to_ramfs();
 
 	debug("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
 		  time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),

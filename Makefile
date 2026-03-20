@@ -214,7 +214,7 @@ initrd: apps __FORCE_initrd
 	@mkdir -p $(BUILD_DIR)/initrd
 	@cp -r $(INITRD_DIR)/* $(BUILD_DIR)/initrd/
 
-	@$(MAKE) -C $(APPS_DIR) install INITRD_DEST=$(BUILD_DIR)/initrd/bin
+	@$(MAKE) -C $(APPS_DIR) install APP_INSTALL_DIR=$(BUILD_DIR)/initrd/bin
 
 	@mkdir -p $(SYSROOT_DIR)/System
 	@cd $(BUILD_DIR)/initrd && find . -type f | cpio -H newc -o > $(INITRD_CPIO)

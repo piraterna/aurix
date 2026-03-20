@@ -6,6 +6,9 @@
 #define EBADF 3
 #define EIO 4
 #define ENOSYS 5
+#define EINVAL 6
+#define ENOMEM 7
+#define ENOTTY 8
 
 static inline int *__errno_location(void)
 {
