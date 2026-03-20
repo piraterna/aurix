@@ -49,6 +49,7 @@
 #include <fs/cpio/newc.h>
 #include <loader/elf.h>
 #include <user/syscall.h>
+#include <dev/builtin/stdio.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -242,6 +243,7 @@ void _start(struct aurix_parameters *params)
 		kpanic(NULL, "Failed to initialize devfs");
 
 	driver_core_init(devfs);
+	stdio_init();
 	cpu_init_mp();
 	syscall_builtin_init();
 	sched_init();
@@ -301,7 +303,9 @@ void _start(struct aurix_parameters *params)
 		if (!ksh_launched && now - last_check_ms >= 1000) {
 			last_check_ms = now;
 			if (!proc_has_threads(init_pid)) {
-				warn("init process pid=%u exited, launching ksh\n", init_pid);
+				kprintf(
+					"\x1b[38;2;100;100;100minit process pid=%u exited, launching ksh\x1b[0m\n",
+					init_pid);
 				pcb *p = proc_create();
 				p->pm = kernel_pm;
 				p->vctx = kvctx;

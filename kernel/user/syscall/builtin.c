@@ -21,9 +21,15 @@
 #include <util/kprintf.h>
 #include <sys/sched.h>
 #include <stdarg.h>
+#include <vfs/fileio.h>
+#include <mm/heap.h>
+#include <lib/string.h>
 
 #define SYS_EXIT 0
-#define SYS_PRINT 1 // replace with stdio and fileio
+#define SYS_OPEN 1
+#define SYS_READ 2
+#define SYS_WRITE 3
+#define SYS_CLOSE 4
 
 int64_t sys_exit(void *args)
 {
@@ -37,17 +43,85 @@ int64_t sys_exit(void *args)
 	return 0;
 }
 
-int64_t sys_print(void *args)
+int64_t sys_open(void *args)
 {
 	syscall_args_t *sys_args = (syscall_args_t *)args;
-	const char *str = (const char *)sys_args->rdi;
-	size_t len = (size_t)sys_args->rsi;
-	kprintf("%.*s", (int)len, str);
+	const char *path = (const char *)sys_args->rdi;
+	int flags = (int)sys_args->rsi;
+	mode_t mode = (mode_t)sys_args->rdx;
+
+	struct fileio *f = open(path, flags, mode);
+	if (!f) {
+		error("open(): failed to open %s\n", path);
+		return (int64_t)NULL; // todo: proper errno
+	}
+
+	trace("open(): opened %s with flags %d and mode %o\n", path, flags, mode);
+	return (int64_t)f;
+}
+
+int64_t sys_read(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	struct fileio *f = (struct fileio *)sys_args->rdi;
+	if (!f) {
+		error("read(): invalid file descriptor\n");
+		return -1; // todo: proper errno
+	}
+
+	void *buf = (void *)sys_args->rsi;
+	size_t count = (size_t)sys_args->rdx;
+
+	if (read(f, count, buf) == 0) {
+		error("read(): failed to read from file descriptor %p\n", f);
+		return -1; // todo: proper errno
+	}
+	return 0;
+}
+
+int64_t sys_write(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	struct fileio *f = (struct fileio *)sys_args->rdi;
+	if (!f) {
+		error("write(): invalid file descriptor\n");
+		return -1; // todo: proper errno
+	}
+
+	const void *buf = (const void *)sys_args->rsi;
+	size_t count = (size_t)sys_args->rdx;
+
+	int r = write(f, (void *)buf, count);
+
+	if (r < 0) {
+		error("write(): failed to write to file descriptor %p\n", f);
+		return -1; // todo: proper errno
+	}
+	return r;
+}
+
+int64_t sys_close(void *args)
+{
+	syscall_args_t *sys_args = (syscall_args_t *)args;
+	struct fileio *f = (struct fileio *)sys_args->rdi;
+	if (!f) {
+		error("close(): invalid file descriptor\n");
+		return -1; // todo: proper errno
+	}
+
+	if (close(f) < 0) {
+		error("close(): failed to close file descriptor %p\n", f);
+		return -1; // todo: proper errno
+	}
+
 	return 0;
 }
 
 void syscall_builtin_init(void)
 {
 	register_syscall(SYS_EXIT, sys_exit);
-	register_syscall(SYS_PRINT, sys_print);
+	register_syscall(SYS_OPEN, sys_open);
+	register_syscall(SYS_READ, sys_read);
+	register_syscall(SYS_WRITE, sys_write);
+	register_syscall(SYS_CLOSE, sys_close);
 }

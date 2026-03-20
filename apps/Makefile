@@ -17,19 +17,17 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-## Project:      AurixOS - Apps Build System
-## Root Makefile
-###################################################################################
+MAKE_TARGETS := all install clean rebuild
 
-MAKE_TARGETS := all install clean
-APP_DIRS = $(foreach v,$(wildcard */.),$(if $(findstring .nocomp,$v),,$v))
+APP_DIRS := $(wildcard */)
+APP_DIRS := $(filter-out include/,$(APP_DIRS))
+APP_DIRS := $(filter-out %.nocomp/,$(APP_DIRS))
 
 export BUILD_DIR := $(BUILD_DIR)/apps
 export APP_INSTALL_DIR := $(INITRD_DIR)/bin
 
 export APP_CFLAGS := -Wall -Wextra -ffreestanding \
-                     -fno-stack-protector -fno-pie \
-                     -I$(abspath ../libs/include)
+                     -fno-stack-protector -fno-pie -I$(abspath include)
 export APP_LDFLAGS := -nostdlib -nostartfiles -nodefaultlibs -static -Wl,-e,_start
 
 export APP_DEFINES := __$(ARCH)__
@@ -54,17 +52,15 @@ else
 export APP_CFLAGS += -O2
 endif
 
-$(MAKE_TARGETS): $(APP_DIRS)
+.PHONY: $(MAKE_TARGETS)
 
-$(APP_DIRS):
-ifeq ($(MAKECMDGOALS),)
-	@printf ">>> Building app '%s'...\n" "$(patsubst %/,%,$(dir $(@)))"
-endif
-	@$(MAKE) -C "$@" $(MAKECMDGOALS) \
-	    APP_CFLAGS="$(APP_CFLAGS)" \
-	    APP_LDFLAGS="$(APP_LDFLAGS)" \
-	    APP_CC="$(APP_CC)" \
-	    APP_OBJCOPY="$(APP_OBJCOPY)" \
-	    APP_INSTALL_DIR="$(APP_INSTALL_DIR)"
-
-.PHONY: $(MAKE_TARGETS) $(APP_DIRS)
+$(MAKE_TARGETS):
+	@for dir in $(APP_DIRS); do \
+		printf ">>> Building app '%s'...\n" "$${dir%/}"; \
+		$(MAKE) -C "$$dir" $(MAKECMDGOALS) \
+			APP_CFLAGS="$(APP_CFLAGS)" \
+			APP_LDFLAGS="$(APP_LDFLAGS)" \
+			APP_CC="$(APP_CC)" \
+			APP_OBJCOPY="$(APP_OBJCOPY)" \
+			APP_INSTALL_DIR="$(APP_INSTALL_DIR)" || exit $$?; \
+	done

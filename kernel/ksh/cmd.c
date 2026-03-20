@@ -703,6 +703,10 @@ static int cmd_exec(int argc, char **argv)
 	// wait until thread has exited
 	ksh_block();
 	thread_wait(thread);
+	if (thread->exit_code != 0) {
+		kprintf("ksh: thread for %s exited with an non-zero code: %d\n", path,
+				thread->exit_code);
+	}
 	ksh_unblock();
 
 	proc_destroy(proc);

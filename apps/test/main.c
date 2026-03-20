@@ -1,7 +1,20 @@
+#include <syscalls.h>
+
 void _start(void)
 {
 	const char *msg = "Hello, world!\n";
-	__asm__ volatile("int $0x80" ::"a"(1), "D"(msg), "S"(14)); // sys_print
-	__asm__ volatile("int $0x80" ::"a"(0), "D"(0)); // sys_exit
+
+	void *f = sys_open("/dev/stdout", 0, 0);
+	if (!f) {
+		sys_exit(1);
+	}
+
+	if (sys_write(f, msg, 14) < 0) {
+		sys_close(f);
+		sys_exit(1);
+	}
+
+	sys_close(f);
+	sys_exit(0);
 	__builtin_unreachable();
 }

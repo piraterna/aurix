@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  driver.h */
+/* Module Name:  stdio.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,29 +17,9 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _DEV_DRIVER_H
-#define _DEV_DRIVER_H
+#ifndef _DEV_BUILTIN_STDIO_H
+#define _DEV_BUILTIN_STDIO_H
 
-#include <stdint.h>
-#include <dev/device.h>
-#include <fs/devfs.h>
+void stdio_init();
 
-typedef int (*driver_probe_fn)(struct device *dev);
-typedef void (*driver_remove_fn)(struct device *dev);
-
-struct driver {
-	const char *name;
-	const char *class_name;
-	driver_probe_fn probe;
-	driver_remove_fn remove;
-};
-
-void driver_core_init(struct devfs *fs);
-
-#ifdef __KERNEL__
-int device_register(struct device *dev);
-int driver_register(struct driver *drv);
-int driver_bind_all(void);
-#endif // __KERNEL__
-
-#endif
+#endif // _DEV_BUILTIN_STDIO_H
