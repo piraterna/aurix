@@ -25,6 +25,9 @@
 #include <arch/sys/irqlock.h>
 #include <lib/align.h>
 #include <arch/cpu/switch.h>
+#ifdef __x86_64__
+#include <arch/cpu/gdt.h>
+#endif
 #include <arch/apic/apic.h>
 #include <aurix.h>
 #include <stdatomic.h>
@@ -35,6 +38,7 @@
 #endif
 
 #define SCHED_DEFAULT_SLICE 10
+#define USER_STACK_SIZE (STACK_SIZE)
 
 static uint32_t next_pid = 1;
 static atomic_uint next_tid = ATOMIC_VAR_INIT(0);
@@ -52,6 +56,20 @@ extern char _start_rodata[];
 extern char _end_rodata[];
 extern char _start_data[];
 extern char _end_data[];
+extern void switch_enter_user(void);
+
+#ifdef __x86_64__
+static inline void sched_prepare_cpu_stack(const tcb *next)
+{
+	if (next)
+		gdt_set_kernel_stack(next->kthread.rsp0);
+}
+#else
+static inline void sched_prepare_cpu_stack(const tcb *next)
+{
+	(void)next;
+}
+#endif
 
 static void sched_ipi_cpu(struct cpu *target)
 {
@@ -217,6 +235,7 @@ void sched_yield(void)
 	current->cpu_next = NULL;
 
 	irqlock_release(&cpu->sched_lock);
+	sched_prepare_cpu_stack(next);
 	switch_task(&current->kthread, &next->kthread);
 }
 
@@ -289,8 +308,7 @@ void sched_init(void)
 		idle_tcb->cpu = cpu;
 
 		uint64_t *stack_base =
-			valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE),
-				   VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+			valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
 		uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
 		rsp = (uint64_t *)((uintptr_t)rsp - 8);
 		memset(stack_base, 0, STACK_SIZE);
@@ -304,8 +322,10 @@ void sched_init(void)
 		*--rsp = 0;
 		*--rsp = 0x202;
 
+		idle_tcb->kthread.rsp0 = (uint64_t)stack_base + STACK_SIZE;
 		idle_tcb->kthread.rsp = (uint64_t)rsp;
 		idle_tcb->kthread.cr3 = (uint64_t)kernel_pm;
+		sched_prepare_cpu_stack(idle_tcb);
 
 		cpu->thread_list = idle_tcb;
 		cpu->thread_count = 1;
@@ -376,7 +396,8 @@ void proc_destroy(pcb *proc)
 	trace("Destroyed process, PID=%u\n", proc->pid);
 }
 
-tcb *thread_create(pcb *proc, void (*entry)(void))
+static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
+								   bool user_mode)
 {
 	if (!proc) {
 		warn("NULL process\n");
@@ -393,11 +414,13 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 
 	thread->magic = TCB_MAGIC_ALIVE;
 	thread->tid = atomic_fetch_add(&next_tid, 1);
+	thread->user = user_mode;
 	thread->process = proc;
 	thread->time_slice = SCHED_DEFAULT_SLICE;
+	thread->user = user_mode;
 
-	uint64_t *stack_base = valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE),
-								  VMM_PRESENT | VMM_WRITABLE | VMM_NX);
+	uint64_t *stack_base =
+		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
 	if (!stack_base) {
 		kfree(thread);
 		return NULL;
@@ -406,15 +429,44 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	uint64_t *rsp = (uint64_t *)((uint8_t *)stack_base + STACK_SIZE);
 	rsp = (uint64_t *)((uintptr_t)rsp - 8);
 	memset(stack_base, 0, STACK_SIZE);
+	thread->kthread.rsp0 = (uint64_t)stack_base + STACK_SIZE;
 
-	*--rsp = (uint64_t)entry;
-	*--rsp = 0;
-	*--rsp = 0;
-	*--rsp = 0;
-	*--rsp = 0;
-	*--rsp = 0;
-	*--rsp = 0;
-	*--rsp = 0x202;
+	if (!user_mode) {
+		*--rsp = (uint64_t)entry;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0x202;
+	} else {
+		uint64_t *user_stack_base =
+			valloc(proc->vctx, DIV_ROUND_UP(USER_STACK_SIZE, PAGE_SIZE),
+				   VALLOC_RW | VALLOC_USER);
+		if (!user_stack_base) {
+			vfree(kvctx, stack_base);
+			kfree(thread);
+			return NULL;
+		}
+
+		uint64_t user_rsp = (uint64_t)user_stack_base + USER_STACK_SIZE;
+
+		*--rsp = 0x1b;
+		*--rsp = user_rsp;
+		*--rsp = 0x202;
+		*--rsp = 0x23;
+		*--rsp = (uint64_t)entry;
+
+		*--rsp = (uint64_t)switch_enter_user;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0;
+		*--rsp = 0x202;
+	}
 
 	thread->kthread.rsp = (uint64_t)rsp;
 	thread->kthread.cr3 = (uint64_t)proc->pm;
@@ -432,6 +484,16 @@ tcb *thread_create(pcb *proc, void (*entry)(void))
 	cpu_add_thread(cpu, thread);
 
 	return thread;
+}
+
+tcb *thread_create(pcb *proc, void (*entry)(void))
+{
+	return thread_create_internal(proc, entry, false);
+}
+
+tcb *thread_create_user(pcb *proc, void (*entry)(void))
+{
+	return thread_create_internal(proc, entry, true);
 }
 
 void thread_destroy(tcb *thread)
@@ -530,6 +592,7 @@ void thread_exit(tcb *thread, int code)
 			while (1)
 				cpu_halt();
 		}
+		sched_prepare_cpu_stack(next);
 		struct kthread dead_ctx = thread->kthread;
 		switch_task(&dead_ctx, &next->kthread);
 		__builtin_unreachable();
@@ -538,6 +601,7 @@ void thread_exit(tcb *thread, int code)
 			while (1)
 				cpu_halt();
 		}
+		sched_prepare_cpu_stack(next);
 		struct kthread dead_ctx = thread->kthread;
 		switch_task(&dead_ctx, &next->kthread);
 		__builtin_unreachable();

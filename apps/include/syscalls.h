@@ -3,6 +3,18 @@
 
 #include <errno.h>
 
+enum {
+	SYS_EXIT = 0,
+	SYS_OPEN = 1,
+	SYS_READ = 2,
+	SYS_WRITE = 3,
+	SYS_CLOSE = 4,
+	SYS_MOUNT = 5,
+	SYS_IOCTL = 6,
+	SYS_LOAD_MODULE = 7,
+	SYS_EXEC = 8,
+};
+
 typedef void *file_t;
 
 static inline long syscall_ret(long value)
@@ -16,87 +28,83 @@ static inline long syscall_ret(long value)
 	return value;
 }
 
-void sys_exit(int code)
+static inline long raw_syscall6(long id, long a1, long a2, long a3, long a4,
+								long a5, long a6)
 {
-	__asm__ volatile("int $0x80" ::"a"(0), "D"(code));
+	long ret;
+	register long r10 __asm__("r10") = a4;
+	register long r8 __asm__("r8") = a5;
+	register long r9 __asm__("r9") = a6;
+
+	__asm__ volatile("syscall"
+					 : "=a"(ret)
+					 : "a"(id), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8),
+					   "r"(r9)
+					 : "rcx", "r11", "memory");
+
+	return ret;
+}
+
+static inline void sys_exit(int code)
+{
+	raw_syscall6(SYS_EXIT, code, 0, 0, 0, 0, 0);
 	__builtin_unreachable();
 }
 
-file_t *sys_open(const char *path, int flags, int mode)
+static inline file_t *sys_open(const char *path, int flags, int mode)
 {
-	long ret;
-	__asm__ volatile("int $0x80"
-					 : "=a"(ret)
-					 : "a"(1), "D"(path), "S"(flags), "d"(mode));
-
+	long ret = raw_syscall6(SYS_OPEN, (long)path, flags, mode, 0, 0, 0);
 	if (ret < 0 && ret >= -4095) {
 		errno = (int)-ret;
 		return (file_t *)0;
 	}
-
 	errno = 0;
 	return (file_t *)ret;
 }
 
-int sys_read(file_t *file, void *buf, int count)
+static inline int sys_read(file_t *file, void *buf, int count)
 {
-	int result;
-	__asm__ volatile("int $0x80"
-					 : "=a"(result)
-					 : "a"(2), "D"(file), "S"(buf), "d"(count));
-
+	long result = raw_syscall6(SYS_READ, (long)file, (long)buf, count, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 
-int sys_write(file_t *file, const void *buf, int count)
+static inline int sys_write(file_t *file, const void *buf, int count)
 {
-	int result;
-	__asm__ volatile("int $0x80"
-					 : "=a"(result)
-					 : "a"(3), "D"(file), "S"(buf), "d"(count));
-
+	long result =
+		raw_syscall6(SYS_WRITE, (long)file, (long)buf, count, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 
-int sys_close(file_t *file)
+static inline int sys_close(file_t *file)
 {
-	int result;
-	__asm__ volatile("int $0x80" : "=a"(result) : "a"(4), "D"(file));
-
+	long result = raw_syscall6(SYS_CLOSE, (long)file, 0, 0, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 
-int sys_mount(const char *source, const char *target, const char *fstype,
-			  unsigned long flags, void *data)
+static inline int sys_mount(const char *source, const char *target,
+							const char *fstype, unsigned long flags, void *data)
 {
-	long result;
-	register unsigned long r10 __asm__("r10") = flags;
-	register void *r8 __asm__("r8") = data;
-
-	__asm__ volatile("int $0x80"
-					 : "=a"(result)
-					 : "a"(5), "D"(source), "S"(target), "d"(fstype), "r"(r10),
-					   "r"(r8)
-					 : "memory");
-
+	long result = raw_syscall6(SYS_MOUNT, (long)source, (long)target,
+							   (long)fstype, flags, (long)data, 0);
 	return (int)syscall_ret(result);
 }
 
-int sys_ioctl(file_t *file, int request, void *arg)
+static inline int sys_ioctl(file_t *file, int request, void *arg)
 {
-	long result;
-	__asm__ volatile("int $0x80"
-					 : "=a"(result)
-					 : "a"(6), "D"(file), "S"(request), "d"(arg));
-
+	long result =
+		raw_syscall6(SYS_IOCTL, (long)file, request, (long)arg, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 
-int sys_load_module(const char *path)
+static inline int sys_load_module(const char *path)
 {
-	long result;
-	__asm__ volatile("int $0x80" : "=a"(result) : "a"(7), "D"(path));
+	long result = raw_syscall6(SYS_LOAD_MODULE, (long)path, 0, 0, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
 
+static inline int sys_exec(const char *path)
+{
+	long result = raw_syscall6(SYS_EXEC, (long)path, 0, 0, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 

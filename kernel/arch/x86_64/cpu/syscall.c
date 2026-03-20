@@ -17,39 +17,53 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <user/syscall.h>
-#include <debug/log.h>
+#include <arch/cpu/cpu.h>
+#include <arch/cpu/syscall.h>
+#include <sys/sched.h>
 #include <sys/errno.h>
+#include <user/syscall.h>
 
-syscall_entry_t syscall_table[MAX_SYSCALLS] = { 0 };
+#define MSR_EFER 0xC0000080
+#define MSR_STAR 0xC0000081
+#define MSR_LSTAR 0xC0000082
+#define MSR_FMASK 0xC0000084
 
-int register_syscall(uint32_t id, syscall_handler_t handler)
+#define EFER_SCE (1u << 0)
+
+extern void x86_64_syscall_entry(void);
+
+void x86_64_syscall_init(void)
 {
-	if (id >= MAX_SYSCALLS || !handler) {
-		error("Failed to register syscall with invalid ID %u\n", id);
-		return -1;
-	}
-	syscall_table[id].handler = handler;
-	syscall_table[id].valid = 1;
-	return 0;
+	uint64_t efer = rdmsr(MSR_EFER);
+	wrmsr(MSR_EFER, efer | EFER_SCE);
+
+	uint64_t star = ((uint64_t)0x0013 << 48) | ((uint64_t)0x0008 << 32);
+	wrmsr(MSR_STAR, star);
+	wrmsr(MSR_LSTAR, (uint64_t)(uintptr_t)x86_64_syscall_entry);
+	wrmsr(MSR_FMASK, (1u << 9));
 }
 
-int unregister_syscall(uint32_t id)
+int64_t x86_64_syscall_dispatch(x86_64_syscall_frame_t *frame)
 {
-	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
-		error("Failed to unregister syscall with invalid ID %u\n", id);
-		return -1;
-	}
-	syscall_table[id].handler = NULL;
-	syscall_table[id].valid = 0;
-	return 0;
-}
+	if (!frame)
+		return -EFAULT;
 
-int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args)
-{
-	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
-		trace("Unknown syscall: %u\n", id);
+	tcb *current = thread_current();
+	if (!current || !current->process || !current->user)
 		return -ENOSYS;
-	}
-	return syscall_table[id].handler(args);
+
+	syscall_args_t args = {
+		.id = frame->rax,
+		.rdi = frame->rdi,
+		.rsi = frame->rsi,
+		.rdx = frame->rdx,
+		.r10 = frame->r10,
+		.r8 = frame->r8,
+		.r9 = frame->r9,
+		.rip = frame->rcx,
+		.rflags = frame->r11,
+		.rsp = frame->rsp,
+	};
+
+	return syscall_dispatch((uint32_t)args.id, &args);
 }

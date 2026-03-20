@@ -137,7 +137,7 @@ pcb *load_init(const char *path)
 	info("loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path, entry,
 		 addr, size);
 
-	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
+	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
 	if (!thread) {
 		error("failed to create thread for: %s\n", path);
 		proc_destroy(proc);

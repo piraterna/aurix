@@ -106,7 +106,7 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		uintptr_t seg_size = seg_off + (uintptr_t)ph[i].p_memsz;
 		uintptr_t seg_phys = phys_base + (aligned_vaddr - base_vaddr);
 
-		uint64_t flags = VMM_PRESENT;
+		uint64_t flags = VMM_PRESENT | VMM_USER;
 		if (ph[i].p_flags & PF_W)
 			flags |= VMM_WRITABLE;
 		if (!(ph[i].p_flags & PF_X))

@@ -24,6 +24,7 @@
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/gdt.h>
 #include <arch/cpu/idt.h>
+#include <arch/cpu/syscall.h>
 #include <config.h>
 #include <aurix.h>
 #include <string.h>
@@ -36,12 +37,14 @@ size_t cpu_count = 0;
 
 int cpu_early_init()
 {
-	gdt_init();
-	idt_init();
-
 	// save cpuinfo
 	cpuinfo[cpu_count].id = cpu_count;
 	wrmsr(CPU_ID_MSR, cpu_count);
+
+	gdt_init();
+	idt_init();
+	x86_64_syscall_init();
+
 	cpu_count++;
 
 	return 1; // all good

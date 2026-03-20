@@ -17,52 +17,25 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _USER_SYSCALL_H
-#define _USER_SYSCALL_H
+#ifndef _ARCH_CPU_SYSCALL_H
+#define _ARCH_CPU_SYSCALL_H
 
 #include <stdint.h>
-#include <stddef.h>
-
-#define MAX_SYSCALLS 1024
-
-enum {
-	SYS_EXIT = 0,
-	SYS_OPEN = 1,
-	SYS_READ = 2,
-	SYS_WRITE = 3,
-	SYS_CLOSE = 4,
-	SYS_MOUNT = 5,
-	SYS_IOCTL = 6,
-	SYS_LOAD_MODULE = 7,
-	SYS_EXEC = 8,
-};
 
 typedef struct {
-	uint64_t id;
+	uint64_t rax;
 	uint64_t rdi;
 	uint64_t rsi;
 	uint64_t rdx;
 	uint64_t r10;
 	uint64_t r8;
 	uint64_t r9;
-	uint64_t rip;
-	uint64_t rflags;
+	uint64_t rcx;
+	uint64_t r11;
 	uint64_t rsp;
-} syscall_args_t;
+} x86_64_syscall_frame_t;
 
-typedef int64_t (*syscall_handler_t)(const syscall_args_t *args);
+void x86_64_syscall_init(void);
+int64_t x86_64_syscall_dispatch(x86_64_syscall_frame_t *frame);
 
-typedef struct {
-	syscall_handler_t handler;
-	uint8_t valid;
-} syscall_entry_t;
-
-extern syscall_entry_t syscall_table[MAX_SYSCALLS];
-
-int register_syscall(uint32_t id, syscall_handler_t handler);
-int unregister_syscall(uint32_t id);
-int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args);
-
-void syscall_builtin_init(void);
-
-#endif // _USER_SYSCALL_H
+#endif /* _ARCH_CPU_SYSCALL_H */

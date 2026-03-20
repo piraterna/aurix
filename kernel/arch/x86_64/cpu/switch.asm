@@ -1,5 +1,6 @@
 section .text
 global switch_task
+global switch_enter_user
 
 %define KTHREAD_CR3_OFFSET 0
 %define KTHREAD_RSP_OFFSET 16
@@ -34,3 +35,11 @@ switch_task:
     pop rbx
 
     ret
+
+switch_enter_user:
+    mov ax, 0x1b
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    iretq

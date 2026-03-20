@@ -23,6 +23,7 @@
 #include <arch/apic/apic.h>
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/idt.h>
+#include <arch/cpu/gdt.h>
 #include <arch/cpu/irq.h>
 #include <cpu/trace.h>
 #include <sys/panic.h>
@@ -133,6 +134,7 @@ static void isr_handle_user_exception(const struct interrupt_frame *frame)
 		UNREACHABLE();
 	}
 
+	gdt_set_kernel_stack(next->kthread.rsp0);
 	switch_task(NULL, &next->kthread);
 	UNREACHABLE();
 }
@@ -145,15 +147,17 @@ static void isr_syscall_handler(struct interrupt_frame *frame)
 	}
 
 	syscall_args_t args = { .rdi = frame->rdi,
+							.id = frame->rax,
 							.rsi = frame->rsi,
 							.rdx = frame->rdx,
 							.r10 = frame->r10,
 							.r8 = frame->r8,
 							.r9 = frame->r9,
+							.rip = frame->rip,
+							.rflags = frame->rflags,
 							.rsp = frame->rsp };
 
-	uint32_t syscall_id = (uint32_t)frame->rax;
-	int64_t ret = syscall_dispatch(syscall_id, &args);
+	int64_t ret = syscall_dispatch((uint32_t)args.id, &args);
 
 	frame->rax = ret;
 }

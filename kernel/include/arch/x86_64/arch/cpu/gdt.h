@@ -48,7 +48,10 @@ struct tss {
 	uint16_t iopb_offset;
 } __attribute__((packed));
 
+extern struct tss gdt_tss[];
+
 void gdt_init(void);
+void gdt_set_kernel_stack(uint64_t rsp0);
 void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit,
 				   uint8_t access, uint8_t flags);
 

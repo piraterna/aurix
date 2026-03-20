@@ -21,28 +21,39 @@
 /*********************************************************************************/
 
 #include <arch/cpu/gdt.h>
+#include <arch/cpu/cpu.h>
+#include <config.h>
 #include <stdint.h>
+#include <string.h>
 
-struct gdt_descriptor gdt[7];
-
-struct tss tss; //TODO: Use tss for double fault and privileged stack
+static struct gdt_descriptor gdt[CONFIG_CPU_MAX_COUNT][7];
+struct tss gdt_tss[CONFIG_CPU_MAX_COUNT];
 
 void gdt_init()
 {
-	gdt_set_entry(&gdt[0], 0, 0, 0, 0);
-	gdt_set_entry(&gdt[1], 0, 0xfffff, 0x9a,
+	uint32_t cpu = cpu_get_current_id();
+	if (cpu >= CONFIG_CPU_MAX_COUNT)
+		cpu = 0;
+
+	memset(gdt[cpu], 0, sizeof(gdt[cpu]));
+	memset(&gdt_tss[cpu], 0, sizeof(gdt_tss[cpu]));
+
+	gdt_set_entry(&gdt[cpu][0], 0, 0, 0, 0);
+	gdt_set_entry(&gdt[cpu][1], 0, 0xfffff, 0x9a,
 				  0x0a); //KCS //TODO: Set accessed bit?
-	gdt_set_entry(&gdt[2], 0, 0xfffff, 0x92, 0x0c); //KDS
-	gdt_set_entry(&gdt[3], 0, 0xfffff, 0xf2,
+	gdt_set_entry(&gdt[cpu][2], 0, 0xfffff, 0x92, 0x0c); //KDS
+	gdt_set_entry(&gdt[cpu][3], 0, 0xfffff, 0xf2,
 				  0x0c); //UDS //REORDERED BECAUSE OF SYSRET
-	gdt_set_entry(&gdt[4], 0, 0xfffff, 0xfa, 0x0a); //UCS
-	gdt_set_entry(&gdt[5], ((uint64_t)&tss) & 0xffffffff, sizeof(tss) - 1, 0x89,
+	gdt_set_entry(&gdt[cpu][4], 0, 0xfffff, 0xfa, 0x0a); //UCS
+	gdt_set_entry(&gdt[cpu][5], ((uint64_t)&gdt_tss[cpu]) & 0xffffffff,
+				  sizeof(struct tss) - 1, 0x89,
 				  0); // TSS low
-	*(uint64_t *)&gdt[6] = (uint64_t)&tss >> 32; // TSS high
+	*(uint64_t *)&gdt[cpu][6] = (uint64_t)&gdt_tss[cpu] >> 32; // TSS high
 
-	tss.iopb_offset = sizeof(tss);
+	gdt_tss[cpu].iopb_offset = sizeof(struct tss);
 
-	struct gdtr gdtr = { .base = (uintptr_t)&gdt[0], .limit = sizeof(gdt) - 1 };
+	struct gdtr gdtr = { .base = (uintptr_t)&gdt[cpu][0],
+						 .limit = sizeof(gdt[cpu]) - 1 };
 
 	__asm__ volatile("lgdt %[gdtr]\n"
 					 "pushq $0x08\n"
@@ -61,6 +72,15 @@ void gdt_init()
 	uint16_t tss_index = 5 * sizeof(struct gdt_descriptor);
 
 	__asm__ volatile("ltr %0" ::"d"(tss_index));
+}
+
+void gdt_set_kernel_stack(uint64_t rsp0)
+{
+	uint32_t cpu = cpu_get_current_id();
+	if (cpu >= CONFIG_CPU_MAX_COUNT)
+		cpu = 0;
+
+	gdt_tss[cpu].rsp_ring[0] = rsp0;
 }
 
 void gdt_set_entry(struct gdt_descriptor *entry, uint32_t base, uint32_t limit,

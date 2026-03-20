@@ -28,33 +28,25 @@
 #include <sys/errno.h>
 #include <loader/module.h>
 
-#define SYS_EXIT 0
-#define SYS_OPEN 1
-#define SYS_READ 2
-#define SYS_WRITE 3
-#define SYS_CLOSE 4
-#define SYS_MOUNT 5
-#define SYS_IOCTL 6
-#define SYS_LOAD_MODULE 7
+#include <loader/elf.h>
 
-int64_t sys_exit(void *args)
+int64_t sys_exit(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	int64_t code = (int64_t)sys_args->rdi;
-	info("TID=%u (%s) exited with code %lld\n", thread_current()->tid,
+	int64_t code = (int64_t)args->rdi;
+	info("TID=%u (%s, userspace=%s) exited with code %lld\n",
+		 thread_current()->tid,
 		 thread_current()->process->name ? thread_current()->process->name :
 										   "unknown",
-		 code);
+		 thread_current()->user ? "yes" : "no", code);
 	thread_exit(thread_current(), (int)code);
 	return 0;
 }
 
-int64_t sys_open(void *args)
+int64_t sys_open(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	const char *path = (const char *)sys_args->rdi;
-	int flags = (int)sys_args->rsi;
-	mode_t mode = (mode_t)sys_args->rdx;
+	const char *path = (const char *)args->rdi;
+	int flags = (int)args->rsi;
+	mode_t mode = (mode_t)args->rdx;
 
 	if (!path) {
 		error("open(): invalid path (%s)\n", ERRNO_NAME(EFAULT));
@@ -71,17 +63,16 @@ int64_t sys_open(void *args)
 	return (int64_t)f;
 }
 
-int64_t sys_read(void *args)
+int64_t sys_read(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	struct fileio *f = (struct fileio *)sys_args->rdi;
+	struct fileio *f = (struct fileio *)args->rdi;
 	if (!f) {
 		error("read(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
 		return -EBADF;
 	}
 
-	void *buf = (void *)sys_args->rsi;
-	size_t count = (size_t)sys_args->rdx;
+	void *buf = (void *)args->rsi;
+	size_t count = (size_t)args->rdx;
 	if (!buf && count) {
 		error("read(): invalid buffer (%s)\n", ERRNO_NAME(EFAULT));
 		return -EFAULT;
@@ -90,17 +81,16 @@ int64_t sys_read(void *args)
 	return (int64_t)read(f, count, buf);
 }
 
-int64_t sys_write(void *args)
+int64_t sys_write(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	struct fileio *f = (struct fileio *)sys_args->rdi;
+	struct fileio *f = (struct fileio *)args->rdi;
 	if (!f) {
 		error("write(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
 		return -EBADF;
 	}
 
-	const void *buf = (const void *)sys_args->rsi;
-	size_t count = (size_t)sys_args->rdx;
+	const void *buf = (const void *)args->rsi;
+	size_t count = (size_t)args->rdx;
 	if (!buf && count) {
 		error("write(): invalid buffer (%s)\n", ERRNO_NAME(EFAULT));
 		return -EFAULT;
@@ -116,10 +106,9 @@ int64_t sys_write(void *args)
 	return r;
 }
 
-int64_t sys_close(void *args)
+int64_t sys_close(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	struct fileio *f = (struct fileio *)sys_args->rdi;
+	struct fileio *f = (struct fileio *)args->rdi;
 	if (!f) {
 		error("close(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
 		return -EBADF;
@@ -135,14 +124,13 @@ int64_t sys_close(void *args)
 	return 0;
 }
 
-int64_t sys_mount(void *args)
+int64_t sys_mount(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	const char *source = (const char *)sys_args->rdi;
-	const char *target = (const char *)sys_args->rsi;
-	const char *fstype = (const char *)sys_args->rdx;
-	uint64_t flags = sys_args->r10;
-	void *data = (void *)sys_args->r8;
+	const char *source = (const char *)args->rdi;
+	const char *target = (const char *)args->rsi;
+	const char *fstype = (const char *)args->rdx;
+	uint64_t flags = args->r10;
+	void *data = (void *)args->r8;
 
 	if (!target || !fstype) {
 		return -EFAULT;
@@ -162,12 +150,11 @@ int64_t sys_mount(void *args)
 	return 0;
 }
 
-int64_t sys_ioctl(void *args)
+int64_t sys_ioctl(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	struct fileio *f = (struct fileio *)sys_args->rdi;
-	int request = (int)sys_args->rsi;
-	void *arg = (void *)sys_args->rdx;
+	struct fileio *f = (struct fileio *)args->rdi;
+	int request = (int)args->rsi;
+	void *arg = (void *)args->rdx;
 
 	if (!f || !f->private) {
 		return -EBADF;
@@ -181,10 +168,9 @@ int64_t sys_ioctl(void *args)
 	return ret;
 }
 
-int64_t sys_load_module(void *args)
+int64_t sys_load_module(const syscall_args_t *args)
 {
-	syscall_args_t *sys_args = (syscall_args_t *)args;
-	const char *path = (const char *)sys_args->rdi;
+	const char *path = (const char *)args->rdi;
 
 	if (!path) {
 		return -EFAULT;
@@ -224,6 +210,67 @@ int64_t sys_load_module(void *args)
 	return 0;
 }
 
+int64_t sys_exec(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+	if (!path)
+		return -EFAULT;
+
+	struct fileio *f = open(path, O_RDONLY, 0);
+	if (!f)
+		return -ENOENT;
+
+	if (f->size == 0) {
+		close(f);
+		return -EINVAL;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		close(f);
+		return -ENOMEM;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		close(f);
+		kfree(buf);
+		return -EIO;
+	}
+
+	close(f);
+
+	struct pcb *proc = proc_create();
+	if (!proc) {
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	char *name_copy = kmalloc(strlen(path) + 1);
+	if (name_copy)
+		strcpy(name_copy, path);
+	proc->name = (const char *)name_copy;
+
+	uint64_t image_addr = 0;
+	size_t image_size = 0;
+	uintptr_t entry = elf_load(buf, &image_addr, &image_size, proc->pm);
+	kfree(buf);
+	if (entry == 0) {
+		proc_destroy(proc);
+		return -EINVAL;
+	}
+
+	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
+	if (!thread) {
+		proc_destroy(proc);
+		return -ENOMEM;
+	}
+
+	thread->joinable = true;
+	int code = thread_wait(thread);
+	proc_destroy(proc);
+	return code;
+}
+
 void syscall_builtin_init(void)
 {
 	register_syscall(SYS_EXIT, sys_exit);
@@ -234,4 +281,5 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_MOUNT, sys_mount);
 	register_syscall(SYS_IOCTL, sys_ioctl);
 	register_syscall(SYS_LOAD_MODULE, sys_load_module);
+	register_syscall(SYS_EXEC, sys_exec);
 }

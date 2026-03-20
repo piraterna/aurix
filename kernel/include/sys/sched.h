@@ -39,6 +39,7 @@ struct tcb;
 typedef struct tcb {
 	uint64_t magic;
 	uint32_t tid;
+	bool user;
 
 	uint32_t time_slice;
 
@@ -82,6 +83,7 @@ void proc_destroy(pcb *proc);
 bool proc_has_threads(uint32_t pid);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
+tcb *thread_create_user(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
 void thread_exit(tcb *thread, int code);
 tcb *thread_current(void);
