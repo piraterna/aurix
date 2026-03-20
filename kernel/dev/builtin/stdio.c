@@ -59,12 +59,11 @@ int stdout_write(struct device *dev, const void *buf, size_t len, size_t offset)
 {
 	(void)dev;
 	(void)offset;
+
 	debug("stdio: writing %zu bytes from %p\n", len, buf);
-	const char *cbuf = (const char *)buf;
-	for (size_t i = 0; i < len; i++) {
-		char ch = cbuf[i];
-		kprintf("%c", ch);
-	}
+
+	kprintf("%.*s", (int)len, (const char *)buf);
+
 	return (int)len;
 }
 

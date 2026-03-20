@@ -4,7 +4,7 @@ void _start(void)
 {
 	const char *msg = "Hello from init! we are just going to exit rn.\n";
 
-	void *f = sys_open("/dev/stdout", 0, 0);
+	file_t *f = sys_open("/dev/stdout", 0, 0);
 	if (!f) {
 		sys_exit(1);
 	}
