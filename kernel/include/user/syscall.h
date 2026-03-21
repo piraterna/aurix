@@ -35,6 +35,11 @@ enum {
 	SYS_IOCTL = 6,
 	SYS_LOAD_MODULE = 7,
 	SYS_EXEC = 8,
+	SYS_MMAP = 9,
+	SYS_LSEEK = 10,
+	SYS_MUNMAP = 11,
+	SYS_CLOCK_GET = 12,
+	SYS_SET_FS_BASE = 13,
 };
 
 typedef struct {

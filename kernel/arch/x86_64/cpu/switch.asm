@@ -4,6 +4,8 @@ global switch_enter_user
 
 %define KTHREAD_CR3_OFFSET 0
 %define KTHREAD_RSP_OFFSET 16
+%define KTHREAD_FSBASE_OFFSET 24
+%define MSR_IA32_FS_BASE 0xC0000100
 
 switch_task:
     test rdi, rdi
@@ -21,7 +23,19 @@ switch_task:
     mov [rdi + KTHREAD_CR3_OFFSET], rax
     mov [rdi + KTHREAD_RSP_OFFSET], rsp
 
+    mov ecx, MSR_IA32_FS_BASE
+    rdmsr
+    shl rdx, 32
+    or rax, rdx
+    mov [rdi + KTHREAD_FSBASE_OFFSET], rax
+
 .load_next:
+    mov rax, [rsi + KTHREAD_FSBASE_OFFSET]
+    mov ecx, MSR_IA32_FS_BASE
+    mov rdx, rax
+    shr rdx, 32
+    wrmsr
+
     mov rax, [rsi + KTHREAD_CR3_OFFSET]
     mov cr3, rax
     mov rsp, [rsi + KTHREAD_RSP_OFFSET]

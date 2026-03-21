@@ -51,5 +51,6 @@ int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args)
 		trace("Unknown syscall: %u\n", id);
 		return -ENOSYS;
 	}
+	trace("syscall(%d)\n", id);
 	return syscall_table[id].handler(args);
 }

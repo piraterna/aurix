@@ -24,15 +24,38 @@
 #include <vfs/fileio.h>
 #include <vfs/vfs.h>
 #include <mm/heap.h>
+#include <mm/vmm.h>
 #include <lib/string.h>
+#include <lib/align.h>
 #include <sys/errno.h>
 #include <loader/module.h>
+#include <time/time.h>
+
+#if defined(__x86_64__)
+#include <arch/cpu/cpu.h>
+#endif
 
 #include <loader/elf.h>
 
 #define FD_RESERVED_STDIN 0
 #define FD_STDOUT 1
 #define FD_FIRST_DYNAMIC 2
+
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
+#define PROT_EXEC 0x4
+
+#define MAP_SHARED 0x01
+#define MAP_PRIVATE 0x02
+#define MAP_FIXED 0x10
+#define MAP_ANONYMOUS 0x20
+
+#define CLOCK_REALTIME 0
+#define CLOCK_MONOTONIC 1
+
+#if defined(__x86_64__)
+#define MSR_IA32_FS_BASE 0xC0000100
+#endif
 
 static struct pcb *syscall_current_process(void)
 {
@@ -365,6 +388,164 @@ int64_t sys_exec(const syscall_args_t *args)
 	return code;
 }
 
+int64_t sys_mmap(const syscall_args_t *args)
+{
+	void *addr = (void *)args->rdi;
+	size_t length = (size_t)args->rsi;
+	int prot = (int)args->rdx;
+	int flags = (int)args->r10;
+	int fd = (int)args->r8;
+	size_t offset = (size_t)args->r9;
+
+	if (length == 0)
+		return -EINVAL;
+
+	if (offset & (PAGE_SIZE - 1))
+		return -EINVAL;
+
+	if (flags & MAP_FIXED)
+		return -ENOTSUP;
+
+	if (!(flags & MAP_ANONYMOUS))
+		return -ENOSYS;
+
+	if (fd != -1 || offset != 0)
+		return -EINVAL;
+
+	if (flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS))
+		return -EINVAL;
+
+	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc || !proc->vctx)
+		return -EINVAL;
+
+	size_t pages = DIV_ROUND_UP(length, PAGE_SIZE);
+	if (!pages)
+		return -EINVAL;
+
+	uint64_t vflags = VALLOC_USER;
+	if (prot & PROT_READ)
+		vflags |= VALLOC_READ;
+	if (prot & PROT_WRITE)
+		vflags |= VALLOC_WRITE;
+	if (prot & PROT_EXEC)
+		vflags |= VALLOC_EXEC;
+
+	(void)addr;
+	void *mapped = valloc(proc->vctx, pages, vflags);
+	if (!mapped)
+		return -ENOMEM;
+
+	return (int64_t)(uintptr_t)mapped;
+}
+
+int64_t sys_lseek(const syscall_args_t *args)
+{
+	int fd = (int)args->rdi;
+	int64_t offset = (int64_t)args->rsi;
+	int whence = (int)args->rdx;
+
+	if (whence != SEEK_SET && whence != SEEK_CUR && whence != SEEK_END)
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *f = proc_fd_lookup_locked(proc, fd);
+	if (!f) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+	fio_retain(f);
+	spinlock_release(&proc->fd_lock);
+
+	int64_t base = 0;
+	if (whence == SEEK_CUR)
+		base = (int64_t)f->offset;
+	else if (whence == SEEK_END)
+		base = (int64_t)f->size;
+
+	int64_t new_off = base + offset;
+	if (new_off < 0) {
+		close(f);
+		return -EINVAL;
+	}
+
+	f->offset = (size_t)new_off;
+	close(f);
+	return new_off;
+}
+
+int64_t sys_munmap(const syscall_args_t *args)
+{
+	void *addr = (void *)args->rdi;
+	size_t length = (size_t)args->rsi;
+
+	if (!addr || length == 0)
+		return -EINVAL;
+
+	if (((uintptr_t)addr & (PAGE_SIZE - 1)) != 0)
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc || !proc->vctx)
+		return -EINVAL;
+
+	vregion_t *region = vget(proc->vctx, (uint64_t)(uintptr_t)addr);
+	if (!region || region->start != (uint64_t)(uintptr_t)addr)
+		return -EINVAL;
+
+	if (length > (region->pages * PAGE_SIZE))
+		return -EINVAL;
+
+	vfree(proc->vctx, addr);
+	return 0;
+}
+
+int64_t sys_clock_get(const syscall_args_t *args)
+{
+	int clock = (int)args->rdi;
+	int64_t *secs = (int64_t *)args->rsi;
+	int64_t *nanos = (int64_t *)args->rdx;
+
+	if (!secs || !nanos)
+		return -EFAULT;
+
+	if (clock != CLOCK_REALTIME && clock != CLOCK_MONOTONIC)
+		return -EINVAL;
+
+	uint64_t ms = get_ms();
+	*secs = (int64_t)(ms / 1000ull);
+	*nanos = (int64_t)((ms % 1000ull) * 1000000ull);
+	return 0;
+}
+
+int64_t sys_set_fs_base(const syscall_args_t *args)
+{
+	uintptr_t base = (uintptr_t)args->rdi;
+	if (!base)
+		return -EINVAL;
+	trace("setfs_base(%.16llx)\n", base);
+
+#if defined(__x86_64__)
+	tcb *current = thread_current();
+	if (!current)
+		return -EINVAL;
+
+	current->kthread.fs_base = (uint64_t)base;
+	wrmsr(MSR_IA32_FS_BASE, (uint64_t)base);
+	return 0;
+#else
+	(void)base;
+	return -ENOSYS;
+#endif
+}
+
 void syscall_builtin_init(void)
 {
 	register_syscall(SYS_EXIT, sys_exit);
@@ -376,4 +557,9 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_IOCTL, sys_ioctl);
 	register_syscall(SYS_LOAD_MODULE, sys_load_module);
 	register_syscall(SYS_EXEC, sys_exec);
+	register_syscall(SYS_MMAP, sys_mmap);
+	register_syscall(SYS_LSEEK, sys_lseek);
+	register_syscall(SYS_MUNMAP, sys_munmap);
+	register_syscall(SYS_CLOCK_GET, sys_clock_get);
+	register_syscall(SYS_SET_FS_BASE, sys_set_fs_base);
 }

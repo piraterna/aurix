@@ -29,6 +29,7 @@ struct kthread {
 	uint64_t cr3;
 	uint64_t rsp0;
 	uint64_t rsp;
+	uint64_t fs_base;
 };
 
 extern void switch_task(struct kthread *prev, struct kthread *next);

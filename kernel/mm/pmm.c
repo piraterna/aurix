@@ -199,36 +199,25 @@ void *palloc(size_t pages)
 	spinlock_acquire(&pmm_lock);
 
 	void *addr = NULL;
-	uint64_t word_count =
-		(bitmap_pages + BITMAP_WORD_SIZE - 1) / BITMAP_WORD_SIZE;
-	uint64_t *bitmap_words = (uint64_t *)bitmap;
+	uint64_t consecutive = 0;
 
-	for (uint64_t i = 0; i < word_count; i++) {
-		if (bitmap_words[i] != UINT64_MAX) {
-			uint64_t start_bit = i * BITMAP_WORD_SIZE;
-			uint64_t consecutive = 0;
-
-			for (uint64_t j = 0;
-				 j < BITMAP_WORD_SIZE && start_bit + j < bitmap_pages; j++) {
-				if (!bitmap_get(bitmap, start_bit + j)) {
-					if (++consecutive == pages) {
-						for (uint64_t k = 0; k < pages; k++) {
-							bitmap_set(bitmap, start_bit + j - pages + 1 + k);
-						}
-						free_pages -= pages;
-						used_pages += pages;
-
-						addr =
-							(void *)((start_bit + j - pages + 1) * PAGE_SIZE);
-						memset((void *)PHYS_TO_VIRT(addr), 0,
-							   pages * PAGE_SIZE);
-
-						goto end;
-					}
-				} else {
-					consecutive = 0;
+	for (uint64_t bit = 0; bit < bitmap_pages; bit++) {
+		if (!bitmap_get(bitmap, bit)) {
+			if (++consecutive == pages) {
+				uint64_t start = bit - pages + 1;
+				for (uint64_t k = 0; k < pages; k++) {
+					bitmap_set(bitmap, start + k);
 				}
+
+				free_pages -= pages;
+				used_pages += pages;
+
+				addr = (void *)(start * PAGE_SIZE);
+				memset((void *)PHYS_TO_VIRT(addr), 0, pages * PAGE_SIZE);
+				goto end;
 			}
+		} else {
+			consecutive = 0;
 		}
 	}
 

@@ -2,6 +2,7 @@
 #define _SYSCALL_H
 
 #include <errno.h>
+#include <stddef.h>
 
 enum {
 	SYS_EXIT = 0,
@@ -13,7 +14,22 @@ enum {
 	SYS_IOCTL = 6,
 	SYS_LOAD_MODULE = 7,
 	SYS_EXEC = 8,
+	SYS_MMAP = 9,
+	SYS_LSEEK = 10,
+	SYS_MUNMAP = 11,
+	SYS_CLOCK_GET = 12,
+	SYS_SET_FS_BASE = 13,
 };
+
+#define PROT_READ 0x01
+#define PROT_WRITE 0x02
+#define PROT_EXEC 0x04
+
+#define MAP_SHARED 0x01
+#define MAP_PRIVATE 0x02
+#define MAP_FIXED 0x10
+#define MAP_ANON 0x20
+#define MAP_ANONYMOUS MAP_ANON
 
 typedef int file_t;
 
@@ -105,6 +121,46 @@ static inline int sys_load_module(const char *path)
 static inline int sys_exec(const char *path)
 {
 	long result = raw_syscall6(SYS_EXEC, (long)path, 0, 0, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline void *sys_mmap(void *addr, size_t length, int prot, int flags,
+							 int fd, size_t offset)
+{
+	long result = raw_syscall6(SYS_MMAP, (long)addr, (long)length, prot, flags,
+							   fd, offset);
+	if (result < 0 && result >= -4095) {
+		errno = (int)-result;
+		return (void *)-1;
+	}
+
+	errno = 0;
+	return (void *)result;
+}
+
+static inline long sys_lseek(file_t file, long offset, int whence)
+{
+	long result = raw_syscall6(SYS_LSEEK, (long)file, offset, whence, 0, 0, 0);
+	return syscall_ret(result);
+}
+
+static inline int sys_munmap(void *addr, size_t length)
+{
+	long result =
+		raw_syscall6(SYS_MUNMAP, (long)addr, (long)length, 0, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline int sys_clock_get(int clock, long *secs, long *nanos)
+{
+	long result =
+		raw_syscall6(SYS_CLOCK_GET, clock, (long)secs, (long)nanos, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline int sys_set_fs_base(void *base)
+{
+	long result = raw_syscall6(SYS_SET_FS_BASE, (long)base, 0, 0, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 

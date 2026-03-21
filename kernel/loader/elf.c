@@ -89,7 +89,9 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 	size_t pages = (exec_size + PAGE_SIZE - 1) / PAGE_SIZE;
 	uintptr_t phys_base = (uintptr_t)palloc(pages);
 	if (!phys_base) {
-		error("Failed to allocate memory for executable!\n");
+		error(
+			"Failed to allocate memory for executable! tried allocating %d pages, 0x%.16llx)\n",
+			pages, phys_base);
 		return 0;
 	}
 

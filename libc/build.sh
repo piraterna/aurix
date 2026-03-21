@@ -24,6 +24,10 @@ GCC_PATCH="${PATCH_DIR}/gcc.patch"
 
 TARGET="x86_64-aurix"
 
+MLIBC_CFLAGS="${MLIBC_CFLAGS:--O2 -ffunction-sections -fdata-sections}"
+MLIBC_CXXFLAGS="${MLIBC_CXXFLAGS:--O2 -ffunction-sections -fdata-sections}"
+MLIBC_LDFLAGS="${MLIBC_LDFLAGS:--Wl,--gc-sections}"
+
 mkdir -p "$SYSROOT_DIR" "$TOOLCHAIN_DIR"
 
 download_if_missing() {
@@ -182,6 +186,9 @@ pushd mlibc >/dev/null
 
 if [ ! -d build ]; then
     echo "[setup] meson build"
+    CFLAGS="$MLIBC_CFLAGS" \
+    CXXFLAGS="$MLIBC_CXXFLAGS" \
+    LDFLAGS="$MLIBC_LDFLAGS" \
     meson setup \
         --cross-file="$ROOT_DIR/aurix-cross.txt" \
         --prefix=/usr \
