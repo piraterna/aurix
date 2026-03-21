@@ -124,7 +124,7 @@ LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
-QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
+QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio -enable-kvm -cpu host
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
@@ -221,41 +221,6 @@ initrd: apps __FORCE_initrd
 
 .PHONY: __FORCE_initrd
 __FORCE_initrd:
-
-TARGET_BASE=$(ARCH)
-
-KERNEL_TARGET=$(TARGET_BASE)-elf
-KERNEL_TOOLCHAIN_PREFIX=$(abspath toolchain/kernel-toolchain)
-
-USERSPACE_TARGET=$(TARGET_BASE)-aurix
-USERSPACE_TOOLCHAIN_PREFIX=$(abspath toolchain/userspace-toolchain)
-SYSROOT_DIR=$(abspath sysroot)
-TOOLCHAIN := $(CURDIR)/toolchain/userspace-toolchain/bin
-
-.PHONY: mlibc-smoke
-mlibc-smoke:
-	@mkdir -p $(BUILD_DIR)/mlibc-smoke
-	@clang -target x86_64-aurix -c libc/mlibc/sysdeps/aurix/crt-x86_64/crti.S -o $(BUILD_DIR)/mlibc-smoke/crti.o
-	@clang -target x86_64-aurix -c libc/mlibc/sysdeps/aurix/crt-x86_64/crt0.S -o $(BUILD_DIR)/mlibc-smoke/crt0.o
-	@clang -target x86_64-aurix -c libc/mlibc/sysdeps/aurix/crt-x86_64/crtn.S -o $(BUILD_DIR)/mlibc-smoke/crtn.o
-	@clang -target x86_64-aurix -ffreestanding -fno-stack-protector -fno-pie -fno-pic -c libc/mlibc-smoke/entry_stub.c -o $(BUILD_DIR)/mlibc-smoke/entry_stub.o
-	@clang -target x86_64-aurix -ffreestanding -fno-stack-protector -fno-pie -fno-pic -c libc/mlibc-smoke/main.c -o $(BUILD_DIR)/mlibc-smoke/main.o
-	@clang -target x86_64-aurix -nostdlib -no-pie -Wl,-e,_start -o $(BUILD_DIR)/mlibc-smoke/return0.elf \
-		$(BUILD_DIR)/mlibc-smoke/crti.o \
-		$(BUILD_DIR)/mlibc-smoke/crt0.o \
-		$(BUILD_DIR)/mlibc-smoke/entry_stub.o \
-		$(BUILD_DIR)/mlibc-smoke/main.o \
-		$(BUILD_DIR)/mlibc-smoke/crtn.o
-	@printf "Built %s\n" "$(BUILD_DIR)/mlibc-smoke/return0.elf"
-
-.PHONY: toolchain
-ifeq ($(DOCKER_BUILD),y)
-toolchain:
-	@$(call docker_make,toolchain)
-else
-toolchain:
-	@$(MAKE) -C toolchain userspace-toolchain
-endif
 
 .PHONY: install
 ifeq ($(DOCKER_BUILD),y)
