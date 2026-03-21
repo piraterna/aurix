@@ -197,9 +197,13 @@ if [ -f "$SYSROOT_DIR/usr/lib/libc.a" ] || [ -f "$SYSROOT_DIR/usr/lib/libmlibc.a
 else
     echo "[build] mlibc"
     ninja -C build
+    echo "[install] mlibc"
+    DESTDIR="$SYSROOT_DIR" ninja -C build install
 fi
 
 popd >/dev/null
 
 # ========== Clean up ==========
 PATH=$OLD_PATH
+
+echo "==> done"

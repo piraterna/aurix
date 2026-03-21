@@ -365,22 +365,6 @@ int64_t sys_exec(const syscall_args_t *args)
 	return code;
 }
 
-int64_t sys_sout(const syscall_args_t *args)
-{
-	const char *str = (const char *)args->rdi;
-	if (!str) {
-		return -EFAULT;
-	}
-
-	size_t len = (size_t)args->rsi;
-	if (len == 0) {
-		return 0;
-	}
-
-	kprintf("[sout()] %.*s", (int)len, str);
-	return 0;
-}
-
 void syscall_builtin_init(void)
 {
 	register_syscall(SYS_EXIT, sys_exit);
@@ -392,5 +376,4 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_IOCTL, sys_ioctl);
 	register_syscall(SYS_LOAD_MODULE, sys_load_module);
 	register_syscall(SYS_EXEC, sys_exec);
-	register_syscall(SYS_SOUT, sys_sout);
 }
