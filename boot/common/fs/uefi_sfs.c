@@ -116,15 +116,16 @@ size_t sfs_read(char *filename, char **buffer, size_t *size,
 
 	struct sfs_fsdata *data = (struct sfs_fsdata *)fsdata;
 	EFI_FILE_PROTOCOL *volume = data->volume;
-	EFI_FILE_PROTOCOL *file;
-	EFI_FILE_INFO *fileinfo;
+	EFI_FILE_PROTOCOL *file = NULL;
+	EFI_FILE_INFO *fileinfo = NULL;
 	EFI_GUID fi_guid = EFI_FILE_INFO_GUID;
-	EFI_UINTN fileinfo_size = sizeof(EFI_FILE_INFO) + 32;
+	EFI_UINTN fileinfo_size = 0;
 	CHAR16 *wfilename;
 	EFI_STATUS status = EFI_SUCCESS;
 	size_t len = 0;
+	size_t total_read = 0;
 
-	wfilename = (CHAR16 *)mem_alloc(strlen(filename) * sizeof(CHAR16));
+	wfilename = (CHAR16 *)mem_alloc((strlen(filename) + 1) * sizeof(CHAR16));
 	if (!wfilename) {
 		debug("sfs_read(): Failed to allocate memory for wide strings!\n");
 		return 0;
@@ -145,37 +146,76 @@ size_t sfs_read(char *filename, char **buffer, size_t *size,
 	mem_free(wfilename);
 
 	/* get file size */
+	status = file->GetInfo(file, &fi_guid, &fileinfo_size, NULL);
+	if (status != EFI_BUFFER_TOO_SMALL) {
+		debug("sfs_read(): Failed to get file info for '%s': %s (%lx)\n",
+			  filename, efi_status_to_str(status), status);
+		file->Close(file);
+		return 0;
+	}
+
 	fileinfo = (EFI_FILE_INFO *)mem_alloc(fileinfo_size);
 	if (!fileinfo) {
 		debug("sfs_read(): Failed to allocate memory for file info!");
-		while (1)
-			;
+		file->Close(file);
+		return 0;
 	}
 
-	file->GetInfo(file, &fi_guid, &fileinfo_size, fileinfo);
+	status = file->GetInfo(file, &fi_guid, &fileinfo_size, fileinfo);
+	if (EFI_ERROR(status)) {
+		debug("sfs_read(): Failed to read file info for '%s': %s (%lx)\n",
+			  filename, efi_status_to_str(status), status);
+		mem_free(fileinfo);
+		file->Close(file);
+		return 0;
+	}
+
 	len = fileinfo->FileSize;
 	mem_free(fileinfo);
 
 	if (size)
 		*size = len;
 
-	*buffer = (char *)mem_alloc(len * sizeof(char));
-	if (!*buffer) {
-		debug("sfs_read(): Failed to allocate memory for output buffer!\n");
+	if (len == 0) {
+		*buffer = NULL;
+		file->Close(file);
 		return 0;
 	}
 
-	status = file->Read(file, &len, *buffer);
-	if (EFI_ERROR(status)) {
-		debug("sfs_read(): Failed to read file '%s': %s (%lx)\n", filename,
-			  efi_status_to_str(status), status);
+	*buffer = (char *)mem_alloc(len * sizeof(char));
+	if (!*buffer) {
+		debug("sfs_read(): Failed to allocate memory for output buffer!\n");
+		file->Close(file);
 		return 0;
+	}
+
+	while (total_read < len) {
+		EFI_UINTN to_read = (EFI_UINTN)(len - total_read);
+		status = file->Read(file, &to_read, *buffer + total_read);
+		if (EFI_ERROR(status)) {
+			debug("sfs_read(): Failed to read file '%s': %s (%lx)\n", filename,
+				  efi_status_to_str(status), status);
+			mem_free(*buffer);
+			*buffer = NULL;
+			file->Close(file);
+			return 0;
+		}
+
+		if (to_read == 0) {
+			debug("sfs_read(): Unexpected EOF while reading '%s'\n", filename);
+			mem_free(*buffer);
+			*buffer = NULL;
+			file->Close(file);
+			return 0;
+		}
+
+		total_read += (size_t)to_read;
 	}
 
 	/* close the file */
 	file->Close(file);
 
-	return len;
+	return total_read;
 }
 
 uint8_t sfs_write(char *filename, char *buffer, size_t size,
@@ -190,7 +230,7 @@ uint8_t sfs_write(char *filename, char *buffer, size_t size,
 	EFI_STATUS status = EFI_SUCCESS;
 	size_t len = 0;
 
-	wfilename = (CHAR16 *)mem_alloc(strlen(filename) * sizeof(CHAR16));
+	wfilename = (CHAR16 *)mem_alloc((strlen(filename) + 1) * sizeof(CHAR16));
 	if (!wfilename) {
 		debug("sfs_write(): Failed to allocate memory for wide strings!\n");
 		return 0;
