@@ -191,6 +191,7 @@ void isr_common_handler(struct interrupt_frame frame)
 		cpu_halt();
 		UNREACHABLE();
 	} else if (frame.vector == 0x80) {
+		warn("int 0x80 syscall! perferably use \"syscall\"\n");
 		isr_syscall_handler(&frame);
 	} else {
 		warn("Unhandled interrupt %u\n", frame.vector);
