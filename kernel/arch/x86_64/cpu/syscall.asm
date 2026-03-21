@@ -53,4 +53,4 @@ x86_64_syscall_entry:
     mov rdx, [rsp + 72]
     add rsp, 80
     mov rsp, rdx
-    db 0x48, 0x0f, 0x07
+    o64 sysret
