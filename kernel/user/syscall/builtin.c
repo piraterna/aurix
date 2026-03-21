@@ -548,18 +548,18 @@ int64_t sys_set_fs_base(const syscall_args_t *args)
 
 void syscall_builtin_init(void)
 {
-	register_syscall(SYS_EXIT, sys_exit);
-	register_syscall(SYS_OPEN, sys_open);
-	register_syscall(SYS_READ, sys_read);
-	register_syscall(SYS_WRITE, sys_write);
-	register_syscall(SYS_CLOSE, sys_close);
-	register_syscall(SYS_MOUNT, sys_mount);
-	register_syscall(SYS_IOCTL, sys_ioctl);
-	register_syscall(SYS_LOAD_MODULE, sys_load_module);
-	register_syscall(SYS_EXEC, sys_exec);
-	register_syscall(SYS_MMAP, sys_mmap);
-	register_syscall(SYS_LSEEK, sys_lseek);
-	register_syscall(SYS_MUNMAP, sys_munmap);
-	register_syscall(SYS_CLOCK_GET, sys_clock_get);
-	register_syscall(SYS_SET_FS_BASE, sys_set_fs_base);
+	register_syscall(SYS_EXIT, sys_exit, "exit");
+	register_syscall(SYS_OPEN, sys_open, "open");
+	register_syscall(SYS_READ, sys_read, "read");
+	register_syscall(SYS_WRITE, sys_write, "write");
+	register_syscall(SYS_CLOSE, sys_close, "close");
+	register_syscall(SYS_MOUNT, sys_mount, "mount");
+	register_syscall(SYS_IOCTL, sys_ioctl, "ioctl");
+	register_syscall(SYS_LOAD_MODULE, sys_load_module, "load_module");
+	register_syscall(SYS_EXEC, sys_exec, "exec");
+	register_syscall(SYS_MMAP, sys_mmap, "mmap");
+	register_syscall(SYS_LSEEK, sys_lseek, "lseek");
+	register_syscall(SYS_MUNMAP, sys_munmap, "munmap");
+	register_syscall(SYS_CLOCK_GET, sys_clock_get, "clock_get");
+	register_syscall(SYS_SET_FS_BASE, sys_set_fs_base, "set_fs_base");
 }
