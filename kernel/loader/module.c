@@ -164,7 +164,7 @@ bool module_load_image(void *image, uint32_t size)
 	}
 
 	uintptr_t load_base =
-		(uintptr_t)vallocat(kmod_vctx, pages, VALLOC_RW, (uint64_t)phys_base);
+		(uintptr_t)vallocatp(kmod_vctx, pages, VALLOC_RW, (uint64_t)phys_base);
 	if (!load_base) {
 		error("Failed to allocate module virtual range\n");
 		pfree((void *)phys_base, pages);

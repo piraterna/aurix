@@ -48,7 +48,19 @@
 #define MAP_SHARED 0x01
 #define MAP_PRIVATE 0x02
 #define MAP_FIXED 0x10
-#define MAP_ANONYMOUS 0x20
+#define MAP_ANON 0x20
+#define MAP_ANONYMOUS MAP_ANON
+#define MAP_GROWSDOWN 0x100
+#define MAP_DENYWRITE 0x800
+#define MAP_EXECUTABLE 0x1000
+#define MAP_LOCKED 0x2000
+#define MAP_NORESERVE 0x4000
+#define MAP_POPULATE 0x8000
+#define MAP_NONBLOCK 0x10000
+#define MAP_STACK 0x20000
+#define MAP_HUGETLB 0x40000
+#define MAP_SYNC 0x80000
+#define MAP_FIXED_NOREPLACE 0x100000
 
 #define CLOCK_REALTIME 0
 #define CLOCK_MONOTONIC 1
@@ -109,6 +121,8 @@ int64_t sys_open(const syscall_args_t *args)
 		error("open(): invalid path (%s)\n", ERRNO_NAME(EFAULT));
 		return -EFAULT;
 	}
+
+	trace("open(%s)\n", path);
 
 	struct pcb *proc = syscall_current_process();
 	if (!proc)
@@ -403,20 +417,27 @@ int64_t sys_mmap(const syscall_args_t *args)
 	if (offset & (PAGE_SIZE - 1))
 		return -EINVAL;
 
-	if (flags & MAP_FIXED)
-		return -ENOTSUP;
-
-	if (!(flags & MAP_ANONYMOUS))
-		return -ENOSYS;
-
-	if (fd != -1 || offset != 0)
+	int share_flags = flags & (MAP_SHARED | MAP_PRIVATE);
+	if (share_flags == 0 || share_flags == (MAP_SHARED | MAP_PRIVATE))
 		return -EINVAL;
 
-	if (flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS))
+	if (flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS |
+				  MAP_GROWSDOWN | MAP_DENYWRITE | MAP_EXECUTABLE | MAP_LOCKED |
+				  MAP_NORESERVE | MAP_POPULATE | MAP_NONBLOCK | MAP_STACK |
+				  MAP_HUGETLB | MAP_SYNC | MAP_FIXED_NOREPLACE))
 		return -EINVAL;
 
 	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
 		return -EINVAL;
+
+	if (offset != 0)
+		return -EINVAL;
+
+	if (!(flags & MAP_ANONYMOUS)) {
+		if (fd < 0)
+			return -EBADF;
+		return -ENOSYS;
+	}
 
 	struct pcb *proc = syscall_current_process();
 	if (!proc || !proc->vctx)
@@ -434,11 +455,33 @@ int64_t sys_mmap(const syscall_args_t *args)
 	if (prot & PROT_EXEC)
 		vflags |= VALLOC_EXEC;
 
-	(void)addr;
-	void *mapped = valloc(proc->vctx, pages, vflags);
+	void *mapped = NULL;
+	uintptr_t min_addr = VPM_MIN_ADDR;
+	uintptr_t hint = (uintptr_t)addr;
+
+	if (flags & (MAP_FIXED | MAP_FIXED_NOREPLACE)) {
+		if (!addr)
+			return -EINVAL;
+		if (!IS_PAGE_ALIGNED(addr))
+			return -EINVAL;
+		if (hint < min_addr)
+			return -EINVAL;
+		mapped = vallocatv(proc->vctx, hint, pages, vflags);
+	} else if (addr != NULL) {
+		if (hint < min_addr)
+			hint = min_addr;
+		hint = ALIGN_DOWN(hint, PAGE_SIZE);
+		mapped = vallocatv(proc->vctx, hint, pages, vflags);
+		if (!mapped)
+			mapped = valloc(proc->vctx, pages, vflags);
+	} else {
+		mapped = valloc(proc->vctx, pages, vflags);
+	}
+
 	if (!mapped)
 		return -ENOMEM;
 
+	memset(mapped, 0, pages * PAGE_SIZE);
 	return (int64_t)(uintptr_t)mapped;
 }
 

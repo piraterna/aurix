@@ -26,4 +26,10 @@ config KSH
     help
     Adds a kernel debug shell if init fails
 
+config MPANIC_DUMP
+    bool "Enable module panic dump"
+    default false
+    help
+    Enable register dump to stdout on module panic (exec, kmod)
+
 endmenu

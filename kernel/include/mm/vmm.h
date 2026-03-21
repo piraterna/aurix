@@ -76,7 +76,8 @@ typedef struct vctx {
 vctx_t *vinit(pagetable *pm, uint64_t start);
 void vdestroy(vctx_t *ctx);
 void *valloc(vctx_t *ctx, size_t pages, uint64_t flags);
-void *vallocat(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys);
+void *vallocatv(vctx_t *ctx, uint64_t vaddr, size_t pages, uint64_t flags);
+void *vallocatp(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys);
 void *vadd(vctx_t *ctx, uint64_t vaddr, uint64_t paddr, size_t pages,
 		   uint64_t flags);
 void vfree(vctx_t *ctx, void *ptr);

@@ -134,7 +134,82 @@ void *valloc(vctx_t *ctx, size_t pages, uint64_t flags)
 	return (void *)new->start;
 }
 
-void *vallocat(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys)
+void *vallocatv(vctx_t *ctx, uint64_t vaddr, size_t pages, uint64_t flags)
+{
+	if (ctx == NULL || ctx->root == NULL || ctx->pagemap == NULL)
+		return NULL;
+
+	if (pages == 0)
+		return NULL;
+
+	vaddr = ALIGN_DOWN(vaddr, PAGE_SIZE);
+	if (vaddr < ctx->root->start)
+		return NULL;
+
+	uint64_t size = pages * PAGE_SIZE;
+	if (size / PAGE_SIZE != pages)
+		return NULL;
+
+	uint64_t vend = vaddr + size;
+	if (vend < vaddr)
+		return NULL;
+
+	vregion_t *region = ctx->root;
+	vregion_t *prev = NULL;
+	while (region) {
+		uint64_t rstart = region->start;
+		uint64_t rend = region->start + (region->pages * PAGE_SIZE);
+
+		if (vaddr < rend && vend > rstart)
+			return NULL;
+
+		if (vaddr < rstart)
+			break;
+
+		prev = region;
+		region = region->next;
+	}
+
+	vregion_t *new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
+	if (!new)
+		return NULL;
+
+	memset(new, 0, sizeof(vregion_t));
+	new->start = vaddr;
+	new->pages = pages;
+	new->flags = VFLAGS_TO_PFLAGS(flags);
+
+	for (uint64_t i = 0; i < pages; i++) {
+		uint64_t page = (uint64_t)palloc(1);
+		if (page == 0) {
+			for (uint64_t j = 0; j < i; j++) {
+				uintptr_t virt = vaddr + (j * PAGE_SIZE);
+				uintptr_t phys = vget_phys(ctx->pagemap, virt);
+				if (phys) {
+					unmap_page(ctx->pagemap, virt);
+					pfree((void *)ALIGN_DOWN(phys, PAGE_SIZE), 1);
+				}
+			}
+			pfree((void *)VIRT_TO_PHYS(new), 1);
+			return NULL;
+		}
+
+		map_page(ctx->pagemap, vaddr + (i * PAGE_SIZE), page, new->flags);
+	}
+
+	new->prev = prev;
+	new->next = region;
+	if (prev)
+		prev->next = new;
+	else
+		ctx->root = new;
+	if (region)
+		region->prev = new;
+
+	return (void *)vaddr;
+}
+
+void *vallocatp(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys)
 {
 	if (ctx == NULL || ctx->root == NULL || ctx->pagemap == NULL)
 		return NULL;
