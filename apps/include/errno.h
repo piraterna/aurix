@@ -9,6 +9,7 @@
 #define EINVAL 6
 #define ENOMEM 7
 #define ENOTTY 8
+#define EMFILE 9
 
 static inline int *__errno_location(void)
 {

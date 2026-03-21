@@ -19,3 +19,12 @@ uefi_nvram.json
 .config*
 
 initrd/bin
+
+libc/mlibc-sysroot
+libc/toolchain
+
+binutils*/
+gcc*/
+
+binutils*.tar*
+gcc*.tar*

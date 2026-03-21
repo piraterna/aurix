@@ -15,7 +15,7 @@ enum {
 	SYS_EXEC = 8,
 };
 
-typedef void *file_t;
+typedef int file_t;
 
 static inline long syscall_ret(long value)
 {
@@ -51,31 +51,31 @@ static inline void sys_exit(int code)
 	__builtin_unreachable();
 }
 
-static inline file_t *sys_open(const char *path, int flags, int mode)
+static inline int sys_open(const char *path, int flags, int mode)
 {
 	long ret = raw_syscall6(SYS_OPEN, (long)path, flags, mode, 0, 0, 0);
 	if (ret < 0 && ret >= -4095) {
 		errno = (int)-ret;
-		return (file_t *)0;
+		return -1;
 	}
 	errno = 0;
-	return (file_t *)ret;
+	return (int)ret;
 }
 
-static inline int sys_read(file_t *file, void *buf, int count)
+static inline int sys_read(file_t file, void *buf, int count)
 {
 	long result = raw_syscall6(SYS_READ, (long)file, (long)buf, count, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 
-static inline int sys_write(file_t *file, const void *buf, int count)
+static inline int sys_write(file_t file, const void *buf, int count)
 {
 	long result =
 		raw_syscall6(SYS_WRITE, (long)file, (long)buf, count, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 
-static inline int sys_close(file_t *file)
+static inline int sys_close(file_t file)
 {
 	long result = raw_syscall6(SYS_CLOSE, (long)file, 0, 0, 0, 0, 0);
 	return (int)syscall_ret(result);
@@ -89,7 +89,7 @@ static inline int sys_mount(const char *source, const char *target,
 	return (int)syscall_ret(result);
 }
 
-static inline int sys_ioctl(file_t *file, int request, void *arg)
+static inline int sys_ioctl(file_t file, int request, void *arg)
 {
 	long result =
 		raw_syscall6(SYS_IOCTL, (long)file, request, (long)arg, 0, 0, 0);

@@ -44,7 +44,15 @@ struct fileio *fio_create()
 {
 	struct fileio *fio = kmalloc(sizeof(struct fileio));
 	memset(fio, 0, sizeof(struct fileio));
+	atomic_init(&fio->refs, 1);
 	return fio;
+}
+
+void fio_retain(struct fileio *file)
+{
+	if (!file)
+		return;
+	atomic_fetch_add_explicit(&file->refs, 1, memory_order_relaxed);
 }
 
 struct fileio *open(const char *path, int flags, mode_t mode)
@@ -141,6 +149,10 @@ int close(struct fileio *file)
 {
 	if (!file) {
 		return -EBADF;
+	}
+
+	if (atomic_fetch_sub_explicit(&file->refs, 1, memory_order_acq_rel) != 1) {
+		return 0;
 	}
 
 	struct vnode *vn = file->private;

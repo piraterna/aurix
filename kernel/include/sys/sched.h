@@ -27,6 +27,7 @@
 #include <stddef.h>
 #include <mm/vmm.h>
 #include <stdatomic.h>
+#include <sys/spinlock.h>
 
 #define STACK_SIZE 4096 * 4 // ~16KB
 
@@ -35,6 +36,10 @@ struct tcb;
 
 #define TCB_MAGIC_ALIVE 0x544352414C495645ULL // "TCRALIVE"
 #define TCB_MAGIC_DEAD 0x544352444541444ULL // "TCRDEAD"
+
+#define PROC_MAX_FDS 256
+
+struct fileio;
 
 typedef struct tcb {
 	uint64_t magic;
@@ -62,6 +67,8 @@ typedef struct pcb {
 	vctx_t *vctx;
 	struct tcb *threads;
 	uint32_t next_tid;
+	spinlock_t fd_lock;
+	struct fileio *fds[PROC_MAX_FDS];
 	const char *name;
 	char *image_elf;
 	size_t image_size;

@@ -32,6 +32,7 @@
 #include <aurix.h>
 #include <stdatomic.h>
 #include <acpi/madt.h>
+#include <vfs/fileio.h>
 
 #ifdef __x86_64__
 #include <platform/time/pit.h>
@@ -295,6 +296,8 @@ void sched_init(void)
 		kernel_proc.vctx = kvctx;
 		kernel_proc.threads = NULL;
 		kernel_proc.next_tid = 0;
+		spinlock_init(&kernel_proc.fd_lock);
+		memset(kernel_proc.fds, 0, sizeof(kernel_proc.fds));
 		kernel_proc_inited = 1;
 	}
 
@@ -351,6 +354,13 @@ pcb *proc_create(void)
 	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
 	proc->next_tid = 0;
+	spinlock_init(&proc->fd_lock);
+	memset(proc->fds, 0, sizeof(proc->fds));
+
+	proc->fds[1] = open("/dev/stdout", O_WRONLY, 0);
+	if (!proc->fds[1]) {
+		warn("proc_create: PID=%u failed to open /dev/stdout\n", proc->pid);
+	}
 
 	uintptr_t kvirt = 0xffffffff80000000ULL;
 	uintptr_t kphys = boot_params->kernel_addr;
@@ -386,6 +396,18 @@ void proc_destroy(pcb *proc)
 		thread_destroy(t);
 		t = next;
 	}
+
+	spinlock_acquire(&proc->fd_lock);
+	for (size_t fd = 1; fd < PROC_MAX_FDS; fd++) {
+		struct fileio *f = proc->fds[fd];
+		proc->fds[fd] = NULL;
+		if (f) {
+			spinlock_release(&proc->fd_lock);
+			close(f);
+			spinlock_acquire(&proc->fd_lock);
+		}
+	}
+	spinlock_release(&proc->fd_lock);
 
 	vdestroy(proc->vctx);
 	destroy_pagemap(proc->pm);

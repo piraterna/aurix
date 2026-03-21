@@ -2,21 +2,14 @@
 
 int print(const char *str)
 {
-	file_t *f = sys_open("/dev/stdout", 0, 0);
-	if (!f) {
-		sys_exit(1);
-	}
-
 	int len = 0;
 	while (str[len])
 		len++;
 
-	if (sys_write(f, str, len) < 0) {
-		sys_close(f);
+	if (sys_write(1, str, len) < 0) {
 		sys_exit(1);
 	}
 
-	sys_close(f);
 	return len;
 }
 

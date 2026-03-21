@@ -9,6 +9,7 @@
 #define EINVAL 6
 #define ENOMEM 7
 #define ENOTTY 8
+#define EMFILE 9
 
 #define ERRNO_NAME(err)           \
 	((err) == EFAULT ? "EFAULT" : \
@@ -19,6 +20,7 @@
 	 (err) == EINVAL ? "EINVAL" : \
 	 (err) == ENOMEM ? "ENOMEM" : \
 	 (err) == ENOTTY ? "ENOTTY" : \
+	 (err) == EMFILE ? "EMFILE" : \
 					   "EUNKNOWN")
 
 #endif // _SYS_ERRNO_H

@@ -35,6 +35,7 @@ enum {
 	SYS_IOCTL = 6,
 	SYS_LOAD_MODULE = 7,
 	SYS_EXEC = 8,
+	SYS_SOUT = 9, // todo: prob dont do this
 };
 
 typedef struct {

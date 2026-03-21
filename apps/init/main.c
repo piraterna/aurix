@@ -9,19 +9,19 @@ static int str_len(const char *s)
 	return len;
 }
 
-static void print_line(file_t *out, const char *msg)
+static void print_line(file_t out, const char *msg)
 {
-	if (!out || !msg) {
+	if (out < 0 || !msg) {
 		return;
 	}
 
 	sys_write(out, msg, str_len(msg));
 }
 
-static void load_modules(file_t *out)
+static void load_modules(file_t out)
 {
-	file_t *list = sys_open("/sys/modules.list", 0, 0);
-	if (!list) {
+	file_t list = sys_open("/sys/modules.list", 0, 0);
+	if (list < 0) {
 		print_line(out,
 				   "init: /sys/modules.list not found, skipping module load\n");
 		return;
@@ -65,13 +65,9 @@ void _start(void)
 {
 	const char *msg = "init: userspace starting\n";
 
-	file_t *f = sys_open("/dev/stdout", 0, 0);
-	if (!f) {
-		sys_exit(1);
-	}
+	file_t f = 1;
 
 	if (sys_write(f, msg, str_len(msg)) < 0) {
-		sys_close(f);
 		sys_exit(1);
 	}
 
@@ -80,7 +76,6 @@ void _start(void)
 	print_line(f, "init: launching /bin/test\n");
 	sys_exec("/bin/test");
 
-	sys_close(f);
 	sys_exit(0);
 	__builtin_unreachable();
 }
