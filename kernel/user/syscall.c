@@ -57,10 +57,6 @@ int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args)
 	}
 	trace("syscall(%d) -> %s\n", id, syscall_table[id].name);
 	int64_t r = syscall_table[id].handler(args);
-	if (r > 0) {
-		error("%s failed with: %s (%d)\n", syscall_table[id].name,
-			  ERRNO_NAME(r), r);
-	}
 	cpu_enable_interrupts();
 	return r;
 }

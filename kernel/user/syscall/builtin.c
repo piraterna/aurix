@@ -122,8 +122,6 @@ int64_t sys_open(const syscall_args_t *args)
 		return -EFAULT;
 	}
 
-	trace("open(%s)\n", path);
-
 	struct pcb *proc = syscall_current_process();
 	if (!proc)
 		return -EINVAL;
