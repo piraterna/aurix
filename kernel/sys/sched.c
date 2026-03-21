@@ -472,7 +472,21 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 			return NULL;
 		}
 
-		uint64_t user_rsp = (uint64_t)user_stack_base + USER_STACK_SIZE;
+		uint64_t user_stack_top =
+			(uint64_t)((uint8_t *)user_stack_base + USER_STACK_SIZE);
+		uint64_t user_zero_start = user_stack_top - (4 * sizeof(uint64_t));
+		uintptr_t user_zero_phys = vget_phys(proc->pm, user_zero_start);
+		if (user_zero_phys == 0) {
+			vfree(proc->vctx, user_stack_base);
+			vfree(kvctx, stack_base);
+			kfree(thread);
+			return NULL;
+		}
+
+		uint64_t *user_stack = (uint64_t *)PHYS_TO_VIRT(user_zero_phys);
+		memset(user_stack, 0, 4 * sizeof(*user_stack));
+
+		uint64_t user_rsp = user_zero_start;
 
 		*--rsp = 0x1b;
 		*--rsp = user_rsp;

@@ -117,10 +117,20 @@ static void isr_handle_user_exception(const struct interrupt_frame *frame)
 		kpanic(frame, exception_str[frame->vector]);
 	}
 
-	error("exception %s (0x%llx) occured in %s (PID=%u, TID=%u)\n",
-		  exception_str[frame->vector], frame->rip,
-		  current->process->name ? current->process->name : "<unknown>",
-		  current->process->pid, current->tid);
+	if (frame->vector == 14) {
+		error(
+			"exception %s rip=0x%llx cr2=0x%llx err=0x%llx occured in %s (PID=%u, TID=%u)\n",
+			exception_str[frame->vector], frame->rip, frame->cr2, frame->err,
+			current->process->name ? current->process->name : "<unknown>",
+			current->process->pid, current->tid);
+	} else {
+		error("exception %s (0x%llx) occured in %s (PID=%u, TID=%u)\n",
+			  exception_str[frame->vector], frame->rip,
+			  current->process->name ? current->process->name : "<unknown>",
+			  current->process->pid, current->tid);
+	}
+
+	error("fsbase value: 0x%llx\n", rdmsr(0xC0000100));
 
 	panic_dump_to_file(frame, exception_str[frame->vector]);
 

@@ -20,6 +20,7 @@
 #include <user/syscall.h>
 #include <debug/log.h>
 #include <sys/errno.h>
+#include <arch/cpu/cpu.h>
 
 syscall_entry_t syscall_table[MAX_SYSCALLS] = { 0 };
 
@@ -48,10 +49,14 @@ int unregister_syscall(uint32_t id)
 
 int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args)
 {
+	cpu_disable_interrupts();
 	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
 		trace("Unknown syscall: %u\n", id);
+		cpu_enable_interrupts();
 		return -ENOSYS;
 	}
 	trace("syscall(%d) -> %s\n", id, syscall_table[id].name);
-	return syscall_table[id].handler(args);
+	int64_t r = syscall_table[id].handler(args);
+	cpu_enable_interrupts();
+	return r;
 }

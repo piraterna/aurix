@@ -43,7 +43,7 @@ void gdt_init()
 				  0x0a); //KCS //TODO: Set accessed bit?
 	gdt_set_entry(&gdt[cpu][2], 0, 0xfffff, 0x92, 0x0c); //KDS
 	gdt_set_entry(&gdt[cpu][3], 0, 0xfffff, 0xf2,
-				  0x0c); //UDS //REORDERED BECAUSE OF SYSRET
+				  0x0c); //UDS
 	gdt_set_entry(&gdt[cpu][4], 0, 0xfffff, 0xfa, 0x0a); //UCS
 	gdt_set_entry(&gdt[cpu][5], ((uint64_t)&gdt_tss[cpu]) & 0xffffffff,
 				  sizeof(struct tss) - 1, 0x89,
