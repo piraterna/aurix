@@ -100,7 +100,7 @@ typedef struct {
 
 static log_sink_t g_log_sinks[LOG_SINK_MAX] = {
 	{ serial_kprintf, LOG_VERBOSITY_SERIAL },
-	{ kprintf, LOG_VERBOSITY_DISPLAY }
+	{ flanterm_kprintf, LOG_VERBOSITY_DISPLAY }
 };
 
 #define _log_dispatch(tag_style, line_style, level_str, level_val, fmt, ...) \

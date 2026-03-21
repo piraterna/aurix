@@ -60,11 +60,12 @@ typedef int64_t (*syscall_handler_t)(const syscall_args_t *args);
 typedef struct {
 	syscall_handler_t handler;
 	uint8_t valid;
+	const char *name;
 } syscall_entry_t;
 
 extern syscall_entry_t syscall_table[MAX_SYSCALLS];
 
-int register_syscall(uint32_t id, syscall_handler_t handler);
+int register_syscall(uint32_t id, syscall_handler_t handler, const char *name);
 int unregister_syscall(uint32_t id);
 int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args);
 

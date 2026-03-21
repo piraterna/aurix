@@ -23,7 +23,7 @@
 
 syscall_entry_t syscall_table[MAX_SYSCALLS] = { 0 };
 
-int register_syscall(uint32_t id, syscall_handler_t handler)
+int register_syscall(uint32_t id, syscall_handler_t handler, const char *name)
 {
 	if (id >= MAX_SYSCALLS || !handler) {
 		error("Failed to register syscall with invalid ID %u\n", id);
@@ -31,6 +31,7 @@ int register_syscall(uint32_t id, syscall_handler_t handler)
 	}
 	syscall_table[id].handler = handler;
 	syscall_table[id].valid = 1;
+	syscall_table[id].name = name;
 	return 0;
 }
 
@@ -51,6 +52,6 @@ int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args)
 		trace("Unknown syscall: %u\n", id);
 		return -ENOSYS;
 	}
-	trace("syscall(%d)\n", id);
+	trace("syscall(%d) -> %s\n", id, syscall_table[id].name);
 	return syscall_table[id].handler(args);
 }

@@ -160,7 +160,8 @@ if [ ! -f Makefile ]; then
         --enable-threads=posix \
         --disable-multilib \
         --enable-shared \
-        --enable-host-shared
+        --enable-host-shared \
+        --with-pic 
 else
     echo "[skip] gcc already configured"
 fi
