@@ -41,6 +41,7 @@
 #define FD_STDOUT 1
 #define FD_FIRST_DYNAMIC 2
 
+#define PROT_NONE 0x0
 #define PROT_READ 0x1
 #define PROT_WRITE 0x2
 #define PROT_EXEC 0x4
@@ -75,6 +76,31 @@ static struct pcb *syscall_current_process(void)
 	if (!current)
 		return NULL;
 	return current->process;
+}
+
+static bool vregion_overlaps(vctx_t *ctx, uint64_t vaddr, size_t pages)
+{
+	if (!ctx || !ctx->root || pages == 0)
+		return false;
+
+	uint64_t size = pages * PAGE_SIZE;
+	if (size / PAGE_SIZE != pages)
+		return true;
+
+	uint64_t vend = vaddr + size;
+	if (vend < vaddr)
+		return true;
+
+	for (vregion_t *region = ctx->root; region; region = region->next) {
+		if (region->pages == 0)
+			continue;
+		uint64_t rstart = region->start;
+		uint64_t rend = region->start + (region->pages * PAGE_SIZE);
+		if (vaddr < rend && vend > rstart)
+			return true;
+	}
+
+	return false;
 }
 
 static struct fileio *proc_fd_lookup_locked(struct pcb *proc, int fd)
@@ -382,6 +408,15 @@ int64_t sys_exec(const syscall_args_t *args)
 	uint64_t image_addr = 0;
 	size_t image_size = 0;
 	uintptr_t entry = elf_load(buf, &image_addr, &image_size, proc->pm);
+
+	uintptr_t link_base = 0;
+	size_t load_size = 0;
+	if (entry && elf_get_load_range(buf, &link_base, &load_size) &&
+		load_size > 0) {
+		size_t pages = DIV_ROUND_UP(load_size, PAGE_SIZE);
+		vreserve(proc->vctx, link_base, pages, VALLOC_USER);
+	}
+
 	kfree(buf);
 	if (entry == 0) {
 		proc_destroy(proc);
@@ -446,6 +481,8 @@ int64_t sys_mmap(const syscall_args_t *args)
 		return -EINVAL;
 
 	uint64_t vflags = VALLOC_USER;
+	if (prot == PROT_NONE)
+		vflags |= VALLOC_NO_PRESENT;
 	if (prot & PROT_READ)
 		vflags |= VALLOC_READ;
 	if (prot & PROT_WRITE)
@@ -457,6 +494,9 @@ int64_t sys_mmap(const syscall_args_t *args)
 	uintptr_t min_addr = VPM_MIN_ADDR;
 	uintptr_t hint = (uintptr_t)addr;
 
+	if ((flags & MAP_FIXED) && (flags & MAP_FIXED_NOREPLACE))
+		return -EINVAL;
+
 	if (flags & (MAP_FIXED | MAP_FIXED_NOREPLACE)) {
 		if (!addr)
 			return -EINVAL;
@@ -464,6 +504,12 @@ int64_t sys_mmap(const syscall_args_t *args)
 			return -EINVAL;
 		if (hint < min_addr)
 			return -EINVAL;
+		if (flags & MAP_FIXED_NOREPLACE) {
+			if (vregion_overlaps(proc->vctx, hint, pages))
+				return -EEXIST;
+		} else {
+			vfree_range(proc->vctx, hint, pages);
+		}
 		mapped = vallocatv(proc->vctx, hint, pages, vflags);
 	} else if (addr != NULL) {
 		if (hint < min_addr)
@@ -537,14 +583,11 @@ int64_t sys_munmap(const syscall_args_t *args)
 	if (!proc || !proc->vctx)
 		return -EINVAL;
 
-	vregion_t *region = vget(proc->vctx, (uint64_t)(uintptr_t)addr);
-	if (!region || region->start != (uint64_t)(uintptr_t)addr)
+	size_t pages = DIV_ROUND_UP(length, PAGE_SIZE);
+	if (pages == 0)
 		return -EINVAL;
 
-	if (length > (region->pages * PAGE_SIZE))
-		return -EINVAL;
-
-	vfree(proc->vctx, addr);
+	vfree_range(proc->vctx, (uint64_t)(uintptr_t)addr, pages);
 	return 0;
 }
 

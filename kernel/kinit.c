@@ -50,6 +50,7 @@
 #include <loader/elf.h>
 #include <user/syscall.h>
 #include <dev/builtin/stdio.h>
+#include <lib/align.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -127,6 +128,14 @@ pcb *load_init(const char *path)
 
 	uint64_t addr, size = 0;
 	uintptr_t entry = elf_load(buf, &addr, &size, proc->pm);
+
+	uintptr_t link_base = 0;
+	size_t load_size = 0;
+	if (entry && elf_get_load_range(buf, &link_base, &load_size) &&
+		load_size > 0) {
+		size_t pages = DIV_ROUND_UP(load_size, PAGE_SIZE);
+		vreserve(proc->vctx, link_base, pages, VALLOC_USER);
+	}
 	if (entry == 0) {
 		error("failed to load ELF: %s\n", path);
 		proc_destroy(proc);
