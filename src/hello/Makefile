@@ -17,7 +17,7 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-APP_NAME := test
+APP_NAME := hello
 
 BUILD_DIR := $(BUILD_DIR)/$(APP_NAME)
 APP_FILE := $(BUILD_DIR)/$(APP_NAME)

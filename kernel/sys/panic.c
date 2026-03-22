@@ -173,6 +173,14 @@ void panic_dump_to_file(const struct interrupt_frame *frame, const char *reason)
 
 void kpanic(const struct interrupt_frame *frame, const char *reason)
 {
+	kpanic_nohalt(frame, reason);
+	for (;;)
+		cpu_halt();
+	UNREACHABLE();
+}
+
+void kpanic_nohalt(const struct interrupt_frame *frame, const char *reason)
+{
 	cpu_disable_interrupts();
 	_log_force_unlock();
 
@@ -254,10 +262,6 @@ void kpanic(const struct interrupt_frame *frame, const char *reason)
 		KPANIC_RED_BG
 		"==========================================================" KPANIC_RESET
 		"\n");
-
-	for (;;)
-		cpu_halt();
-	UNREACHABLE();
 }
 
 void kpanicf(const struct interrupt_frame *frame, const char *fmt, ...)

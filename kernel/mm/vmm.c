@@ -357,6 +357,10 @@ void *vadd(vctx_t *ctx, uint64_t vaddr, uint64_t paddr, size_t pages,
 
 	vregion_t *region = ctx->root;
 	while (region) {
+		if (region->pages == 0) {
+			region = region->next;
+			continue;
+		}
 		uint64_t rstart = region->start;
 		uint64_t rend = region->start + region->pages * PAGE_SIZE;
 

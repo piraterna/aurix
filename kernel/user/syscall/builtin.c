@@ -30,9 +30,11 @@
 #include <sys/errno.h>
 #include <loader/module.h>
 #include <time/time.h>
+#include <aurix.h>
 
 #if defined(__x86_64__)
 #include <arch/cpu/cpu.h>
+#include <arch/cpu/syscall.h>
 #endif
 
 #include <loader/elf.h>
@@ -103,6 +105,163 @@ static bool vregion_overlaps(vctx_t *ctx, uint64_t vaddr, size_t pages)
 	return false;
 }
 
+static char *syscall_normalize_path(const char *path)
+{
+	if (!path)
+		return NULL;
+
+	size_t len = strlen(path);
+	bool abs = (len > 0 && path[0] == '/');
+
+	char *temp = kmalloc(len + 1);
+	if (!temp)
+		return NULL;
+	memcpy(temp, path, len + 1);
+
+	size_t max_parts = (len / 2) + 2;
+	char **parts = kmalloc(max_parts * sizeof(char *));
+	if (!parts) {
+		kfree(temp);
+		return NULL;
+	}
+
+	size_t count = 0;
+	char *save = NULL;
+	char *token = strtok_r(temp, "/", &save);
+	while (token) {
+		if (strcmp(token, ".") == 0 || *token == '\0') {
+			// skip
+		} else if (strcmp(token, "..") == 0) {
+			if (count > 0 && strcmp(parts[count - 1], "..") != 0) {
+				count--;
+			} else if (!abs) {
+				parts[count++] = token;
+			}
+		} else {
+			parts[count++] = token;
+		}
+		token = strtok_r(NULL, "/", &save);
+	}
+
+	size_t out_len = abs ? 1 : 0;
+	for (size_t i = 0; i < count; i++)
+		out_len += strlen(parts[i]) + 1;
+	if (out_len == 0)
+		out_len = 1;
+
+	char *out = kmalloc(out_len + 1);
+	if (!out) {
+		kfree(parts);
+		kfree(temp);
+		return NULL;
+	}
+
+	char *cursor = out;
+	if (abs)
+		*cursor++ = '/';
+
+	for (size_t i = 0; i < count; i++) {
+		size_t part_len = strlen(parts[i]);
+		memcpy(cursor, parts[i], part_len);
+		cursor += part_len;
+		if (i + 1 < count)
+			*cursor++ = '/';
+	}
+
+	if (cursor == out) {
+		*cursor++ = '/';
+	}
+	*cursor = '\0';
+
+	kfree(parts);
+	kfree(temp);
+	return out;
+}
+
+static char *syscall_resolve_path(struct pcb *proc, const char *path)
+{
+	if (!path)
+		return NULL;
+	if (path[0] == '/')
+		return syscall_normalize_path(path);
+
+	const char *cwd = (proc && proc->cwd) ? proc->cwd : "/";
+	size_t cwd_len = strlen(cwd);
+	size_t path_len = strlen(path);
+	bool need_slash = (cwd_len == 0 || cwd[cwd_len - 1] != '/');
+
+	size_t total = cwd_len + (need_slash ? 1 : 0) + path_len + 1;
+	char *combined = kmalloc(total);
+	if (!combined)
+		return NULL;
+	memcpy(combined, cwd, cwd_len);
+	size_t pos = cwd_len;
+	if (need_slash)
+		combined[pos++] = '/';
+	memcpy(combined + pos, path, path_len);
+	combined[pos + path_len] = '\0';
+
+	char *normalized = syscall_normalize_path(combined);
+	kfree(combined);
+	return normalized;
+}
+
+static uint64_t pflags_to_vflags(uint64_t pflags)
+{
+	uint64_t vflags = VALLOC_READ;
+	if (pflags & VMM_WRITABLE)
+		vflags |= VALLOC_WRITE;
+	if (pflags & VMM_USER)
+		vflags |= VALLOC_USER;
+	if (!(pflags & VMM_NX))
+		vflags |= VALLOC_EXEC;
+	if (!(pflags & VMM_PRESENT))
+		vflags |= VALLOC_NO_PRESENT;
+	return vflags;
+}
+
+static int syscall_clone_memory(struct pcb *parent, struct pcb *child)
+{
+	if (!parent || !child || !parent->vctx || !child->vctx)
+		return -EINVAL;
+
+	for (vregion_t *region = parent->vctx->root; region;
+		 region = region->next) {
+		if (region->pages == 0)
+			continue;
+
+		uint64_t vflags = pflags_to_vflags(region->flags);
+		if (!(region->flags & VMM_PRESENT)) {
+			if (!vreserve(child->vctx, region->start, region->pages, vflags))
+				return -ENOMEM;
+			continue;
+		}
+
+		uint64_t phys = (uint64_t)palloc(region->pages);
+		if (!phys)
+			return -ENOMEM;
+
+		if (!vadd(child->vctx, region->start, phys, region->pages, vflags)) {
+			pfree((void *)phys, region->pages);
+			return -ENOMEM;
+		}
+
+		for (size_t i = 0; i < region->pages; i++) {
+			uintptr_t virt = region->start + (i * PAGE_SIZE);
+			uintptr_t src_phys = vget_phys(parent->pm, virt);
+			void *dst = (void *)PHYS_TO_VIRT(phys + (i * PAGE_SIZE));
+			if (src_phys) {
+				void *src = (void *)PHYS_TO_VIRT(src_phys);
+				memcpy(dst, src, PAGE_SIZE);
+			} else {
+				memset(dst, 0, PAGE_SIZE);
+			}
+		}
+	}
+
+	return 0;
+}
+
 static struct fileio *proc_fd_lookup_locked(struct pcb *proc, int fd)
 {
 	if (!proc || fd < 0 || fd >= PROC_MAX_FDS)
@@ -152,7 +311,12 @@ int64_t sys_open(const syscall_args_t *args)
 	if (!proc)
 		return -EINVAL;
 
-	struct fileio *f = open(path, flags, mode);
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	struct fileio *f = open(resolved, flags, mode);
+	kfree(resolved);
 	if (!f) {
 		error("open(): failed to open %s (%s)\n", path, ERRNO_NAME(ENOENT));
 		return -ENOENT;
@@ -331,7 +495,13 @@ int64_t sys_load_module(const syscall_args_t *args)
 		return -EFAULT;
 	}
 
-	struct fileio *f = open(path, O_RDONLY, 0);
+	struct pcb *proc = syscall_current_process();
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	struct fileio *f = open(resolved, O_RDONLY, 0);
+	kfree(resolved);
 	if (!f) {
 		return -ENOENT;
 	}
@@ -371,9 +541,16 @@ int64_t sys_exec(const syscall_args_t *args)
 	if (!path)
 		return -EFAULT;
 
-	struct fileio *f = open(path, O_RDONLY, 0);
-	if (!f)
+	struct pcb *cur = syscall_current_process();
+	char *resolved = syscall_resolve_path(cur, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	struct fileio *f = open(resolved, O_RDONLY, 0);
+	if (!f) {
+		kfree(resolved);
 		return -ENOENT;
+	}
 
 	if (f->size == 0) {
 		close(f);
@@ -400,18 +577,97 @@ int64_t sys_exec(const syscall_args_t *args)
 		return -ENOMEM;
 	}
 
-	char *name_copy = kmalloc(strlen(path) + 1);
+	char *name_copy = kmalloc(strlen(resolved) + 1);
 	if (name_copy)
-		strcpy(name_copy, path);
+		strcpy(name_copy, resolved);
 	proc->name = (const char *)name_copy;
 
 	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, path, proc, &entry)) {
+	if (!elf_load_user_process(buf, resolved, proc, &entry)) {
+		kfree(resolved);
 		kfree(buf);
 		proc_destroy(proc);
 		return -EINVAL;
 	}
 
+	kfree(resolved);
+
+	kfree(buf);
+
+	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
+	if (!thread) {
+		proc_destroy(proc);
+		return -ENOMEM;
+	}
+
+	thread->joinable = true;
+	int code = thread_wait(thread);
+	proc_destroy(proc);
+	return code;
+}
+
+int64_t sys_execve(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+	const char *const *argv = (const char *const *)args->rsi;
+	const char *const *envp = (const char *const *)args->rdx;
+
+	(void)argv;
+	(void)envp;
+
+	if (!path)
+		return -EFAULT;
+
+	struct pcb *cur = syscall_current_process();
+	char *resolved = syscall_resolve_path(cur, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	struct fileio *f = open(resolved, O_RDONLY, 0);
+	if (!f) {
+		kfree(resolved);
+		return -ENOENT;
+	}
+
+	if (f->size == 0) {
+		close(f);
+		return -EINVAL;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		close(f);
+		return -ENOMEM;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		close(f);
+		kfree(buf);
+		return -EIO;
+	}
+
+	close(f);
+
+	struct pcb *proc = proc_create();
+	if (!proc) {
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	char *name_copy = kmalloc(strlen(resolved) + 1);
+	if (name_copy)
+		strcpy(name_copy, resolved);
+	proc->name = (const char *)name_copy;
+
+	uintptr_t entry = 0;
+	if (!elf_load_user_process(buf, resolved, proc, &entry)) {
+		kfree(resolved);
+		kfree(buf);
+		proc_destroy(proc);
+		return -EINVAL;
+	}
+
+	kfree(resolved);
 	kfree(buf);
 
 	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
@@ -638,6 +894,95 @@ int64_t sys_mprotect(const syscall_args_t *args)
 	return 0;
 }
 
+int64_t sys_getcwd(const syscall_args_t *args)
+{
+	char *buf = (char *)args->rdi;
+	size_t size = (size_t)args->rsi;
+
+	if (!buf || size == 0)
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	const char *cwd = (proc && proc->cwd) ? proc->cwd : "/";
+	size_t len = strlen(cwd);
+	if (len + 1 > size)
+		return -ERANGE;
+	memcpy(buf, cwd, len + 1);
+	return 0;
+}
+
+int64_t sys_fork(const syscall_args_t *args)
+{
+	(void)args;
+	kprintf("fork() called\n");
+	return -ENOSYS;
+}
+
+int64_t sys_chdir(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+	if (!path)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	struct vnode *vnode = NULL;
+	int ret = vfs_lookup(resolved, &vnode);
+	if (ret != 0) {
+		kfree(resolved);
+		return -ENOENT;
+	}
+
+	if (!vnode || vnode->vtype != VNODE_DIR) {
+		vnode_unref(vnode);
+		kfree(resolved);
+		return -ENOTDIR;
+	}
+
+	vnode_unref(vnode);
+	if (proc->cwd)
+		kfree(proc->cwd);
+	proc->cwd = resolved;
+	return 0;
+}
+
+int64_t sys_waitpid(const syscall_args_t *args)
+{
+	int pid = (int)args->rdi;
+	int *status = (int *)args->rsi;
+	int options = (int)args->rdx;
+
+	if (pid <= 0)
+		return -EINVAL;
+	if (options != 0)
+		return -EINVAL;
+
+	struct pcb *parent = syscall_current_process();
+	if (!parent)
+		return -EINVAL;
+
+	struct pcb *child = proc_get_by_pid((uint32_t)pid);
+	if (!child)
+		return -ECHILD;
+	if (child->parent_pid != parent->pid)
+		return -ECHILD;
+
+	while (!child->exited)
+		sched_yield();
+
+	if (status)
+		*status = (child->exit_code & 0xff) << 8;
+
+	proc_destroy(child);
+	return pid;
+}
+
 int64_t sys_clock_get(const syscall_args_t *args)
 {
 	int clock = (int)args->rdi;
@@ -694,4 +1039,9 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_MPROTECT, sys_mprotect, "mprotect");
 	register_syscall(SYS_CLOCK_GET, sys_clock_get, "clock_get");
 	register_syscall(SYS_SET_FS_BASE, sys_set_fs_base, "set_fs_base");
+	register_syscall(SYS_GETCWD, sys_getcwd, "getcwd");
+	register_syscall(SYS_FORK, sys_fork, "fork");
+	register_syscall(SYS_CHDIR, sys_chdir, "chdir");
+	register_syscall(SYS_WAITPID, sys_waitpid, "waitpid");
+	register_syscall(SYS_EXECVE, sys_execve, "execve");
 }
