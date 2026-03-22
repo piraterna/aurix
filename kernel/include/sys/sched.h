@@ -29,7 +29,8 @@
 #include <stdatomic.h>
 #include <sys/spinlock.h>
 
-#define STACK_SIZE 4096 * 4 // ~16KB
+#define STACK_SIZE 4096 * 8 // ~32KB
+#define USER_STACK_SIZE (1024 * 1024)
 
 struct pcb;
 struct tcb;
@@ -76,6 +77,9 @@ typedef struct pcb {
 	uintptr_t image_load_base;
 	uintptr_t image_link_base;
 	size_t image_exec_size;
+	uintptr_t user_stack_base;
+	size_t user_stack_size;
+	uintptr_t user_rsp;
 } pcb;
 
 void sched_init(void);

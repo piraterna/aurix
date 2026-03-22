@@ -23,12 +23,28 @@
 #include <lib/align.h>
 #include <lib/string.h>
 #include <loader/elf.h>
+#include <mm/heap.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <sys/axapi.h>
+#include <sys/sched.h>
+#include <time/time.h>
+#include <vfs/fileio.h>
+#include <vfs/vfs.h>
 #include <aurix.h>
 
 #include <stdint.h>
+
+#define AT_NULL 0
+#define AT_PHDR 3
+#define AT_PHENT 4
+#define AT_PHNUM 5
+#define AT_PAGESZ 6
+#define AT_BASE 7
+#define AT_ENTRY 9
+#define AT_RANDOM 25
+#define AT_EXECFN 31
+#define AT_SECURE 23
 
 /* https://github.com/KevinAlavik/nekonix/blob/main/kernel/src/proc/elf.c */
 /* Thanks, Kevin <3 */
@@ -56,11 +72,11 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 	uintptr_t base_vaddr = (uintptr_t)-1;
 	uintptr_t end_vaddr = 0;
 
+	bool has_interp = false;
 	for (uint16_t i = 0; i < header->e_phnum; i++) {
 		if (ph[i].p_type == PT_INTERP) {
-			error("elf64_load(): dynamic interpreter not supported (%s)\n",
-				  (char *)((uintptr_t)data + ph[i].p_offset));
-			return 0;
+			has_interp = true;
+			continue;
 		}
 
 		if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
@@ -124,7 +140,8 @@ uintptr_t elf64_load(char *data, uintptr_t *addr, size_t *size,
 		}
 	}
 
-	elf64_apply_relocations_ex(header, phys_base, base_vaddr, base_vaddr);
+	if (!(header->e_type == ET_DYN && has_interp))
+		elf64_apply_relocations_ex(header, phys_base, base_vaddr, base_vaddr);
 
 	uintptr_t entry_addr = (uintptr_t)header->e_entry;
 	if (header->e_type == ET_DYN) {
@@ -178,7 +195,8 @@ bool elf_get_load_range(char *data, uintptr_t *link_base_out, size_t *size_out)
 }
 
 bool elf_load_image_at(char *data, pagetable *pagemap, uintptr_t load_base,
-					   elf_loaded_image_t *out)
+					   elf_loaded_image_t *out, bool user_mode,
+					   bool apply_relocs)
 {
 	if (!data || !pagemap || !out)
 		return false;
@@ -216,11 +234,13 @@ bool elf_load_image_at(char *data, pagetable *pagemap, uintptr_t load_base,
 		return false;
 	}
 
-	return elf_load_image_mapped(data, pagemap, load_base, phys_base, out);
+	return elf_load_image_mapped(data, pagemap, load_base, phys_base, out,
+								 user_mode, apply_relocs);
 }
 
 bool elf_load_image_mapped(char *data, pagetable *pagemap, uintptr_t load_base,
-						   uintptr_t phys_base, elf_loaded_image_t *out)
+						   uintptr_t phys_base, elf_loaded_image_t *out,
+						   bool user_mode, bool apply_relocs)
 {
 	if (!data || !pagemap || !out)
 		return false;
@@ -267,6 +287,8 @@ bool elf_load_image_mapped(char *data, pagetable *pagemap, uintptr_t load_base,
 		uintptr_t seg_virt = load_base + (aligned_vaddr - link_base);
 
 		uint64_t flags = VMM_PRESENT;
+		if (user_mode)
+			flags |= VMM_USER;
 		if (ph[i].p_flags & PF_W)
 			flags |= VMM_WRITABLE;
 		if (!(ph[i].p_flags & PF_X))
@@ -283,7 +305,8 @@ bool elf_load_image_mapped(char *data, pagetable *pagemap, uintptr_t load_base,
 		}
 	}
 
-	elf64_apply_relocations_ex(header, phys_base, load_base, link_base);
+	if (apply_relocs)
+		elf64_apply_relocations_ex(header, phys_base, load_base, link_base);
 
 	out->phys_base = phys_base;
 	out->load_base = load_base;
@@ -555,5 +578,327 @@ bool elf_lookup_addr(char *elf_data, uintptr_t addr, const char **name_out,
 	*name_out = strtab + best->st_name;
 	if (sym_addr_out)
 		*sym_addr_out = (uintptr_t)best->st_value;
+	return true;
+}
+
+static bool elf64_get_interp(char *data, const char **path_out)
+{
+	if (!data || !path_out)
+		return false;
+	*path_out = NULL;
+
+	Elf64_Ehdr *header = (Elf64_Ehdr *)data;
+	if (header->e_ident[EI_MAG0] != ELFMAG0 ||
+		header->e_ident[EI_MAG1] != ELFMAG1 ||
+		header->e_ident[EI_MAG2] != ELFMAG2 ||
+		header->e_ident[EI_MAG3] != ELFMAG3)
+		return false;
+	if (header->e_ident[EI_CLASS] != ELFCLASS64)
+		return false;
+
+	Elf64_Phdr *ph = (Elf64_Phdr *)((uint8_t *)data + header->e_phoff);
+	for (uint16_t i = 0; i < header->e_phnum; i++) {
+		if (ph[i].p_type != PT_INTERP)
+			continue;
+		if (ph[i].p_filesz == 0)
+			return false;
+
+		const char *interp = (const char *)((uintptr_t)data + ph[i].p_offset);
+		for (size_t j = 0; j < (size_t)ph[i].p_filesz; j++) {
+			if (interp[j] == '\0') {
+				*path_out = interp;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	return false;
+}
+
+bool elf_get_interpreter(char *data, const char **path_out)
+{
+	if (!data || !path_out)
+		return false;
+	*path_out = NULL;
+
+	Elf64_Ehdr *header = (Elf64_Ehdr *)data;
+	if (header->e_ident[EI_CLASS] == ELFCLASS64)
+		return elf64_get_interp(data, path_out);
+
+	return false;
+}
+
+static uintptr_t vfind_free_range(vctx_t *ctx, size_t pages, uintptr_t min_addr)
+{
+	if (!ctx || !ctx->root || pages == 0)
+		return 0;
+
+	uint64_t size = pages * PAGE_SIZE;
+	if (size / PAGE_SIZE != pages)
+		return 0;
+
+	uint64_t start = ctx->root->start;
+	if (start < min_addr)
+		start = min_addr;
+	start = ALIGN_UP(start, PAGE_SIZE);
+
+	for (vregion_t *region = ctx->root; region; region = region->next) {
+		uint64_t rstart = region->start;
+		uint64_t rend = region->start + (region->pages * PAGE_SIZE);
+		if (region->pages == 0) {
+			continue;
+		}
+		if (start + size <= rstart)
+			return start;
+		if (rend > start)
+			start = ALIGN_UP(rend, PAGE_SIZE);
+	}
+
+	return start;
+}
+
+static bool write_user_bytes(struct pcb *proc, uintptr_t dest, const void *src,
+							 size_t len)
+{
+	if (!proc || !src)
+		return false;
+
+	const uint8_t *bytes = (const uint8_t *)src;
+	size_t offset = 0;
+	while (offset < len) {
+		uintptr_t addr = dest + offset;
+		uintptr_t phys = vget_phys(proc->pm, addr);
+		if (!phys)
+			return false;
+
+		size_t chunk = PAGE_SIZE - (addr & (PAGE_SIZE - 1));
+		if (chunk > (len - offset))
+			chunk = len - offset;
+		memcpy((void *)PHYS_TO_VIRT(phys), bytes + offset, chunk);
+		offset += chunk;
+	}
+
+	return true;
+}
+
+static bool write_user_u64(struct pcb *proc, uintptr_t dest, uint64_t value)
+{
+	return write_user_bytes(proc, dest, &value, sizeof(value));
+}
+
+static bool elf_build_user_stack(struct pcb *proc, const char *exec_path,
+								 uintptr_t exec_entry, uintptr_t phdr,
+								 size_t phent, size_t phnum,
+								 uintptr_t interp_base)
+{
+	if (!proc || proc->user_stack_base)
+		return false;
+
+	size_t pages = DIV_ROUND_UP(USER_STACK_SIZE, PAGE_SIZE);
+	uint8_t *user_stack_base =
+		valloc(proc->vctx, pages, VALLOC_RW | VALLOC_USER);
+	if (!user_stack_base)
+		return false;
+
+	uintptr_t sp = (uintptr_t)user_stack_base + USER_STACK_SIZE;
+
+	uint8_t random_bytes[16];
+	uint64_t seed = (uint64_t)get_ms() ^ (uintptr_t)proc ^ exec_entry;
+	for (size_t i = 0; i < sizeof(random_bytes); i++) {
+		seed = seed * 6364136223846793005ULL + 1;
+		random_bytes[i] = (uint8_t)(seed >> 56);
+	}
+
+	sp -= sizeof(random_bytes);
+	uintptr_t random_ptr = sp;
+	if (!write_user_bytes(proc, random_ptr, random_bytes, sizeof(random_bytes)))
+		return false;
+
+	const char *execfn = exec_path ? exec_path : "";
+	size_t execfn_len = strlen(execfn) + 1;
+	sp -= execfn_len;
+	uintptr_t execfn_ptr = sp;
+	if (!write_user_bytes(proc, execfn_ptr, execfn, execfn_len))
+		return false;
+
+	sp = ALIGN_DOWN(sp, 16);
+
+	struct {
+		uintptr_t type;
+		uintptr_t value;
+	} auxv[] = { { AT_PHDR, phdr },			{ AT_PHENT, phent },
+				 { AT_PHNUM, phnum },		{ AT_PAGESZ, PAGE_SIZE },
+				 { AT_BASE, interp_base },	{ AT_ENTRY, exec_entry },
+				 { AT_EXECFN, execfn_ptr }, { AT_RANDOM, random_ptr },
+				 { AT_SECURE, 0 },			{ AT_NULL, 0 } };
+
+	size_t argv_count = 1;
+	size_t envp_count = 0;
+	size_t auxv_count = sizeof(auxv) / sizeof(auxv[0]);
+	size_t total_words =
+		1 + (argv_count + 1) + (envp_count + 1) + (auxv_count * 2);
+	size_t bytes = total_words * sizeof(uintptr_t);
+	if (bytes > USER_STACK_SIZE)
+		return false;
+
+	uintptr_t stack_base = ALIGN_DOWN(sp - bytes, 16);
+	if (stack_base < (uintptr_t)user_stack_base)
+		return false;
+	uintptr_t cursor = stack_base;
+
+	if (!write_user_u64(proc, cursor, (uint64_t)argv_count))
+		return false;
+	cursor += sizeof(uint64_t);
+
+	if (!write_user_u64(proc, cursor, execfn_ptr))
+		return false;
+	cursor += sizeof(uint64_t);
+
+	if (!write_user_u64(proc, cursor, 0))
+		return false;
+	cursor += sizeof(uint64_t);
+
+	if (!write_user_u64(proc, cursor, 0))
+		return false;
+	cursor += sizeof(uint64_t);
+
+	for (size_t i = 0; i < auxv_count; i++) {
+		if (!write_user_u64(proc, cursor, auxv[i].type))
+			return false;
+		cursor += sizeof(uint64_t);
+		if (!write_user_u64(proc, cursor, auxv[i].value))
+			return false;
+		cursor += sizeof(uint64_t);
+	}
+
+	trace(
+		"user stack base=%p top=%p rsp=%p execfn=%p random=%p words=%zu bytes=%zu\n",
+		user_stack_base, (void *)((uintptr_t)user_stack_base + USER_STACK_SIZE),
+		(void *)stack_base, (void *)execfn_ptr, (void *)random_ptr, total_words,
+		bytes);
+	proc->user_stack_base = (uintptr_t)user_stack_base;
+	proc->user_stack_size = USER_STACK_SIZE;
+	proc->user_rsp = stack_base;
+	return true;
+}
+
+static bool elf_load_interpreter(struct pcb *proc, const char *path,
+								 uintptr_t *entry_out, uintptr_t *base_out)
+{
+	if (!proc || !path || !entry_out || !base_out)
+		return false;
+
+	struct fileio *f = open(path, O_RDONLY, 0);
+	if (!f) {
+		trace("interpreter not found: %s\n", path);
+		return false;
+	}
+
+	if (f->size == 0) {
+		close(f);
+		return false;
+	}
+
+	char *buf = (char *)kmalloc(f->size);
+	if (!buf) {
+		close(f);
+		return false;
+	}
+
+	if (read(f, f->size, buf) != f->size) {
+		close(f);
+		kfree(buf);
+		return false;
+	}
+
+	close(f);
+
+	uintptr_t link_base = 0;
+	size_t exec_size = 0;
+	if (!elf_get_load_range(buf, &link_base, &exec_size) || exec_size == 0) {
+		kfree(buf);
+		return false;
+	}
+
+	exec_size = (size_t)ALIGN_UP(exec_size, PAGE_SIZE);
+	size_t pages = exec_size / PAGE_SIZE;
+	uintptr_t load_base = vfind_free_range(proc->vctx, pages, 0x40000000ULL);
+	if (load_base == 0) {
+		kfree(buf);
+		return false;
+	}
+
+	if (!vreserve(proc->vctx, load_base, pages, VALLOC_USER)) {
+		kfree(buf);
+		return false;
+	}
+
+	elf_loaded_image_t img;
+	if (!elf_load_image_at(buf, proc->pm, load_base, &img, true, false)) {
+		vfree_range(proc->vctx, load_base, pages);
+		kfree(buf);
+		return false;
+	}
+
+	*entry_out = img.entry;
+	*base_out = img.load_base;
+	kfree(buf);
+	return true;
+}
+
+bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
+						   uintptr_t *entry_out)
+{
+	if (!data || !proc || !entry_out)
+		return false;
+
+	const char *interp_path = NULL;
+	bool has_interp = elf_get_interpreter(data, &interp_path);
+	if (has_interp && interp_path && *interp_path)
+		trace("ELF PT_INTERP: %s\n", interp_path);
+	else
+		trace("ELF PT_INTERP: none\n");
+
+	uint64_t addr = 0;
+	size_t size = 0;
+	uintptr_t exec_entry = elf_load(data, &addr, &size, proc->pm);
+	if (!exec_entry)
+		return false;
+
+	proc->image_phys_base = addr;
+	proc->image_exec_size = size;
+	proc->image_size = size;
+
+	uintptr_t link_base = 0;
+	size_t load_size = 0;
+	if (elf_get_load_range(data, &link_base, &load_size) && load_size > 0) {
+		size_t pages = DIV_ROUND_UP(load_size, PAGE_SIZE);
+		vreserve(proc->vctx, link_base, pages, VALLOC_USER);
+	}
+	proc->image_load_base = link_base;
+	proc->image_link_base = link_base;
+
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)data;
+	uintptr_t phdr = 0;
+	if (ehdr->e_phoff)
+		phdr = link_base + (uintptr_t)ehdr->e_phoff;
+
+	uintptr_t interp_entry = 0;
+	uintptr_t interp_base = 0;
+	if (has_interp && interp_path && *interp_path) {
+		if (!elf_load_interpreter(proc, interp_path, &interp_entry,
+								  &interp_base)) {
+			error("failed to load interpreter: %s\n", interp_path);
+			return false;
+		}
+	}
+
+	if (!elf_build_user_stack(proc, path, exec_entry, phdr, ehdr->e_phentsize,
+							  ehdr->e_phnum, interp_base)) {
+		return false;
+	}
+
+	*entry_out = interp_entry ? interp_entry : exec_entry;
 	return true;
 }

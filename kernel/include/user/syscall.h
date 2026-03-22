@@ -40,6 +40,7 @@ enum {
 	SYS_MUNMAP = 11,
 	SYS_CLOCK_GET = 12,
 	SYS_SET_FS_BASE = 13,
+	SYS_MPROTECT = 14,
 };
 
 typedef struct {

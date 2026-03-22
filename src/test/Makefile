@@ -17,50 +17,46 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-MAKE_TARGETS := all install clean rebuild
+APP_NAME := test
 
-APP_DIRS := $(wildcard */)
-APP_DIRS := $(filter-out include/,$(APP_DIRS))
-APP_DIRS := $(filter-out %.nocomp/,$(APP_DIRS))
+BUILD_DIR := $(BUILD_DIR)/$(APP_NAME)
+APP_FILE := $(BUILD_DIR)/$(APP_NAME)
 
-export BUILD_DIR := $(BUILD_DIR)/apps
-export APP_INSTALL_DIR := $(INITRD_DIR)/bin
+APP_DEFINES := __$(ARCH)__ APP_NAME=$(APP_NAME)
+APP_CFLAGS += $(foreach d,$(APP_DEFINES),-D$d)
 
-export APP_CFLAGS := -Wall -Wextra -ffreestanding \
-                     -fno-stack-protector -fno-pie -I$(abspath include)
-export APP_LDFLAGS := -nostdlib -nostartfiles -nodefaultlibs -static -Wl,-e,_start
+APP_CFILES := $(wildcard *.c) $(wildcard */*.c)
+APP_OBJ := $(APP_CFILES:%.c=$(BUILD_DIR)/%.c.o)
+APP_DEP := $(APP_OBJ:.o=.d)
+APP_GLOBAL_DEPS := Makefile ../Makefile $(wildcard ../include/*.h)
 
-export APP_DEFINES := __$(ARCH)__
+.PHONY: all clean install rebuild
 
-ifeq ($(USE_HOST_TOOLCHAIN),y)
-export APP_AS := gcc
-export APP_CC := gcc
-export APP_LD := $(APP_CC)
-export APP_AR := ar
-export APP_OBJCOPY := objcopy
-else
-export APP_AS := $(ARCH)-elf-gcc
-export APP_CC := $(ARCH)-elf-gcc
-export APP_LD := $(APP_CC)
-export APP_AR := $(ARCH)-elf-ar
-export APP_OBJCOPY := $(ARCH)-elf-objcopy
+all: $(APP_FILE)
+
+rebuild: clean all
+
+$(APP_FILE): $(APP_OBJ)
+	@mkdir -p $(@D)
+	@printf "  LD\t$(notdir $@)\n"
+	@$(APP_CC) $(APP_OBJ) $(APP_LDFLAGS) -o $@
+ifneq ($(BUILD_TYPE),debug)
+	@printf "  STRIP\t$(notdir $@)\n"
+	@$(APP_OBJCOPY) --strip-unneeded $@
 endif
 
-ifeq ($(BUILD_TYPE),debug)
-export APP_CFLAGS += -O0 -g3 -D_DEBUG
-else
-export APP_CFLAGS += -O2
-endif
+$(APP_OBJ): $(APP_GLOBAL_DEPS)
 
-.PHONY: $(MAKE_TARGETS)
+$(BUILD_DIR)/%.c.o: %.c
+	@mkdir -p $(@D)
+	@printf "  CC\t$<\n"
+	@$(APP_CC) $(APP_CFLAGS) -MMD -MP -c $< -o $@
 
-$(MAKE_TARGETS):
-	@for dir in $(APP_DIRS); do \
-		printf ">>> Building app '%s'...\n" "$${dir%/}"; \
-		$(MAKE) -C "$$dir" $(MAKECMDGOALS) \
-			APP_CFLAGS="$(APP_CFLAGS)" \
-			APP_LDFLAGS="$(APP_LDFLAGS)" \
-			APP_CC="$(APP_CC)" \
-			APP_OBJCOPY="$(APP_OBJCOPY)" \
-			APP_INSTALL_DIR="$(APP_INSTALL_DIR)" || exit $$?; \
-	done
+-include $(APP_DEP)
+
+clean:
+	@rm -rf $(BUILD_DIR)
+
+install: all
+	@mkdir -p $(APP_INSTALL_DIR)
+	@cp $(APP_FILE) $(APP_INSTALL_DIR)

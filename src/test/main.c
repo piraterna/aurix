@@ -10,7 +10,7 @@ int main(void)
 		return 1;
 	}
 
-	fprintf(stdout, "%s", msg);
+	printf("%s", msg);
 
 	free(msg);
 	return 0;

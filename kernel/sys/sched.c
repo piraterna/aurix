@@ -463,30 +463,24 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 		*--rsp = 0;
 		*--rsp = 0x202;
 	} else {
-		uint64_t *user_stack_base =
-			valloc(proc->vctx, DIV_ROUND_UP(USER_STACK_SIZE, PAGE_SIZE),
-				   VALLOC_RW | VALLOC_USER);
-		if (!user_stack_base) {
+		if (!proc->user_rsp || !proc->user_stack_base ||
+			proc->user_stack_size == 0) {
+			error("user stack not initialized for PID=%u\n", proc->pid);
 			vfree(kvctx, stack_base);
 			kfree(thread);
 			return NULL;
 		}
 
-		uint64_t user_stack_top =
-			(uint64_t)((uint8_t *)user_stack_base + USER_STACK_SIZE);
-		uint64_t user_zero_start = user_stack_top - (4 * sizeof(uint64_t));
-		uintptr_t user_zero_phys = vget_phys(proc->pm, user_zero_start);
-		if (user_zero_phys == 0) {
-			vfree(proc->vctx, user_stack_base);
+		uint64_t user_rsp = proc->user_rsp;
+		uintptr_t user_stack_end =
+			proc->user_stack_base + proc->user_stack_size;
+		if (user_rsp < proc->user_stack_base || user_rsp > user_stack_end) {
+			error("user rsp out of range for PID=%u (rsp=%p)\n", proc->pid,
+				  (void *)user_rsp);
 			vfree(kvctx, stack_base);
 			kfree(thread);
 			return NULL;
 		}
-
-		uint64_t *user_stack = (uint64_t *)PHYS_TO_VIRT(user_zero_phys);
-		memset(user_stack, 0, 4 * sizeof(*user_stack));
-
-		uint64_t user_rsp = user_zero_start;
 
 		*--rsp = 0x1b;
 		*--rsp = user_rsp;

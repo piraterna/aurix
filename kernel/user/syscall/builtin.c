@@ -405,23 +405,14 @@ int64_t sys_exec(const syscall_args_t *args)
 		strcpy(name_copy, path);
 	proc->name = (const char *)name_copy;
 
-	uint64_t image_addr = 0;
-	size_t image_size = 0;
-	uintptr_t entry = elf_load(buf, &image_addr, &image_size, proc->pm);
-
-	uintptr_t link_base = 0;
-	size_t load_size = 0;
-	if (entry && elf_get_load_range(buf, &link_base, &load_size) &&
-		load_size > 0) {
-		size_t pages = DIV_ROUND_UP(load_size, PAGE_SIZE);
-		vreserve(proc->vctx, link_base, pages, VALLOC_USER);
-	}
-
-	kfree(buf);
-	if (entry == 0) {
+	uintptr_t entry = 0;
+	if (!elf_load_user_process(buf, path, proc, &entry)) {
+		kfree(buf);
 		proc_destroy(proc);
 		return -EINVAL;
 	}
+
+	kfree(buf);
 
 	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
 	if (!thread) {
@@ -589,6 +580,64 @@ int64_t sys_munmap(const syscall_args_t *args)
 	return 0;
 }
 
+int64_t sys_mprotect(const syscall_args_t *args)
+{
+	void *addr = (void *)args->rdi;
+	size_t length = (size_t)args->rsi;
+	int prot = (int)args->rdx;
+
+	if (!addr || length == 0)
+		return -EINVAL;
+
+	if (!IS_PAGE_ALIGNED(addr))
+		return -EINVAL;
+
+	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc || !proc->vctx || !proc->pm)
+		return -EINVAL;
+
+	size_t pages = DIV_ROUND_UP(length, PAGE_SIZE);
+	if (pages == 0)
+		return -EINVAL;
+
+	uint64_t vflags = VALLOC_USER;
+	if (prot == PROT_NONE) {
+		vflags |= VALLOC_NO_PRESENT;
+	} else {
+		if (prot & PROT_READ)
+			vflags |= VALLOC_READ;
+		if (prot & PROT_WRITE)
+			vflags |= VALLOC_WRITE;
+		if (prot & PROT_EXEC)
+			vflags |= VALLOC_EXEC;
+	}
+
+	uint64_t pflags = VFLAGS_TO_PFLAGS(vflags);
+	uintptr_t base = (uintptr_t)addr;
+
+	for (size_t i = 0; i < pages; i++) {
+		uintptr_t virt = base + (i * PAGE_SIZE);
+		uintptr_t phys = vget_phys(proc->pm, virt);
+		if (!phys)
+			return -ENOMEM;
+		map_page(proc->pm, virt, ALIGN_DOWN(phys, PAGE_SIZE), pflags);
+	}
+
+	for (vregion_t *region = proc->vctx->root; region; region = region->next) {
+		if (region->pages == 0)
+			continue;
+		uintptr_t rstart = region->start;
+		uintptr_t rend = region->start + (region->pages * PAGE_SIZE);
+		if (base <= rstart && (base + (pages * PAGE_SIZE)) >= rend)
+			region->flags = pflags;
+	}
+
+	return 0;
+}
+
 int64_t sys_clock_get(const syscall_args_t *args)
 {
 	int clock = (int)args->rdi;
@@ -642,6 +691,7 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_MMAP, sys_mmap, "mmap");
 	register_syscall(SYS_LSEEK, sys_lseek, "lseek");
 	register_syscall(SYS_MUNMAP, sys_munmap, "munmap");
+	register_syscall(SYS_MPROTECT, sys_mprotect, "mprotect");
 	register_syscall(SYS_CLOCK_GET, sys_clock_get, "clock_get");
 	register_syscall(SYS_SET_FS_BASE, sys_set_fs_base, "set_fs_base");
 }

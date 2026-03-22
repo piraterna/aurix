@@ -100,7 +100,7 @@ export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
 export RELEASE_DIR ?= $(ROOT_DIR)/release
 export INITRD_DIR ?= $(ROOT_DIR)/initrd
 export MODULE_DIR ?= $(ROOT_DIR)/modules
-export APPS_DIR ?= $(ROOT_DIR)/apps
+export APPS_DIR ?= $(ROOT_DIR)/src
 
 export NOUEFI ?= n
 
@@ -124,7 +124,7 @@ LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
-QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
+QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio -cpu host -enable-kvm
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
@@ -215,6 +215,9 @@ initrd: apps __FORCE_initrd
 	@cp -r $(INITRD_DIR)/* $(BUILD_DIR)/initrd/
 
 	@$(MAKE) -C $(APPS_DIR) install APP_INSTALL_DIR=$(BUILD_DIR)/initrd/bin
+	@mkdir -p $(BUILD_DIR)/initrd/usr/lib
+	@cp -a $(SYSROOT_DIR)/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
+	@cp -a $(ROOT_DIR)/libc/mlibc-sysroot/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
 
 	@mkdir -p $(SYSROOT_DIR)/System
 	@cd $(BUILD_DIR)/initrd && find . -type f | cpio -H newc -o > $(INITRD_CPIO)

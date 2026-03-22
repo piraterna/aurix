@@ -193,7 +193,7 @@ if [ ! -d build ]; then
     meson setup \
         --cross-file="$ROOT_DIR/aurix-cross.txt" \
         --prefix=/usr \
-        -Ddefault_library=static \
+        -Ddefault_library=both \
         -Dno_headers=true \
         build
 else

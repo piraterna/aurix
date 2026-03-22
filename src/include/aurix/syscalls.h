@@ -19,6 +19,7 @@ enum {
 	SYS_MUNMAP = 11,
 	SYS_CLOCK_GET = 12,
 	SYS_SET_FS_BASE = 13,
+	SYS_MPROTECT = 14,
 };
 
 #define PROT_READ 0x01
@@ -161,6 +162,13 @@ static inline int sys_clock_get(int clock, long *secs, long *nanos)
 static inline int sys_set_fs_base(void *base)
 {
 	long result = raw_syscall6(SYS_SET_FS_BASE, (long)base, 0, 0, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline int sys_mprotect(void *addr, size_t length, int prot)
+{
+	long result =
+		raw_syscall6(SYS_MPROTECT, (long)addr, (long)length, prot, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 

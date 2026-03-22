@@ -173,8 +173,8 @@ bool module_load_image(void *image, uint32_t size)
 
 	elf_loaded_image_t img;
 	memset(&img, 0, sizeof(img));
-	if (!elf_load_image_mapped(virt_data, kernel_pm, load_base, phys_base,
-							   &img)) {
+	if (!elf_load_image_mapped(virt_data, kernel_pm, load_base, phys_base, &img,
+							   false, true)) {
 		error("Failed to load module file\n");
 		vfree(kmod_vctx, (void *)load_base);
 		pfree((void *)phys_base, pages);

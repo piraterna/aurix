@@ -126,25 +126,15 @@ pcb *load_init(const char *path)
 
 	proc->name = strdup("init");
 
-	uint64_t addr, size = 0;
-	uintptr_t entry = elf_load(buf, &addr, &size, proc->pm);
-
-	uintptr_t link_base = 0;
-	size_t load_size = 0;
-	if (entry && elf_get_load_range(buf, &link_base, &load_size) &&
-		load_size > 0) {
-		size_t pages = DIV_ROUND_UP(load_size, PAGE_SIZE);
-		vreserve(proc->vctx, link_base, pages, VALLOC_USER);
-	}
-	if (entry == 0) {
+	uintptr_t entry = 0;
+	if (!elf_load_user_process(buf, path, proc, &entry)) {
 		error("failed to load ELF: %s\n", path);
 		proc_destroy(proc);
 		kfree(buf);
 		return NULL;
 	}
 
-	info("loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path, entry,
-		 addr, size);
+	info("loaded ELF '%s' entry=0x%lx\n", path, entry);
 
 	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
 	if (!thread) {
