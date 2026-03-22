@@ -555,3 +555,37 @@ uintptr_t vget_phys(pagetable *pm, uintptr_t virt)
 	return (pml1_table->entries[p1] & PAGE_FRAME_MASK) |
 		   (virt & (PAGE_SIZE - 1));
 }
+
+uint64_t vget_flags(pagetable *pm, uintptr_t virt)
+{
+	if (!pm)
+		pm = (pagetable *)kernel_pm;
+	uintptr_t pm_phys = (uintptr_t)pm;
+
+	uint64_t p4 = pml4_index(virt);
+	uint64_t p3 = pml3_index(virt);
+	uint64_t p2 = pml2_index(virt);
+	uint64_t p1 = pml1_index(virt);
+
+	pagetable *pml4_table = (pagetable *)PHYS_TO_VIRT(pm_phys);
+	if (!(pml4_table->entries[p4] & VMM_PRESENT))
+		return 0;
+
+	pagetable *pml3_table =
+		(pagetable *)PHYS_TO_VIRT(pml4_table->entries[p4] & PAGE_FRAME_MASK);
+	if (!(pml3_table->entries[p3] & VMM_PRESENT))
+		return 0;
+
+	pagetable *pml2_table =
+		(pagetable *)PHYS_TO_VIRT(pml3_table->entries[p3] & PAGE_FRAME_MASK);
+	if (!(pml2_table->entries[p2] & VMM_PRESENT))
+		return 0;
+
+	pagetable *pml1_table =
+		(pagetable *)PHYS_TO_VIRT(pml2_table->entries[p2] & PAGE_FRAME_MASK);
+	uint64_t entry = pml1_table->entries[p1];
+	if (!(entry & VMM_PRESENT))
+		return 0;
+
+	return entry & ~PAGE_FRAME_MASK;
+}

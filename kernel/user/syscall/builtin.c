@@ -231,25 +231,23 @@ static int syscall_clone_memory(struct pcb *parent, struct pcb *child)
 			continue;
 
 		uint64_t vflags = pflags_to_vflags(region->flags);
-		if (!(region->flags & VMM_PRESENT)) {
-			if (!vreserve(child->vctx, region->start, region->pages, vflags))
-				return -ENOMEM;
-			continue;
-		}
-
-		uint64_t phys = (uint64_t)palloc(region->pages);
-		if (!phys)
+		if (!vreserve(child->vctx, region->start, region->pages, vflags))
 			return -ENOMEM;
-
-		if (!vadd(child->vctx, region->start, phys, region->pages, vflags)) {
-			pfree((void *)phys, region->pages);
-			return -ENOMEM;
-		}
 
 		for (size_t i = 0; i < region->pages; i++) {
 			uintptr_t virt = region->start + (i * PAGE_SIZE);
+			uint64_t pflags = vget_flags(parent->pm, virt);
+			if (!(pflags & VMM_PRESENT))
+				continue;
+
+			uintptr_t phys = (uintptr_t)palloc(1);
+			if (!phys)
+				return -ENOMEM;
+
+			map_page(child->pm, virt, phys, pflags);
+
 			uintptr_t src_phys = vget_phys(parent->pm, virt);
-			void *dst = (void *)PHYS_TO_VIRT(phys + (i * PAGE_SIZE));
+			void *dst = (void *)PHYS_TO_VIRT(phys);
 			if (src_phys) {
 				void *src = (void *)PHYS_TO_VIRT(src_phys);
 				memcpy(dst, src, PAGE_SIZE);
@@ -603,7 +601,9 @@ int64_t sys_exec(const syscall_args_t *args)
 	thread->joinable = true;
 	int code = thread_wait(thread);
 	proc_destroy(proc);
-	return code;
+
+	thread_exit(thread_current(), code);
+	__builtin_unreachable();
 }
 
 int64_t sys_execve(const syscall_args_t *args)
@@ -913,9 +913,121 @@ int64_t sys_getcwd(const syscall_args_t *args)
 
 int64_t sys_fork(const syscall_args_t *args)
 {
-	(void)args;
-	kprintf("fork() called\n");
-	return -ENOSYS;
+	if (!args)
+		return -EINVAL;
+
+	tcb *parent_thread = thread_current();
+	if (!parent_thread || !parent_thread->process)
+		return -EINVAL;
+
+	pcb *parent = parent_thread->process;
+	pcb *child = proc_create();
+	if (!child)
+		return -ENOMEM;
+
+	child->parent_pid = parent->pid;
+	child->user_stack_base = parent->user_stack_base;
+	child->user_stack_size = parent->user_stack_size;
+	child->user_rsp = args->rsp;
+	child->image_elf = parent->image_elf;
+	child->image_size = parent->image_size;
+	child->image_phys_base = parent->image_phys_base;
+	child->image_load_base = parent->image_load_base;
+	child->image_link_base = parent->image_link_base;
+	child->image_exec_size = parent->image_exec_size;
+
+	if (child->cwd) {
+		kfree(child->cwd);
+		child->cwd = NULL;
+	}
+	if (parent->cwd)
+		child->cwd = strdup(parent->cwd);
+
+	if (child->name) {
+		kfree((void *)child->name);
+		child->name = NULL;
+	}
+	if (parent->name)
+		child->name = strdup(parent->name);
+
+	for (int fd = 0; fd < PROC_MAX_FDS; fd++) {
+		if (child->fds[fd]) {
+			close(child->fds[fd]);
+			child->fds[fd] = NULL;
+		}
+	}
+
+	spinlock_acquire(&parent->fd_lock);
+	for (int fd = 0; fd < PROC_MAX_FDS; fd++) {
+		struct fileio *f = parent->fds[fd];
+		if (!f)
+			continue;
+		fio_retain(f);
+		child->fds[fd] = f;
+	}
+	spinlock_release(&parent->fd_lock);
+
+	int mem_err = syscall_clone_memory(parent, child);
+	if (mem_err != 0) {
+		proc_destroy(child);
+		return mem_err;
+	}
+
+	tcb *child_thread = thread_clone_user(child, parent_thread);
+	if (!child_thread) {
+		proc_destroy(child);
+		return -ENOMEM;
+	}
+
+	struct fork_frame {
+		uint64_t rdi;
+		uint64_t rsi;
+		uint64_t rdx;
+		uint64_t r10;
+		uint64_t r8;
+		uint64_t r9;
+		uint64_t rcx;
+		uint64_t r11;
+		uint64_t rsp;
+	};
+
+	struct fork_frame frame = {
+		.rdi = args->rdi,
+		.rsi = args->rsi,
+		.rdx = args->rdx,
+		.r10 = args->r10,
+		.r8 = args->r8,
+		.r9 = args->r9,
+		.rcx = args->rip,
+		.r11 = args->rflags,
+		.rsp = args->rsp,
+	};
+
+	uint64_t *rsp = (uint64_t *)(uintptr_t)child_thread->kthread.rsp0;
+
+	*--rsp = frame.rsp;
+	*--rsp = frame.r11;
+	*--rsp = frame.rcx;
+	*--rsp = frame.r9;
+	*--rsp = frame.r8;
+	*--rsp = frame.r10;
+	*--rsp = frame.rdx;
+	*--rsp = frame.rsi;
+	*--rsp = frame.rdi;
+
+	*--rsp = (uint64_t)(uintptr_t)fork_trampoline;
+	*--rsp = args->rbx;
+	*--rsp = args->rbp;
+	*--rsp = args->r12;
+	*--rsp = args->r13;
+	*--rsp = args->r14;
+	*--rsp = args->r15;
+	*--rsp = 0x202;
+
+	child_thread->kthread.rsp = (uint64_t)(uintptr_t)rsp;
+	thread_enqueue(child_thread);
+
+	return (int64_t)child->pid;
 }
 
 int64_t sys_chdir(const syscall_args_t *args)

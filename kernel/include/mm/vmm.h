@@ -88,5 +88,6 @@ void vfree_range(vctx_t *ctx, uint64_t vaddr, size_t pages);
 
 vregion_t *vget(vctx_t *ctx, uint64_t vaddr);
 uintptr_t vget_phys(pagetable *pm, uintptr_t virt);
+uint64_t vget_flags(pagetable *pm, uintptr_t virt);
 
 #endif /* _MM_VMM_H */

@@ -33,5 +33,6 @@ struct kthread {
 };
 
 extern void switch_task(struct kthread *prev, struct kthread *next);
+extern void fork_trampoline(void);
 
 #endif // _ARCH_CPU_SWITCH_H

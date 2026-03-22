@@ -1,6 +1,7 @@
 section .text
 global switch_task
 global switch_enter_user
+global fork_trampoline
 
 %define KTHREAD_CR3_OFFSET 0
 %define KTHREAD_RSP_OFFSET 16
@@ -58,3 +59,19 @@ switch_enter_user:
     mov fs, ax
     mov gs, ax
     iretq
+
+fork_trampoline:
+    mov rax, rsp
+
+    mov rdi, [rax + 0]
+    mov rsi, [rax + 8]
+    mov rdx, [rax + 16]
+    mov r10, [rax + 24]
+    mov r8, [rax + 32]
+    mov r9, [rax + 40]
+    mov rcx, [rax + 48]
+    mov r11, [rax + 56]
+    mov rsp, [rax + 64]
+
+    xor eax, eax
+    o64 sysret
