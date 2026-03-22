@@ -28,3 +28,5 @@ gcc*/
 
 binutils*.tar*
 gcc*.tar*
+
+kernel/include/config.h

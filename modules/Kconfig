@@ -1,0 +1,5 @@
+menu "Kernel Modules"
+
+source "modules/pci/Kconfig"
+
+endmenu

@@ -14,6 +14,10 @@ AXAPI_SYM(void, kfree, (void *ptr))
 
 AXAPI_SYM(uint8_t, ax_inb, (uint16_t port))
 AXAPI_SYM(void, ax_outb, (uint16_t port, uint8_t val))
+AXAPI_SYM(uint16_t, ax_inw, (uint16_t port))
+AXAPI_SYM(void, ax_outw, (uint16_t port, uint16_t val))
+AXAPI_SYM(uint32_t, ax_indw, (uint16_t port))
+AXAPI_SYM(void, ax_outdw, (uint16_t port, uint32_t val))
 AXAPI_SYM(void, ax_io_wait, (void))
 
 AXAPI_SYM(int, device_register, (struct device * dev))
