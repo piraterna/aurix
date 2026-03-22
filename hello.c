@@ -1,4 +1,11 @@
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+
 int main(void)
 {
-	return 69;
+	printf("Hello, World!\n");
+	return 0;
 }

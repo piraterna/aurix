@@ -3,5 +3,4 @@ set -exuo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")/.."
 
-./libc/toolchain/usr/bin/x86_64-aurix-gcc hello.c -o initrd/bin/test -O2 -g0 -ffunction-sections -fdata-sections -Wl,--gc-sections 
-./libc/toolchain/usr/bin/x86_64-aurix-strip --strip-all initrd/bin/test 
+./libc/toolchain/usr/bin/x86_64-aurix-gcc hello.c -o initrd/bin/test -ffunction-sections -fdata-sections -Wl,--gc-sections  -Wl,--strip-all
