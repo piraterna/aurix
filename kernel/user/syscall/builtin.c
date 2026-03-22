@@ -524,8 +524,6 @@ int64_t sys_mmap(const syscall_args_t *args)
 
 	if (!mapped)
 		return -ENOMEM;
-
-	memset(mapped, 0, pages * PAGE_SIZE);
 	return (int64_t)(uintptr_t)mapped;
 }
 

@@ -1,14 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int main(void)
 {
-	printf("Hello, World from %s!\n", "mlibc");
-	void *a = malloc(sizeof(char));
-	if (!a) {
-		printf("error: Failed to allocate using malloc!\n");
+	char *msg = strdup("Hello, World!\n");
+	if (!msg) {
+		fprintf(stderr, "strdup failed\n");
 		return 1;
 	}
-	printf("allocated some memory at %p\n", a);
+
+	fprintf(stdout, "%s", msg);
+
+	free(msg);
 	return 0;
 }
