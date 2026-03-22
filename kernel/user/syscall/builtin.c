@@ -336,7 +336,6 @@ int64_t sys_open(const syscall_args_t *args)
 	struct fileio *f = open(resolved, flags, mode);
 	kfree(resolved);
 	if (!f) {
-		error("open(): failed to open %s (%s)\n", path, ERRNO_NAME(ENOENT));
 		return -ENOENT;
 	}
 
