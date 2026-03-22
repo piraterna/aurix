@@ -416,7 +416,7 @@ void aurix_load(char *kernel_path)
 				uint8_t *tmp_addr = parameters.modules[i + 1].addr;
 				size_t tmp_size = parameters.modules[i + 1].size;
 				char tmp_filename[32];
-				strncpy(&tmp_filename, &(parameters.modules[i + 1].filename[0]), 32);
+				strncpy(&tmp_filename[0], &(parameters.modules[i + 1].filename[0]), 32);
 
 				parameters.modules[i + 1].addr = parameters.modules[i].addr;
 				parameters.modules[i + 1].size = parameters.modules[i].size;
