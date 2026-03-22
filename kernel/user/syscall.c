@@ -55,7 +55,6 @@ int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args)
 		cpu_enable_interrupts();
 		return -ENOSYS;
 	}
-	trace("syscall(%d) -> %s\n", id, syscall_table[id].name);
 	int64_t r = syscall_table[id].handler(args);
 	cpu_enable_interrupts();
 	return r;

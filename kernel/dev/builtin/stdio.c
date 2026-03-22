@@ -109,7 +109,6 @@ static struct device *stdio_find_dev(const char *path)
 		if (!dev || !dev->dev_node_path)
 			continue;
 		if (strcmp(dev->dev_node_path, path) == 0) {
-			trace("stdio: found dev %s\n", dev->name);
 			return dev;
 		}
 	}
@@ -165,50 +164,46 @@ static char stdio_scancode_to_ascii(uint8_t sc, bool shift, bool caps_lock)
 	return shift ? shifted[sc] : ch;
 }
 
-#define STDIN_LINE_MAX 256
+#define STDIN_RB_SIZE 256u
+#define STDIN_RB_MASK (STDIN_RB_SIZE - 1u)
 
-static char stdin_line[STDIN_LINE_MAX];
-static size_t stdin_line_len;
-static size_t stdin_line_pos;
+static uint8_t stdin_rb[STDIN_RB_SIZE];
+static uint32_t stdin_rb_head;
+static uint32_t stdin_rb_tail;
 static bool stdin_left_shift;
 static bool stdin_right_shift;
 static bool stdin_caps_lock;
 static bool stdin_extended;
 static bool stdin_release_prefix;
 
-static void stdin_echo_backspace(void)
+static void stdin_rb_push(uint8_t ch)
 {
-	kprintf("\b \b");
+	uint32_t head = __atomic_load_n(&stdin_rb_head, __ATOMIC_RELAXED);
+	uint32_t tail = __atomic_load_n(&stdin_rb_tail, __ATOMIC_ACQUIRE);
+	if ((head - tail) >= STDIN_RB_SIZE) {
+		__atomic_store_n(&stdin_rb_tail, tail + 1, __ATOMIC_RELEASE);
+		tail++;
+	}
+	stdin_rb[head & STDIN_RB_MASK] = ch;
+	__atomic_store_n(&stdin_rb_head, head + 1, __ATOMIC_RELEASE);
 }
 
-static void stdin_push_char(char ch)
+static int stdin_rb_pop(uint8_t *out)
 {
-	if (stdin_line_len + 1 >= STDIN_LINE_MAX)
-		return;
-	stdin_line[stdin_line_len++] = ch;
-	if (ch == '\n')
-		kprintf("\n");
-	else
-		kprintf("%c", ch);
+	uint32_t tail = __atomic_load_n(&stdin_rb_tail, __ATOMIC_RELAXED);
+	uint32_t head = __atomic_load_n(&stdin_rb_head, __ATOMIC_ACQUIRE);
+	if (tail == head)
+		return 0;
+	*out = stdin_rb[tail & STDIN_RB_MASK];
+	__atomic_store_n(&stdin_rb_tail, tail + 1, __ATOMIC_RELEASE);
+	return 1;
 }
 
-static void stdin_handle_backspace(void)
+static int stdin_rb_count(void)
 {
-	if (stdin_line_len == 0)
-		return;
-	stdin_line_len--;
-	stdin_echo_backspace();
-}
-
-static bool stdin_line_ready(void)
-{
-	return stdin_line_len > 0 && stdin_line[stdin_line_len - 1] == '\n';
-}
-
-static void stdin_reset_line(void)
-{
-	stdin_line_len = 0;
-	stdin_line_pos = 0;
+	uint32_t head = __atomic_load_n(&stdin_rb_head, __ATOMIC_ACQUIRE);
+	uint32_t tail = __atomic_load_n(&stdin_rb_tail, __ATOMIC_ACQUIRE);
+	return (int)(head - tail);
 }
 
 static void stdin_handle_scancode(uint8_t sc)
@@ -224,6 +219,36 @@ static void stdin_handle_scancode(uint8_t sc)
 
 	if (stdin_extended) {
 		stdin_extended = false;
+		if (stdin_release_prefix) {
+			stdin_release_prefix = false;
+			return;
+		}
+		if (sc == 0x48 || sc == 0x75 || sc == 0x50 || sc == 0x72 ||
+			sc == 0x4B || sc == 0x6B || sc == 0x4D || sc == 0x74) {
+			stdin_rb_push('\033');
+			stdin_rb_push('[');
+			switch (sc) {
+			case 0x48:
+			case 0x75:
+				stdin_rb_push('A');
+				break;
+			case 0x50:
+			case 0x72:
+				stdin_rb_push('B');
+				break;
+			case 0x4D:
+			case 0x74:
+				stdin_rb_push('C');
+				break;
+			case 0x4B:
+			case 0x6B:
+				stdin_rb_push('D');
+				break;
+			default:
+				break;
+			}
+			return;
+		}
 		return;
 	}
 	if (stdin_release_prefix) {
@@ -263,29 +288,25 @@ static void stdin_handle_scancode(uint8_t sc)
 	}
 
 	if (sc == 0x1C) {
-		stdin_push_char('\n');
+		stdin_rb_push('\n');
 		return;
 	}
 	if (sc == 0x0E) {
-		stdin_handle_backspace();
+		stdin_rb_push('\b');
 		return;
 	}
 
 	bool shift = stdin_left_shift || stdin_right_shift;
 	char ch = stdio_scancode_to_ascii(sc, shift, stdin_caps_lock);
 	if (ch)
-		stdin_push_char(ch);
+		stdin_rb_push((uint8_t)ch);
 }
 
 static void stdin_handle_ascii(uint8_t ch)
 {
 	if (ch == '\r')
 		ch = '\n';
-	if (ch == '\b' || ch == 0x7F) {
-		stdin_handle_backspace();
-		return;
-	}
-	stdin_push_char((char)ch);
+	stdin_rb_push(ch);
 }
 
 int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
@@ -306,49 +327,39 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 
 	char *out = buf;
 
-	for (;;) {
-		if (stdin_line_pos < stdin_line_len)
-			break;
+	while (stdin_rb_count() == 0) {
+		bool did_work = false;
 
-		stdin_reset_line();
-
-		while (!stdin_line_ready()) {
-			bool did_work = false;
-
-			if (kbd && kbd->ops && kbd->ops->read && stdio_dev_has_data(kbd)) {
-				uint8_t sc = 0;
-				int got = kbd->ops->read(kbd, &sc, 1, 0);
-				if (got > 0) {
-					stdin_handle_scancode(sc);
-					did_work = true;
-				}
+		if (kbd && kbd->ops && kbd->ops->read && stdio_dev_has_data(kbd)) {
+			uint8_t sc = 0;
+			int got = kbd->ops->read(kbd, &sc, 1, 0);
+			if (got > 0) {
+				stdin_handle_scancode(sc);
+				did_work = true;
 			}
-
-			if (com1 && com1->ops && com1->ops->read &&
-				stdio_dev_has_data(com1)) {
-				uint8_t ch = 0;
-				int got = com1->ops->read(com1, &ch, 1, 0);
-				if (got > 0) {
-					stdin_handle_ascii(ch);
-					did_work = true;
-				}
-			}
-
-			if (stdin_line_ready())
-				break;
-
-			if (!did_work)
-				sleep_ms(1);
 		}
+
+		if (com1 && com1->ops && com1->ops->read && stdio_dev_has_data(com1)) {
+			uint8_t ch = 0;
+			int got = com1->ops->read(com1, &ch, 1, 0);
+			if (got > 0) {
+				stdin_handle_ascii(ch);
+				did_work = true;
+			}
+		}
+
+		if (!did_work)
+			sleep_ms(1);
 	}
 
-	size_t avail = stdin_line_len - stdin_line_pos;
-	size_t to_copy = len < avail ? len : avail;
-	memcpy(out, stdin_line + stdin_line_pos, to_copy);
-	stdin_line_pos += to_copy;
-	if (stdin_line_pos >= stdin_line_len)
-		stdin_reset_line();
-	return (int)to_copy;
+	size_t n = 0;
+	while (n < len) {
+		uint8_t ch = 0;
+		if (!stdin_rb_pop(&ch))
+			break;
+		out[n++] = (char)ch;
+	}
+	return (int)n;
 }
 
 int stdin_poll(struct device *dev)
@@ -358,6 +369,8 @@ int stdin_poll(struct device *dev)
 	struct device *kbd = stdio_find_dev("/raw/ps2/kbd0");
 	struct device *com1 = stdio_find_dev("/raw/serial/com1");
 
+	if (stdin_rb_count() > 0)
+		return 1;
 	if (stdio_dev_has_data(kbd))
 		return 1;
 	if (stdio_dev_has_data(com1))
