@@ -25,6 +25,7 @@
 #include <debug/assert.h>
 #include <string.h>
 #include <user/access.h>
+#include <sys/errno.h>
 
 int f2vflags(int fio_flags)
 {
@@ -43,7 +44,15 @@ struct fileio *fio_create()
 {
 	struct fileio *fio = kmalloc(sizeof(struct fileio));
 	memset(fio, 0, sizeof(struct fileio));
+	atomic_init(&fio->refs, 1);
 	return fio;
+}
+
+void fio_retain(struct fileio *file)
+{
+	if (!file)
+		return;
+	atomic_fetch_add_explicit(&file->refs, 1, memory_order_relaxed);
 }
 
 struct fileio *open(const char *path, int flags, mode_t mode)
@@ -114,7 +123,7 @@ int write(struct fileio *file, void *buf, size_t size)
 		pipe_write(file, buf, &size);
 		return size;
 	} else if (file->flags & PIPE_READ_END) {
-		return -1;
+		return -EBADF;
 	}
 
 	size_t offset = file->offset;
@@ -125,7 +134,7 @@ int write(struct fileio *file, void *buf, size_t size)
 	int ret = vfs_write(vn, buf, size, offset);
 
 	if (ret < 0) {
-		return -ret;
+		return ret;
 	}
 
 	if (file->size < size) {
@@ -139,7 +148,11 @@ int write(struct fileio *file, void *buf, size_t size)
 int close(struct fileio *file)
 {
 	if (!file) {
-		return -1;
+		return -EBADF;
+	}
+
+	if (atomic_fetch_sub_explicit(&file->refs, 1, memory_order_acq_rel) != 1) {
+		return 0;
 	}
 
 	struct vnode *vn = file->private;
@@ -150,7 +163,7 @@ int close(struct fileio *file)
 	}
 
 	if (vfs_close(vn) != 0) {
-		return -1;
+		return -EIO;
 	}
 
 	kfree(file);

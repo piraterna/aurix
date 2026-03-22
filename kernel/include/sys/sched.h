@@ -27,8 +27,10 @@
 #include <stddef.h>
 #include <mm/vmm.h>
 #include <stdatomic.h>
+#include <sys/spinlock.h>
 
-#define STACK_SIZE 4096 * 4 // ~16KB
+#define STACK_SIZE 4096 * 8 // ~32KB
+#define USER_STACK_SIZE (1024 * 1024)
 
 struct pcb;
 struct tcb;
@@ -36,9 +38,14 @@ struct tcb;
 #define TCB_MAGIC_ALIVE 0x544352414C495645ULL // "TCRALIVE"
 #define TCB_MAGIC_DEAD 0x544352444541444ULL // "TCRDEAD"
 
+#define PROC_MAX_FDS 256
+
+struct fileio;
+
 typedef struct tcb {
 	uint64_t magic;
 	uint32_t tid;
+	bool user;
 
 	uint32_t time_slice;
 
@@ -61,6 +68,8 @@ typedef struct pcb {
 	vctx_t *vctx;
 	struct tcb *threads;
 	uint32_t next_tid;
+	spinlock_t fd_lock;
+	struct fileio *fds[PROC_MAX_FDS];
 	const char *name;
 	char *image_elf;
 	size_t image_size;
@@ -68,6 +77,9 @@ typedef struct pcb {
 	uintptr_t image_load_base;
 	uintptr_t image_link_base;
 	size_t image_exec_size;
+	uintptr_t user_stack_base;
+	size_t user_stack_size;
+	uintptr_t user_rsp;
 } pcb;
 
 void sched_init(void);
@@ -82,6 +94,7 @@ void proc_destroy(pcb *proc);
 bool proc_has_threads(uint32_t pid);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
+tcb *thread_create_user(pcb *proc, void (*entry)(void));
 void thread_destroy(tcb *thread);
 void thread_exit(tcb *thread, int code);
 tcb *thread_current(void);

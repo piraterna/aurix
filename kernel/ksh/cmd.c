@@ -40,6 +40,7 @@
 #include <loader/elf.h>
 #include <mm/heap.h>
 #include <ksh/ksh.h>
+#include <lib/align.h>
 
 extern const char *aurix_banner;
 
@@ -96,7 +97,8 @@ static const ksh_command ksh_commands[] = {
 	{ "readf", "readf <path>", "reads file from path", cmd_readf },
 	{ "dir", "dir [path]", "list directory contents", cmd_dir },
 	{ "clear", "clear", "clears screen", cmd_clear },
-	{ "exec", "exec <path>", "executes executable from path", cmd_exec }
+	{ "exec", "exec [-u|-k] <path>", "execute userspace/kernel executable",
+	  cmd_exec }
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
@@ -644,11 +646,25 @@ static int cmd_kconfig(int argc, char **argv)
 static int cmd_exec(int argc, char **argv)
 {
 	if (argc < 2) {
-		kprintf("usage: exec <path>\n");
+		kprintf("usage: exec [-u|-k] <path>\n");
 		return 1;
 	}
 
-	const char *path = argv[1];
+	bool user_mode = true;
+	int path_arg = 1;
+	if (argc >= 3 && argv[1][0] == '-') {
+		if (strcmp(argv[1], "-k") == 0) {
+			user_mode = false;
+		} else if (strcmp(argv[1], "-u") == 0) {
+			user_mode = true;
+		} else {
+			kprintf("usage: exec [-u|-k] <path>\n");
+			return 1;
+		}
+		path_arg = 2;
+	}
+
+	const char *path = argv[path_arg];
 	struct fileio *f = open(path, 0, 0);
 	if (!f) {
 		kprintf("ksh: failed to open file: %s\n", path);
@@ -658,6 +674,7 @@ static int cmd_exec(int argc, char **argv)
 	char *buf = (char *)kmalloc(f->size);
 	if (!buf) {
 		kprintf("ksh: failed to allocate buffer for file: %s\n", path);
+		close(f);
 		return 1;
 	}
 
@@ -682,16 +699,17 @@ static int cmd_exec(int argc, char **argv)
 		strcpy(name_copy, path);
 	proc->name = (const char *)name_copy;
 
-	uint64_t addr, size = 0;
-	uintptr_t entry = elf_load(buf, &addr, &size, proc->pm);
-	if (entry == 0) {
+	uintptr_t entry = 0;
+	if (!elf_load_user_process(buf, path, proc, &entry)) {
 		kprintf("ksh: failed to load ELF: %s\n", path);
 		proc_destroy(proc);
 		kfree(buf);
 		return 1;
 	}
 
-	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
+	struct tcb *thread = user_mode ?
+							 thread_create_user(proc, (void (*)(void))entry) :
+							 thread_create(proc, (void (*)(void))entry);
 	if (!thread) {
 		kprintf("ksh: failed to create thread for: %s\n", path);
 		proc_destroy(proc);
@@ -702,7 +720,11 @@ static int cmd_exec(int argc, char **argv)
 
 	// wait until thread has exited
 	ksh_block();
-	thread_wait(thread);
+	int exit_code = thread_wait(thread);
+	if (exit_code != 0) {
+		kprintf("ksh: thread for %s exited with an non-zero code: %d\n", path,
+				exit_code);
+	}
 	ksh_unblock();
 
 	proc_destroy(proc);

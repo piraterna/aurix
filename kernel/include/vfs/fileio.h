@@ -24,6 +24,7 @@
 #define _VFS_FILEIO_H
 
 #include <stddef.h>
+#include <stdatomic.h>
 #include <sys/types.h>
 
 typedef enum fseek {
@@ -66,6 +67,7 @@ struct fileio {
 	size_t flags;
 	size_t offset;
 	void *private;
+	atomic_size_t refs;
 };
 
 struct vnode;
@@ -80,6 +82,7 @@ typedef struct dir_handle {
 } dir_handle_t;
 
 struct fileio *fio_create();
+void fio_retain(struct fileio *file);
 
 struct fileio *open(const char *path, int flags, mode_t mode);
 size_t read(struct fileio *file, size_t size, void *out);

@@ -26,6 +26,7 @@
 #include <sys/sched.h>
 #include <util/kprintf.h>
 #include <vfs/fileio.h>
+#include <vfs/vfs.h>
 #include <nanoprintf.h>
 
 #include <stdbool.h>
@@ -112,7 +113,9 @@ static void panic_backtrace(uintptr_t pm_phys, uintptr_t rbp, uint16_t depth)
 
 void panic_dump_to_file(const struct interrupt_frame *frame, const char *reason)
 {
-	struct fileio *f = open("/panic.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	// Remove existing panic file if present
+	vfs_remove("/panic.txt");
+	struct fileio *f = open("/panic.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
 	if (!f)
 		return;
 

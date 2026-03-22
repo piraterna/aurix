@@ -159,6 +159,8 @@ bool aurix_get_memmap(struct aurix_parameters *params, size_t kernel_size,
 		}
 	}
 
+	// TODO: Refactor this abomination
+
 	kernel_size =
 		ROUND_UP(kernel_addr - ROUND_DOWN(kernel_addr, PAGE_SIZE) + kernel_size,
 				 PAGE_SIZE) +
@@ -225,6 +227,17 @@ bool aurix_get_memmap(struct aurix_parameters *params, size_t kernel_size,
 			mmap_add_entry(&params->mmap, framebuffer_addr, framebuffer_size,
 						   AURIX_MMAP_FRAMEBUFFER, &i, &params->mmap_entries,
 						   false);
+		}
+
+		// change loaded modules to kernel type
+		for (size_t mod = 0; mod < params->module_count; mod++) {
+			uintptr_t mod_addr = ROUND_DOWN((uintptr_t)params->modules[mod].addr, PAGE_SIZE);
+			size_t mod_size = ROUND_UP(((uintptr_t)params->modules[mod].addr - mod_addr) + params->modules[mod].size, PAGE_SIZE);
+
+			if (base <= mod_addr && (base + size) >= (mod_addr + mod_size)) {
+			mmap_add_entry(&params->mmap, mod_addr, mod_size,
+						   AURIX_MMAP_KERNEL, &i, &params->mmap_entries, true);
+			}
 		}
 	}
 
@@ -378,6 +391,50 @@ void aurix_load(char *kernel_path)
 			  parameters.framebuffer.addr - parameters.hhdm_offset,
 			  parameters.framebuffer.height * parameters.framebuffer.pitch,
 			  VMM_PRESENT | VMM_WRITABLE);
+	
+	// preload kernel modules
+	char **premod_filenames = config_get_modules(&parameters.module_count);
+	parameters.modules = (struct aurix_module *)mem_alloc(
+		sizeof(struct aurix_module) * parameters.module_count);
+	for (uint32_t i = 0; i < parameters.module_count; i++) {
+		char *trimmed_name = trim_str(premod_filenames[i], '\\');
+		strncpy((char *)&parameters.modules[i].filename, trimmed_name, 32);
+		
+		vfs_read(premod_filenames[i], (char **)&parameters.modules[i].addr,
+		&parameters.modules[i].size);
+
+		debug("aurix_load(): Preloaded module '%s' at 0x%llx with size %u\n",
+			  parameters.modules[i].filename, parameters.modules[i].addr, parameters.modules[i].size);
+	}
+
+	for (uint32_t i = 0; i < parameters.module_count; i++) {
+		for (uint32_t j = 0; j < parameters.module_count - i; j++) {
+			if (parameters.modules[i].addr > parameters.modules[i + 1].addr) {
+				debug("swap 0x%x/0x%x\n", i, parameters.module_count);
+				debug("%llx > %llx\n", parameters.modules[i].addr, parameters.modules[i + 1].addr);
+
+				uint8_t *tmp_addr = parameters.modules[i + 1].addr;
+				size_t tmp_size = parameters.modules[i + 1].size;
+				char tmp_filename[32];
+				strncpy(&tmp_filename, &(parameters.modules[i + 1].filename[0]), 32);
+
+				parameters.modules[i + 1].addr = parameters.modules[i].addr;
+				parameters.modules[i + 1].size = parameters.modules[i].size;
+				strncpy(&(parameters.modules[i + 1].filename[0]), &(parameters.modules[i].filename[0]), 32);
+
+				parameters.modules[i].addr = tmp_addr;
+				parameters.modules[i].size = tmp_size;
+				strncpy(&(parameters.modules[i].filename[0]), &tmp_filename[0], 32);
+			}
+		}
+	}
+
+	for (uint32_t i = 0; i < parameters.module_count; i++) {
+		debug("aurix_load(): Module %i\n", i);
+		debug(" - Filename: '%s'\n", parameters.modules[i].filename);
+		debug(" - Address: 0x%llx\n", parameters.modules[i].addr);
+		debug(" - Size: %u\n", parameters.modules[i].size);
+	}
 
 	// translate memory map
 	if (!aurix_get_memmap(&parameters, kernel_size, mmap, mmap_entries, pm)) {
@@ -404,21 +461,6 @@ void aurix_load(char *kernel_path)
 #ifdef ARCH_SMBIOS_AVAILABLE
 	parameters.smbios_addr = platform_get_smbios();
 #endif
-
-	// preload kernel modules
-	char **premod_filenames = config_get_modules(&parameters.module_count);
-	parameters.modules = (struct aurix_module *)mem_alloc(
-		sizeof(struct aurix_module) * parameters.module_count);
-	for (uint32_t i = 0; i < parameters.module_count; i++) {
-		char *trimmed_name = trim_str(premod_filenames[i], '\\');
-		strncpy((char *)&parameters.modules[i].filename, trimmed_name, 32);
-
-		debug("aurix_load(): Preloaded module '%s'\n",
-			  parameters.modules[i].filename);
-
-		vfs_read(premod_filenames[i], (char **)&parameters.modules[i].addr,
-				 &parameters.modules[i].size);
-	}
 
 	debug(
 		"aurix_load(): Handoff state: pm=0x%llx, stack=0x%llx, kernel_entry=0x%llx\n",

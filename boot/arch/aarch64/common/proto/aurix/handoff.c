@@ -54,11 +54,11 @@ void aurix_arch_handoff(void *kernel_entry, pagetable *pm, void *stack,
 		"lretq\n"
 		"1:\n"
 		"movq $0x10, %%rax\n"
-		"movq %%rax, %%ds\n"
-		"movq %%rax, %%es\n"
-		"movq %%rax, %%ss\n"
-		"movq %%rax, %%fs\n"
-		"movq %%rax, %%gs\n"
+		"movw %%ax, %%ds\n"
+		"movw %%ax, %%es\n"
+		"movw %%ax, %%ss\n"
+		"movw %%ax, %%fs\n"
+		"movw %%ax, %%gs\n"
 
 		"lidt %[idt]\n"
 

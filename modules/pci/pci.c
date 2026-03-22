@@ -62,6 +62,19 @@ __attribute__((section(".aurix.mod"))) const struct axmod_info modinfo = {
 	.mod_exit = mod_exit,
 };
 
+static int probe(struct device *dev)
+{
+	(void)dev;
+	return 1;
+}
+
+static struct driver pci_driver = {
+	.name = "pci",
+	.class_name = "pci",
+	.probe = probe,
+	.remove = 0,
+};
+
 struct pci_device {
 	uint8_t bus;
 	uint8_t dev;

@@ -17,36 +17,24 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-APP_NAME := test
+APP_NAME := init
 
 BUILD_DIR := $(BUILD_DIR)/$(APP_NAME)
 APP_FILE := $(BUILD_DIR)/$(APP_NAME)
 
-APP_INCLUDE_DIRS := include
-APP_DEFINES := __$(ARCH)__
-APP_DEFINES += APP_NAME=$(APP_NAME)
+APP_DEFINES := __$(ARCH)__ APP_NAME=$(APP_NAME)
+APP_CFLAGS += $(foreach d,$(APP_DEFINES),-D$d)
 
-APP_CFLAGS += $(foreach d,$(APP_INCLUDE_DIRS),-I$d) \
-              $(foreach d,$(APP_DEFINES),-D$d)
-
-APP_LDFLAGS +=
-
-APP_CFILES := $(shell find . -name '*.c')
+APP_CFILES := $(wildcard *.c) $(wildcard */*.c)
 APP_OBJ := $(APP_CFILES:%.c=$(BUILD_DIR)/%.c.o)
 APP_DEP := $(APP_OBJ:.o=.d)
+APP_GLOBAL_DEPS := Makefile ../Makefile $(wildcard ../include/*.h)
 
-.PHONY: all clean install
+.PHONY: all clean install rebuild
 
 all: $(APP_FILE)
 
-install: all
-	@mkdir -p $(APP_INSTALL_DIR)
-	@cp $(APP_FILE) $(APP_INSTALL_DIR)
-
-clean:
-	@rm -rf $(BUILD_DIR)
-
--include $(APP_DEP)
+rebuild: clean all
 
 $(APP_FILE): $(APP_OBJ)
 	@mkdir -p $(@D)
@@ -57,7 +45,18 @@ ifneq ($(BUILD_TYPE),debug)
 	@$(APP_OBJCOPY) --strip-unneeded $@
 endif
 
+$(APP_OBJ): $(APP_GLOBAL_DEPS)
+
 $(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(@D)
 	@printf "  CC\t$<\n"
 	@$(APP_CC) $(APP_CFLAGS) -MMD -MP -c $< -o $@
+
+-include $(APP_DEP)
+
+clean:
+	@rm -rf $(BUILD_DIR)
+
+install: all
+	@mkdir -p $(APP_INSTALL_DIR)
+	@cp $(APP_FILE) $(APP_INSTALL_DIR)

@@ -338,6 +338,79 @@ int vfs_resolve_mount(const char *path, struct vfs **out, char **remaining_path)
 static int vfs_lookup_internal(const char *path, struct vnode **out, int depth,
 							   bool follow_symlinks);
 
+static char *vfs_normalize_path(const char *path)
+{
+	if (!path)
+		return NULL;
+
+	size_t len = strlen(path);
+	bool abs = (len > 0 && path[0] == '/');
+
+	char *temp = kmalloc(len + 1);
+	if (!temp)
+		return NULL;
+	memcpy(temp, path, len + 1);
+
+	size_t max_parts = (len / 2) + 2;
+	char **parts = kmalloc(max_parts * sizeof(char *));
+	if (!parts) {
+		kfree(temp);
+		return NULL;
+	}
+
+	size_t count = 0;
+	char *save = NULL;
+	char *token = strtok_r(temp, "/", &save);
+	while (token) {
+		if (strcmp(token, ".") == 0 || *token == '\0') {
+			// skip
+		} else if (strcmp(token, "..") == 0) {
+			if (count > 0 && strcmp(parts[count - 1], "..") != 0) {
+				count--;
+			} else if (!abs) {
+				parts[count++] = token;
+			}
+		} else {
+			parts[count++] = token;
+		}
+		token = strtok_r(NULL, "/", &save);
+	}
+
+	size_t out_len = abs ? 1 : 0;
+	for (size_t i = 0; i < count; i++)
+		out_len += strlen(parts[i]) + 1;
+	if (out_len == 0)
+		out_len = 1;
+
+	char *out = kmalloc(out_len + 1);
+	if (!out) {
+		kfree(parts);
+		kfree(temp);
+		return NULL;
+	}
+
+	char *cursor = out;
+	if (abs)
+		*cursor++ = '/';
+
+	for (size_t i = 0; i < count; i++) {
+		size_t part_len = strlen(parts[i]);
+		memcpy(cursor, parts[i], part_len);
+		cursor += part_len;
+		if (i + 1 < count)
+			*cursor++ = '/';
+	}
+
+	if (cursor == out) {
+		*cursor++ = '/';
+	}
+	*cursor = '\0';
+
+	kfree(parts);
+	kfree(temp);
+	return out;
+}
+
 static int vfs_follow_symlink(struct vnode *vnode, struct vnode **out,
 							  int depth)
 {
@@ -360,9 +433,42 @@ static int vfs_follow_symlink(struct vnode *vnode, struct vnode **out,
 		return ret;
 	}
 
+	const char *lookup_path = target;
+	char *resolved_path = NULL;
+	if (target[0] != '/') {
+		const char *link_path = vnode->path ? vnode->path : "/";
+		const char *last_slash = strrchr(link_path, '/');
+		size_t parent_len = last_slash ? (size_t)(last_slash - link_path) : 0;
+		size_t target_len = strlen(target);
+		size_t total_len = parent_len + 1 + target_len + 1;
+
+		resolved_path = kmalloc(total_len);
+		if (!resolved_path)
+			return -1;
+
+		if (parent_len == 0) {
+			strcpy(resolved_path, "/");
+		} else {
+			memcpy(resolved_path, link_path, parent_len);
+			resolved_path[parent_len] = '\0';
+		}
+		if (resolved_path[strlen(resolved_path) - 1] != '/')
+			strcat(resolved_path, "/");
+		strcat(resolved_path, target);
+		lookup_path = resolved_path;
+	}
+
+	char *normalized = vfs_normalize_path(lookup_path);
+	if (normalized)
+		lookup_path = normalized;
+
 	// Resolve the symlink target
 	struct vnode *target_vnode;
-	ret = vfs_lookup_internal(target, &target_vnode, depth + 1, false);
+	ret = vfs_lookup_internal(lookup_path, &target_vnode, depth + 1, false);
+	if (resolved_path)
+		kfree(resolved_path);
+	if (normalized)
+		kfree(normalized);
 	if (ret != 0) {
 		return ret;
 	}

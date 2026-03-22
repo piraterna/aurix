@@ -36,4 +36,10 @@ struct driver {
 
 void driver_core_init(struct devfs *fs);
 
+#ifdef __KERNEL__
+int device_register(struct device *dev);
+int driver_register(struct driver *drv);
+int driver_bind_all(void);
+#endif // __KERNEL__
+
 #endif

@@ -43,7 +43,18 @@ struct axmod_info {
 #define MOD_COLOR "\x1b[38;2;100;100;100m"
 #define MOD_RESET "\x1b[0m"
 
-#define mod_log(fmt, ...) \
-	kprintf(MOD_COLOR __AX_XSTR(MOD_NAME) ": " fmt MOD_RESET, ##__VA_ARGS__)
+#ifndef MOD_LOG_SERIAL
+#define MOD_LOG_SERIAL 1
+#endif
+
+#if MOD_LOG_SERIAL
+#define __MOD_PRINTF serial_kprintf
+#else
+#define __MOD_PRINTF kprintf
+#endif
+
+#define mod_log(fmt, ...)                                          \
+	__MOD_PRINTF(MOD_COLOR __AX_XSTR(MOD_NAME) ": " fmt MOD_RESET, \
+				 ##__VA_ARGS__)
 
 #endif /* __SYS_AURIX_MOD_H */

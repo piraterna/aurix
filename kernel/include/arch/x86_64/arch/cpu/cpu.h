@@ -160,6 +160,7 @@ extern struct cpu cpuinfo[];
 extern size_t cpu_count;
 
 struct cpu *cpu_get_current(void);
+uint8_t cpu_get_current_id(void);
 
 ////
 // Utilities

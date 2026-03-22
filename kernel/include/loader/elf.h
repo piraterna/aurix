@@ -248,13 +248,20 @@ typedef struct {
 
 bool elf_get_load_range(char *data, uintptr_t *link_base_out, size_t *size_out);
 bool elf_load_image_at(char *data, pagetable *pagemap, uintptr_t load_base,
-					   elf_loaded_image_t *out);
+					   elf_loaded_image_t *out, bool user_mode,
+					   bool apply_relocs);
 
 bool elf_load_image_mapped(char *data, pagetable *pagemap, uintptr_t load_base,
-						   uintptr_t phys_base, elf_loaded_image_t *out);
+						   uintptr_t phys_base, elf_loaded_image_t *out,
+						   bool user_mode, bool apply_relocs);
 
 uintptr_t elf_lookup_symbol(char *elf_data, const char *symbol_name);
 bool elf_lookup_addr(char *elf_data, uintptr_t addr, const char **name_out,
 					 uintptr_t *sym_addr_out);
+
+struct pcb;
+bool elf_get_interpreter(char *data, const char **path_out);
+bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
+						   uintptr_t *entry_out);
 
 #endif /* _LOADER_ELF_H */

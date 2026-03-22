@@ -190,6 +190,9 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 	uint64_t p3 = pml3_index(virt);
 	uint64_t p2 = pml2_index(virt);
 	uint64_t p1 = pml1_index(virt);
+	uint64_t table_flags = VMM_PRESENT | VMM_WRITABLE;
+	if (flags & VMM_USER)
+		table_flags |= VMM_USER;
 
 	// if (flags & VMM_WRITABLE)
 	// flags |= VMM_NX;
@@ -201,7 +204,9 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 		if (!new_pml3_phys)
 			return;
 		pml4_table->entries[p4] =
-			(new_pml3_phys & PAGE_FRAME_MASK) | VMM_PRESENT | VMM_WRITABLE;
+			(new_pml3_phys & PAGE_FRAME_MASK) | table_flags;
+	} else if (flags & VMM_USER) {
+		pml4_table->entries[p4] |= VMM_USER;
 	}
 
 	pagetable *pml3_table =
@@ -212,7 +217,9 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 		if (!new_pml2_phys)
 			return;
 		pml3_table->entries[p3] =
-			(new_pml2_phys & PAGE_FRAME_MASK) | VMM_PRESENT | VMM_WRITABLE;
+			(new_pml2_phys & PAGE_FRAME_MASK) | table_flags;
+	} else if (flags & VMM_USER) {
+		pml3_table->entries[p3] |= VMM_USER;
 	}
 
 	pagetable *pml2_table =
@@ -223,7 +230,9 @@ static inline void _map(pagetable *pm_phys_ptr, uintptr_t virt, uintptr_t phys,
 		if (!new_pml1_phys)
 			return;
 		pml2_table->entries[p2] =
-			(new_pml1_phys & PAGE_FRAME_MASK) | VMM_PRESENT | VMM_WRITABLE;
+			(new_pml1_phys & PAGE_FRAME_MASK) | table_flags;
+	} else if (flags & VMM_USER) {
+		pml2_table->entries[p2] |= VMM_USER;
 	}
 
 	pagetable *pml1_table =
@@ -327,8 +336,8 @@ pagetable *create_pagemap(void)
 	memset((void *)PHYS_TO_VIRT(pm_phys), 0, PAGE_SIZE);
 
 	for (size_t i = 256; i < 512; i++) {
-		((pagetable *)PHYS_TO_VIRT(pm_phys))->entries[i] =
-			kernel_pm->entries[i];
+		pagetable *kpm = (pagetable *)PHYS_TO_VIRT((uintptr_t)kernel_pm);
+		((pagetable *)PHYS_TO_VIRT(pm_phys))->entries[i] = kpm->entries[i];
 	}
 
 	return (pagetable *)pm_phys;

@@ -49,6 +49,8 @@
 #include <fs/cpio/newc.h>
 #include <loader/elf.h>
 #include <user/syscall.h>
+#include <dev/builtin/stdio.h>
+#include <lib/align.h>
 
 struct aurix_parameters *boot_params = NULL;
 struct flanterm_context *ft_ctx = NULL;
@@ -124,19 +126,17 @@ pcb *load_init(const char *path)
 
 	proc->name = strdup("init");
 
-	uint64_t addr, size = 0;
-	uintptr_t entry = elf_load(buf, &addr, &size, proc->pm);
-	if (entry == 0) {
+	uintptr_t entry = 0;
+	if (!elf_load_user_process(buf, path, proc, &entry)) {
 		error("failed to load ELF: %s\n", path);
 		proc_destroy(proc);
 		kfree(buf);
 		return NULL;
 	}
 
-	info("loaded ELF '%s' entry=0x%lx addr=0x%lx size=0x%lx\n", path, entry,
-		 addr, size);
+	info("loaded ELF '%s' entry=0x%lx\n", path, entry);
 
-	struct tcb *thread = thread_create(proc, (void (*)(void))entry);
+	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
 	if (!thread) {
 		error("failed to create thread for: %s\n", path);
 		proc_destroy(proc);
@@ -145,6 +145,77 @@ pcb *load_init(const char *path)
 	}
 	kfree(buf);
 	return proc;
+}
+
+static bool stage_module_file(const char *name, void *phys_addr, size_t size,
+							  struct fileio *manifest)
+{
+	if (!name || !phys_addr || size == 0) {
+		return false;
+	}
+
+	char path[64];
+	int path_len = snprintf(path, sizeof(path), "/sys/%s", name);
+	if (path_len <= 1 || (size_t)path_len >= sizeof(path)) {
+		return false;
+	}
+
+	struct fileio *out = open(path, O_CREATE | O_WRONLY | O_TRUNC, 0644);
+	if (!out) {
+		return false;
+	}
+
+	int written = write(out, (void *)PHYS_TO_VIRT((uintptr_t)phys_addr), size);
+	close(out);
+	if (written < 0 || (size_t)written != size) {
+		return false;
+	}
+
+	if (manifest) {
+		int list_written = write(manifest, path, (size_t)path_len);
+		if (list_written < 0 || list_written != path_len) {
+			return false;
+		}
+
+		list_written = write(manifest, "\n", 1);
+		if (list_written != 1) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static void stage_boot_modules_to_ramfs(void)
+{
+	if (vfs_mkdir("/sys", 0755) != 0) {
+		kpanic(NULL, "Failed to create /sys directory");
+	}
+
+	struct fileio *manifest =
+		open("/sys/modules.list", O_CREATE | O_WRONLY | O_TRUNC, 0644);
+	if (!manifest) {
+		kpanic(NULL, "Failed to create /sys/modules.list");
+	}
+
+	for (uint32_t m = 0; m < boot_params->module_count; m++) {
+		struct aurix_module *mod = &boot_params->modules[m];
+		const char *name = mod->filename;
+		size_t len = strlen(name);
+
+		if (len < 4 || strcmp(name + len - 4, ".sys") != 0) {
+			continue;
+		}
+
+		if (!stage_module_file(name, mod->addr, mod->size, manifest)) {
+			close(manifest);
+			kpanicf(NULL, "Failed to stage module '%s'", name);
+		}
+
+		trace("Staged module '%s' to ramfs\n", name);
+	}
+
+	close(manifest);
 }
 
 void _start(struct aurix_parameters *params)
@@ -242,28 +313,13 @@ void _start(struct aurix_parameters *params)
 		kpanic(NULL, "Failed to initialize devfs");
 
 	driver_core_init(devfs);
+	stdio_init();
 	cpu_init_mp();
 	syscall_builtin_init();
 	sched_init();
 
 	platform_timekeeper_init();
-
-	for (uint32_t m = 0; m < boot_params->module_count; m++) {
-		const char *name = boot_params->modules[m].filename;
-		size_t len = strlen(name);
-
-		if (len < 4 || strcmp(name + len - 4, ".sys") != 0) {
-			warn("skipping module '%s' (not a .sys module)\n", name);
-			continue;
-		}
-
-		trace("Loading module '%s'...\n", name);
-
-		if (!module_load(boot_params->modules[m].addr,
-						 boot_params->modules[m].size)) {
-			kpanicf(NULL, "Module '%s' failed to load", name);
-		}
-	}
+	stage_boot_modules_to_ramfs();
 
 	debug("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
 		  time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),
@@ -292,6 +348,8 @@ void _start(struct aurix_parameters *params)
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();
 
+#if CONFIG_KSH
+
 	uint64_t last_check_ms = get_ms();
 	bool ksh_launched = (init_proc == NULL);
 	uint32_t init_pid = init_proc ? init_proc->pid : 0;
@@ -301,7 +359,9 @@ void _start(struct aurix_parameters *params)
 		if (!ksh_launched && now - last_check_ms >= 1000) {
 			last_check_ms = now;
 			if (!proc_has_threads(init_pid)) {
-				warn("init process pid=%u exited, launching ksh\n", init_pid);
+				kprintf(
+					"\x1b[38;2;100;100;100minit process pid=%u exited, launching ksh\x1b[0m\n",
+					init_pid);
 				pcb *p = proc_create();
 				p->pm = kernel_pm;
 				p->vctx = kvctx;
@@ -311,6 +371,7 @@ void _start(struct aurix_parameters *params)
 			}
 		}
 	}
+#endif // CONFIG_KSH
 
 	for (;;) {
 #ifdef __x86_64__

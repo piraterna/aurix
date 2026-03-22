@@ -7,3 +7,6 @@
 [submodule "utils/kconfiglib"]
 	path = utils/kconfiglib
 	url = https://github.com/zephyrproject-rtos/Kconfiglib.git
+[submodule "libc/mlibc"]
+	path = libc/mlibc
+	url = https://github.com/piraterna/aurix-mlibc

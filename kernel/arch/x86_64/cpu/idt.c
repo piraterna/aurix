@@ -23,6 +23,7 @@
 #include <arch/apic/apic.h>
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/idt.h>
+#include <arch/cpu/gdt.h>
 #include <arch/cpu/irq.h>
 #include <cpu/trace.h>
 #include <sys/panic.h>
@@ -116,10 +117,58 @@ static void isr_handle_user_exception(const struct interrupt_frame *frame)
 		kpanic(frame, exception_str[frame->vector]);
 	}
 
-	error("exception %s (0x%llx) occured in %s (PID=%u, TID=%u)\n",
-		  exception_str[frame->vector], frame->rip,
-		  current->process->name ? current->process->name : "<unknown>",
-		  current->process->pid, current->tid);
+	if (frame->vector == 14) {
+		error(
+			"exception %s rip=0x%llx cr2=0x%llx err=0x%llx occured in %s (PID=%u, TID=%u)\n",
+			exception_str[frame->vector], frame->rip, frame->cr2, frame->err,
+			current->process->name ? current->process->name : "<unknown>",
+			current->process->pid, current->tid);
+	} else {
+		error("exception %s (0x%llx) occured in %s (PID=%u, TID=%u)\n",
+			  exception_str[frame->vector], frame->rip,
+			  current->process->name ? current->process->name : "<unknown>",
+			  current->process->pid, current->tid);
+	}
+
+	error("!!! fsbase value: 0x%llx\n", rdmsr(0xC0000100));
+
+#if CONFIG_MPANIC_DUMP
+	error(
+
+		"regs: rax=%016llx rbx=%016llx rcx=%016llx rdx=%016llx\n",
+		(unsigned long long)frame->rax, (unsigned long long)frame->rbx,
+		(unsigned long long)frame->rcx, (unsigned long long)frame->rdx);
+
+	error(
+
+		"      rdi=%016llx rsi=%016llx rbp=%016llx rsp=%016llx\n",
+		(unsigned long long)frame->rdi, (unsigned long long)frame->rsi,
+		(unsigned long long)frame->rbp, (unsigned long long)frame->rsp);
+
+	error(
+
+		"      r8 =%016llx r9 =%016llx r10=%016llx r11=%016llx\n",
+		(unsigned long long)frame->r8, (unsigned long long)frame->r9,
+		(unsigned long long)frame->r10, (unsigned long long)frame->r11);
+
+	error(
+
+		"      r12=%016llx r13=%016llx r14=%016llx r15=%016llx\n",
+		(unsigned long long)frame->r12, (unsigned long long)frame->r13,
+		(unsigned long long)frame->r14, (unsigned long long)frame->r15);
+
+	error(
+
+		"      rip=%016llx rfl=%016llx cs =%016llx ss =%016llx\n",
+		(unsigned long long)frame->rip, (unsigned long long)frame->rflags,
+		(unsigned long long)frame->cs, (unsigned long long)frame->ss);
+
+	error(
+
+		"      vec=%016llx err=%016llx cr2=%016llx cr3=%016llx\n",
+		(unsigned long long)frame->vector, (unsigned long long)frame->err,
+		(unsigned long long)frame->cr2, (unsigned long long)frame->cr3);
+#endif
 
 	panic_dump_to_file(frame, exception_str[frame->vector]);
 
@@ -133,6 +182,7 @@ static void isr_handle_user_exception(const struct interrupt_frame *frame)
 		UNREACHABLE();
 	}
 
+	gdt_set_kernel_stack(next->kthread.rsp0);
 	switch_task(NULL, &next->kthread);
 	UNREACHABLE();
 }
@@ -145,15 +195,22 @@ static void isr_syscall_handler(struct interrupt_frame *frame)
 	}
 
 	syscall_args_t args = { .rdi = frame->rdi,
+							.id = frame->rax,
 							.rsi = frame->rsi,
 							.rdx = frame->rdx,
 							.r10 = frame->r10,
 							.r8 = frame->r8,
 							.r9 = frame->r9,
+							.rip = frame->rip,
+							.rflags = frame->rflags,
 							.rsp = frame->rsp };
 
-	uint32_t syscall_id = (uint32_t)frame->rax;
-	int64_t ret = syscall_dispatch(syscall_id, &args);
+	if (frame->vector == 0x80) {
+		warn("%s called via an int 0x80 syscall! perferably use \"syscall\"\n",
+			 syscall_table[args.id].name);
+	}
+
+	int64_t ret = syscall_dispatch((uint32_t)args.id, &args);
 
 	frame->rax = ret;
 }

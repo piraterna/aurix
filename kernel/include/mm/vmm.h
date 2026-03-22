@@ -49,14 +49,16 @@ void unmap_pages(pagetable *pm, uintptr_t virt, size_t size);
 #define VALLOC_WRITE (1 << 1)
 #define VALLOC_EXEC (1 << 2)
 #define VALLOC_USER (1 << 3)
+#define VALLOC_NO_PRESENT (1 << 4)
 
 #define VALLOC_RW (VALLOC_READ | VALLOC_WRITE)
 #define VALLOC_RX (VALLOC_READ | VALLOC_EXEC)
 #define VALLOC_RWX (VALLOC_READ | VALLOC_WRITE | VALLOC_EXEC)
 
-#define VFLAGS_TO_PFLAGS(flags)                                    \
-	(VMM_PRESENT | (((flags) & VALLOC_WRITE) ? VMM_WRITABLE : 0) | \
-	 (((flags) & VALLOC_USER) ? VMM_USER : 0) |                    \
+#define VFLAGS_TO_PFLAGS(flags)                          \
+	((((flags) & VALLOC_NO_PRESENT) ? 0 : VMM_PRESENT) | \
+	 (((flags) & VALLOC_WRITE) ? VMM_WRITABLE : 0) |     \
+	 (((flags) & VALLOC_USER) ? VMM_USER : 0) |          \
 	 (((flags) & VALLOC_EXEC) ? 0 : VMM_NX))
 
 typedef struct vregion {
@@ -76,10 +78,13 @@ typedef struct vctx {
 vctx_t *vinit(pagetable *pm, uint64_t start);
 void vdestroy(vctx_t *ctx);
 void *valloc(vctx_t *ctx, size_t pages, uint64_t flags);
-void *vallocat(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys);
+void *vreserve(vctx_t *ctx, uint64_t vaddr, size_t pages, uint64_t flags);
+void *vallocatv(vctx_t *ctx, uint64_t vaddr, size_t pages, uint64_t flags);
+void *vallocatp(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys);
 void *vadd(vctx_t *ctx, uint64_t vaddr, uint64_t paddr, size_t pages,
 		   uint64_t flags);
 void vfree(vctx_t *ctx, void *ptr);
+void vfree_range(vctx_t *ctx, uint64_t vaddr, size_t pages);
 
 vregion_t *vget(vctx_t *ctx, uint64_t vaddr);
 uintptr_t vget_phys(pagetable *pm, uintptr_t virt);

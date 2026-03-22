@@ -125,7 +125,7 @@ static int axmod_get_current_cpuid(void)
 	return c ? (int)c->id : 0;
 }
 
-bool module_load(void *addr, uint32_t size)
+bool module_load_image(void *image, uint32_t size)
 {
 	uint32_t file_size = size;
 	uintptr_t entry_point = 0;
@@ -136,7 +136,7 @@ bool module_load(void *addr, uint32_t size)
 		return false;
 	}
 
-	char *virt_data = (char *)PHYS_TO_VIRT(addr);
+	char *virt_data = (char *)image;
 	mod->image_elf = virt_data;
 	mod->image_size = file_size;
 
@@ -164,7 +164,7 @@ bool module_load(void *addr, uint32_t size)
 	}
 
 	uintptr_t load_base =
-		(uintptr_t)vallocat(kmod_vctx, pages, VALLOC_RW, (uint64_t)phys_base);
+		(uintptr_t)vallocatp(kmod_vctx, pages, VALLOC_RW, (uint64_t)phys_base);
 	if (!load_base) {
 		error("Failed to allocate module virtual range\n");
 		pfree((void *)phys_base, pages);
@@ -173,8 +173,8 @@ bool module_load(void *addr, uint32_t size)
 
 	elf_loaded_image_t img;
 	memset(&img, 0, sizeof(img));
-	if (!elf_load_image_mapped(virt_data, kernel_pm, load_base, phys_base,
-							   &img)) {
+	if (!elf_load_image_mapped(virt_data, kernel_pm, load_base, phys_base, &img,
+							   false, true)) {
 		error("Failed to load module file\n");
 		vfree(kmod_vctx, (void *)load_base);
 		pfree((void *)phys_base, pages);
@@ -247,6 +247,15 @@ bool module_load(void *addr, uint32_t size)
 		  img.phys_base, img.load_base, entry_point);
 
 	return true;
+}
+
+bool module_load(void *addr, uint32_t size)
+{
+	if (!addr) {
+		return false;
+	}
+
+	return module_load_image((void *)PHYS_TO_VIRT(addr), size);
 }
 
 struct module_info_node *module_get_list(void)

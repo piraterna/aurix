@@ -29,6 +29,7 @@
 #define align4(x) (((x) + 3) & ~3)
 
 typedef struct {
+	uint8_t *start;
 	uint8_t *pos;
 	uint8_t *end;
 } cpio_reader_t;
@@ -42,12 +43,19 @@ static uint64_t parse_hex(char *buf, size_t len)
 
 static int cpio_reader_next(cpio_reader_t *reader, struct cpio_file *file)
 {
-	if ((size_t)(reader->end - reader->pos) < 110)
+	if ((size_t)(reader->end - reader->pos) < 110) {
+		warn("cpio: truncated header at 0x%llx (remaining=%zu)\n",
+			 (unsigned long long)(reader->pos - reader->start),
+			 (size_t)(reader->end - reader->pos));
 		return -1;
+	}
 
 	if (memcmp(reader->pos, "070701", 6) != 0 &&
-		memcmp(reader->pos, "070702", 6) != 0)
+		memcmp(reader->pos, "070702", 6) != 0) {
+		warn("cpio: invalid magic at 0x%llx\n",
+			 (unsigned long long)(reader->pos - reader->start));
 		return -1;
+	}
 
 	uint8_t *pos = reader->pos + 6;
 
@@ -81,36 +89,60 @@ static int cpio_reader_next(cpio_reader_t *reader, struct cpio_file *file)
 	reader->pos = pos;
 
 	if (file->namesize == 0 ||
-		(size_t)(reader->end - reader->pos) < file->namesize)
+		(size_t)(reader->end - reader->pos) < file->namesize) {
+		warn("cpio: invalid namesize %llu at 0x%llx (remaining=%zu)\n",
+			 (unsigned long long)file->namesize,
+			 (unsigned long long)(reader->pos - reader->start),
+			 (size_t)(reader->end - reader->pos));
 		return -1;
+	}
 
 	file->filename = (char *)reader->pos;
 	reader->pos += file->namesize;
 	reader->pos = (uint8_t *)align4((uintptr_t)reader->pos);
 
-	if (file->filename[file->namesize - 1] != '\0')
+	if (file->filename[file->namesize - 1] != '\0') {
+		warn("cpio: filename missing NUL terminator\n");
 		return -1;
+	}
 
 	if (strcmp(file->filename, "TRAILER!!!") == 0)
 		return 1;
 
-	uint16_t type = file->mode & S_IFMT;
-	if (type == S_IFREG) {
-		if ((size_t)(reader->end - reader->pos) < file->filesize)
+	if (file->filesize) {
+		if ((size_t)(reader->end - reader->pos) < file->filesize) {
+			warn("cpio: truncated data for %s (size=%llu, remaining=%zu)\n",
+				 file->filename, (unsigned long long)file->filesize,
+				 (size_t)(reader->end - reader->pos));
 			return -1;
+		}
 		file->data = reader->pos;
 		reader->pos += file->filesize;
 		reader->pos = (uint8_t *)align4((uintptr_t)reader->pos);
+		if (reader->pos > reader->end) {
+			warn("cpio: data alignment moved past end for %s\n",
+				 file->filename);
+			return -1;
+		}
 	} else {
 		file->data = NULL;
 	}
+
+	trace("cpio: entry %s mode=0x%llx size=%llu\n", file->filename,
+		  (unsigned long long)file->mode, (unsigned long long)file->filesize);
 
 	return 0;
 }
 
 int cpio_fs_parse(struct cpio_fs *fs, void *data, size_t size)
 {
+	if (!fs || !data || size < 110) {
+		warn("cpio: invalid archive (%p, %p, size=%zu)\n", fs, data, size);
+		return -1;
+	}
+
 	cpio_reader_t reader = {
+		.start = (uint8_t *)data,
 		.pos = (uint8_t *)data,
 		.end = (uint8_t *)data + size,
 	};
@@ -141,12 +173,17 @@ int cpio_fs_parse(struct cpio_fs *fs, void *data, size_t size)
 		int res = cpio_reader_next(&reader, file);
 		if (res == 1)
 			break;
-		if (res < 0)
+		if (res < 0) {
+			warn("cpio: parse failed at index %zu (offset=0x%llx)\n",
+				 fs->file_count,
+				 (unsigned long long)(reader.pos - reader.start));
 			return -1;
+		}
 
 		fs->file_count++;
 	}
 
+	trace("cpio: parsed %zu entries\n", fs->file_count);
 	return 0;
 }
 
@@ -234,12 +271,15 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 
 		char *save;
 		char *dir = strtok_r(name_dup, "/", &save);
+		uint16_t type = file->mode & S_IFMT;
 
 		while (dir) {
 			if (*dir == '\0') {
 				dir = strtok_r(NULL, "/", &save);
 				continue;
 			}
+
+			bool is_last = !(save && *save);
 
 			if (strlen(path) + strlen(dir) + 2 > s) {
 				s = strlen(path) + strlen(dir) + 2;
@@ -250,7 +290,7 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 			strcat(path, dir);
 
 			int flags = V_CREATE;
-			if (save && *save)
+			if (!is_last)
 				flags |= V_DIR;
 
 			struct vnode *v;
@@ -258,27 +298,54 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 
 			if (vfs_lookup(path, &v) != 0) {
 				char *dup = strdup(path);
-				if (flags & V_DIR) {
-					vfs_mkdir(dup, 0755);
+				if (!is_last || type == S_IFDIR) {
+					if (vfs_mkdir(dup, 0755) != 0)
+						warn("cpio: mkdir failed for %s\n", dup);
 					if (vfs_lookup(dup, &v) != 0) {
+						warn("cpio: lookup failed after mkdir for %s\n", dup);
 						return -1;
 					} else {
 						v->gid = file->gid;
 						v->uid = file->uid;
 					}
-				} else {
-					if (vfs_create(dup, file->mode) == 0) {
+				} else if (type == S_IFLNK) {
+					if (!file->data || file->filesize == 0) {
+						warn("cpio: empty symlink target for %s\n", dup);
+						return -1;
+					}
+					char *target = kmalloc(file->filesize + 1);
+					if (!target)
+						return -1;
+					memcpy(target, file->data, file->filesize);
+					target[file->filesize] = '\0';
+					if (vfs_symlink(target, dup) != 0) {
+						kfree(target);
+						warn("cpio: failed to create symlink %s -> %s\n", dup,
+							 target);
+						return -1;
+					}
+					kfree(target);
+				} else if (type == S_IFREG) {
+					if (vfs_create(dup, file->mode) != 0) {
+						warn("cpio: create failed for %s\n", dup);
+					} else {
 						if (vfs_open(dup, 0, &f) == 0) {
 							write(f, file->data, file->filesize);
 							close(f);
+						} else {
+							warn("cpio: open failed for %s\n", dup);
 						}
 						if (vfs_lookup(dup, &v) != 0) {
+							warn("cpio: lookup failed after create for %s\n",
+								 dup);
 							return -1;
 						} else {
 							v->gid = file->gid;
 							v->uid = file->uid;
 						}
 					}
+				} else {
+					warn("cpio: unsupported type 0x%x for %s\n", type, dup);
 				}
 			}
 
