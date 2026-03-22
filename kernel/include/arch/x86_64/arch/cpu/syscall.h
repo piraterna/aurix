@@ -33,6 +33,12 @@ typedef struct {
 	uint64_t rcx;
 	uint64_t r11;
 	uint64_t rsp;
+	uint64_t rbx;
+	uint64_t rbp;
+	uint64_t r12;
+	uint64_t r13;
+	uint64_t r14;
+	uint64_t r15;
 } x86_64_syscall_frame_t;
 
 void x86_64_syscall_init(void);

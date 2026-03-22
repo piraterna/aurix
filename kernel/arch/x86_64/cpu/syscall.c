@@ -63,7 +63,14 @@ int64_t x86_64_syscall_dispatch(x86_64_syscall_frame_t *frame)
 		.rip = frame->rcx,
 		.rflags = frame->r11,
 		.rsp = frame->rsp,
+		.rbx = frame->rbx,
+		.rbp = frame->rbp,
+		.r12 = frame->r12,
+		.r13 = frame->r13,
+		.r14 = frame->r14,
+		.r15 = frame->r15,
 	};
 
-	return syscall_dispatch((uint32_t)args.id, &args);
+	int64_t ret = syscall_dispatch((uint32_t)args.id, &args);
+	return ret;
 }

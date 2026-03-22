@@ -28,6 +28,12 @@ x86_64_syscall_entry:
     lea rdx, [rel gdt_tss]
     mov rsp, [rdx + rax + TSS_RSP0_OFFSET]
 
+    push r15
+    push r14
+    push r13
+    push r12
+    push rbp
+    push rbx
     push r9
     push qword [r10 + 64]
     push qword [r10 + 56]
@@ -50,7 +56,13 @@ x86_64_syscall_entry:
     mov r9, [rsp + 48]
     mov rcx, [rsp + 56]
     mov r11, [rsp + 64]
+    mov rbx, [rsp + 80]
+    mov rbp, [rsp + 88]
+    mov r12, [rsp + 96]
+    mov r13, [rsp + 104]
+    mov r14, [rsp + 112]
+    mov r15, [rsp + 120]
     mov rdx, [rsp + 72]
-    add rsp, 80
+    add rsp, 128
     mov rsp, rdx
     o64 sysret

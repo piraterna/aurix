@@ -28,6 +28,8 @@ __attribute__((noreturn)) void kpanic(const struct interrupt_frame *frame,
 __attribute__((noreturn)) void kpanicf(const struct interrupt_frame *frame,
 									   const char *fmt, ...);
 
+void kpanic_nohalt(const struct interrupt_frame *frame, const char *reason);
+
 void panic_dump_to_file(const struct interrupt_frame *frame,
 						const char *reason);
 

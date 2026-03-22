@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -39,11 +40,11 @@ static void load_modules(void)
 	char *line = buf;
 
 	for (ssize_t i = 0; i <= bytes; i++) {
-		if (buf[i] != '\n' && buf[i] != '\0') {
+		if (buf[i] != '\n' && buf[i] != '\0')
 			continue;
-		}
 
 		buf[i] = '\0';
+
 		if (line[0] != '\0') {
 			if (load_module_raw(line) < 0) {
 				printf("init: failed to load module: %s (%s)\n", line,
@@ -57,17 +58,19 @@ static void load_modules(void)
 	}
 }
 
-int main(int argc, char *argv)
+int main(void)
 {
 	printf("init: userspace starting\n");
+
 	load_modules();
+
 	printf("init: module load phase complete\n");
-	printf("init: launching /bin/test\n");
+	printf("init: launching /bin/sh\n");
 
-	if (sys_exec("/bin/test") < 0) {
-		printf("init: exec /bin/test failed: %s\n", strerror(errno));
-		return 1;
-	}
+	char *const argv[] = { "/bin/sh", NULL };
+	char *const envp[] = { "HOME=/", "PATH=/bin", NULL };
+	execve("/bin/sh", argv, envp);
+	printf("init: execve /bin/sh failed: %s\n", strerror(errno));
 
-	return 0;
+	return 1;
 }

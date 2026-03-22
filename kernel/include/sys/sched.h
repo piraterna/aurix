@@ -68,9 +68,14 @@ typedef struct pcb {
 	vctx_t *vctx;
 	struct tcb *threads;
 	uint32_t next_tid;
+	struct pcb *proc_next;
 	spinlock_t fd_lock;
 	struct fileio *fds[PROC_MAX_FDS];
 	const char *name;
+	char *cwd;
+	uint32_t parent_pid;
+	int exit_code;
+	bool exited;
 	char *image_elf;
 	size_t image_size;
 	uintptr_t image_phys_base;
@@ -92,9 +97,12 @@ bool sched_is_enabled(void);
 pcb *proc_create(void);
 void proc_destroy(pcb *proc);
 bool proc_has_threads(uint32_t pid);
+pcb *proc_get_by_pid(uint32_t pid);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
 tcb *thread_create_user(pcb *proc, void (*entry)(void));
+tcb *thread_clone_user(pcb *proc, tcb *parent);
+void thread_enqueue(tcb *thread);
 void thread_destroy(tcb *thread);
 void thread_exit(tcb *thread, int code);
 tcb *thread_current(void);

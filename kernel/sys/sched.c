@@ -50,6 +50,8 @@ static pcb kernel_proc;
 static int kernel_proc_inited = 0;
 static tcb idle_threads[CONFIG_CPU_MAX_COUNT];
 static bool cpu_sched_inited[CONFIG_CPU_MAX_COUNT] = { false };
+static pcb *proc_list = NULL;
+static spinlock_t proc_list_lock = { 0 };
 
 extern char _start_text[];
 extern char _end_text[];
@@ -354,8 +356,13 @@ pcb *proc_create(void)
 	proc->vctx = vinit(proc->pm, 0x1000);
 	proc->threads = NULL;
 	proc->next_tid = 0;
+	proc->proc_next = NULL;
 	spinlock_init(&proc->fd_lock);
 	memset(proc->fds, 0, sizeof(proc->fds));
+	proc->cwd = strdup("/");
+	proc->parent_pid = 0;
+	proc->exit_code = 0;
+	proc->exited = false;
 
 	proc->fds[0] = open("/dev/stdin", O_RDONLY, 0);
 	if (!proc->fds[0]) {
@@ -391,6 +398,11 @@ pcb *proc_create(void)
 
 	trace("Created process PID=%u (pm=%p)\n", proc->pid, proc->pm);
 
+	spinlock_acquire(&proc_list_lock);
+	proc->proc_next = proc_list;
+	proc_list = proc;
+	spinlock_release(&proc_list_lock);
+
 	return proc;
 }
 
@@ -422,6 +434,20 @@ void proc_destroy(pcb *proc)
 	destroy_pagemap(proc->pm);
 	if (proc->name)
 		kfree((void *)proc->name);
+	if (proc->cwd)
+		kfree(proc->cwd);
+
+	spinlock_acquire(&proc_list_lock);
+	pcb **link = &proc_list;
+	while (*link) {
+		if (*link == proc) {
+			*link = proc->proc_next;
+			break;
+		}
+		link = &(*link)->proc_next;
+	}
+	spinlock_release(&proc_list_lock);
+
 	kfree(proc);
 
 	trace("Destroyed process, PID=%u\n", proc->pid);
@@ -535,6 +561,58 @@ tcb *thread_create_user(pcb *proc, void (*entry)(void))
 	return thread_create_internal(proc, entry, true);
 }
 
+void thread_enqueue(tcb *thread)
+{
+	if (!thread)
+		return;
+	struct cpu *cpu = sched_pick_best_cpu();
+	cpu_add_thread(cpu, thread);
+}
+
+tcb *thread_clone_user(pcb *proc, tcb *parent)
+{
+	if (!proc || !parent) {
+		warn("thread_clone_user: invalid args\n");
+		return NULL;
+	}
+
+	tcb *thread = kmalloc(sizeof(tcb));
+	if (!thread) {
+		error("Failed to allocate memory for cloned thread\n");
+		return NULL;
+	}
+
+	memset(thread, 0, sizeof(tcb));
+	thread->magic = TCB_MAGIC_ALIVE;
+	thread->tid = atomic_fetch_add(&next_tid, 1);
+	thread->user = true;
+	thread->process = proc;
+	thread->time_slice = SCHED_DEFAULT_SLICE;
+	thread->joinable = parent->joinable;
+
+	uint64_t *stack_base =
+		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
+	if (!stack_base) {
+		kfree(thread);
+		return NULL;
+	}
+
+	thread->kthread.rsp0 = (uint64_t)stack_base + STACK_SIZE;
+	thread->kthread.cr3 = (uint64_t)proc->pm;
+	thread->kthread.fs_base = parent->kthread.fs_base;
+
+	if (!proc->threads) {
+		proc->threads = thread;
+	} else {
+		tcb *cur = proc->threads;
+		while (cur->proc_next)
+			cur = cur->proc_next;
+		cur->proc_next = thread;
+	}
+
+	return thread;
+}
+
 void thread_destroy(tcb *thread)
 {
 	if (!thread)
@@ -617,6 +695,10 @@ void thread_exit(tcb *thread, int code)
 				break;
 			}
 			link = &(*link)->proc_next;
+		}
+		if (!proc->threads) {
+			proc->exit_code = code;
+			proc->exited = true;
 		}
 		thread->process = NULL;
 	}
@@ -708,6 +790,21 @@ bool proc_has_threads(uint32_t pid)
 	}
 
 	return false;
+}
+
+pcb *proc_get_by_pid(uint32_t pid)
+{
+	spinlock_acquire(&proc_list_lock);
+	pcb *p = proc_list;
+	while (p) {
+		if (p->pid == pid) {
+			spinlock_release(&proc_list_lock);
+			return p;
+		}
+		p = p->proc_next;
+	}
+	spinlock_release(&proc_list_lock);
+	return NULL;
 }
 
 int thread_wait(tcb *thread)

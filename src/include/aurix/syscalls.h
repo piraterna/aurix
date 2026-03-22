@@ -20,6 +20,10 @@ enum {
 	SYS_CLOCK_GET = 12,
 	SYS_SET_FS_BASE = 13,
 	SYS_MPROTECT = 14,
+	SYS_GETCWD = 15,
+	SYS_FORK = 16,
+	SYS_CHDIR = 17,
+	SYS_WAITPID = 18,
 };
 
 #define PROT_READ 0x01
@@ -169,6 +173,31 @@ static inline int sys_mprotect(void *addr, size_t length, int prot)
 {
 	long result =
 		raw_syscall6(SYS_MPROTECT, (long)addr, (long)length, prot, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline int sys_getcwd(char *buf, size_t size)
+{
+	long result = raw_syscall6(SYS_GETCWD, (long)buf, (long)size, 0, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline int sys_fork(void)
+{
+	long result = raw_syscall6(SYS_FORK, 0, 0, 0, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline int sys_chdir(const char *path)
+{
+	long result = raw_syscall6(SYS_CHDIR, (long)path, 0, 0, 0, 0, 0);
+	return (int)syscall_ret(result);
+}
+
+static inline int sys_waitpid(int pid, int *status, int options)
+{
+	long result =
+		raw_syscall6(SYS_WAITPID, pid, (long)status, options, 0, 0, 0);
 	return (int)syscall_ret(result);
 }
 

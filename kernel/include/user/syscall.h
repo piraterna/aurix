@@ -41,6 +41,11 @@ enum {
 	SYS_CLOCK_GET = 12,
 	SYS_SET_FS_BASE = 13,
 	SYS_MPROTECT = 14,
+	SYS_GETCWD = 15,
+	SYS_FORK = 16,
+	SYS_CHDIR = 17,
+	SYS_WAITPID = 18,
+	SYS_EXECVE = 19,
 };
 
 typedef struct {
@@ -54,6 +59,12 @@ typedef struct {
 	uint64_t rip;
 	uint64_t rflags;
 	uint64_t rsp;
+	uint64_t rbx;
+	uint64_t rbp;
+	uint64_t r12;
+	uint64_t r13;
+	uint64_t r14;
+	uint64_t r15;
 } syscall_args_t;
 
 typedef int64_t (*syscall_handler_t)(const syscall_args_t *args);
