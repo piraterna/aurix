@@ -305,7 +305,7 @@ static int ps2_poll_and_demux(void)
 
 static bool ps2_is_dev_response(uint8_t b)
 {
-	return b == 0xFA || b == 0xAA || b == 0xFE;
+	return b == 0xFA || b == 0xFE;
 }
 
 static void ps2_kbd_thread(void)

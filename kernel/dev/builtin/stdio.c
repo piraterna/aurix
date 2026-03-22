@@ -126,7 +126,7 @@ static int stdio_dev_has_data(struct device *dev)
 	return dev->ops->poll(dev) != 0;
 }
 
-static char stdio_scancode_to_ascii(uint8_t sc, bool shift)
+static char stdio_scancode_to_ascii(uint8_t sc, bool shift, bool caps_lock)
 {
 	static const char base[128] = {
 		[0x02] = '1', [0x03] = '2',	 [0x04] = '3', [0x05] = '4', [0x06] = '5',
@@ -154,7 +154,15 @@ static char stdio_scancode_to_ascii(uint8_t sc, bool shift)
 	};
 	if (sc >= 128)
 		return 0;
-	return shift ? shifted[sc] : base[sc];
+
+	char ch = base[sc];
+	if (!ch)
+		return 0;
+	if (ch >= 'a' && ch <= 'z') {
+		bool upper = shift ^ caps_lock;
+		return upper ? (char)(ch - 'a' + 'A') : ch;
+	}
+	return shift ? shifted[sc] : ch;
 }
 
 #define STDIN_LINE_MAX 256
@@ -162,8 +170,11 @@ static char stdio_scancode_to_ascii(uint8_t sc, bool shift)
 static char stdin_line[STDIN_LINE_MAX];
 static size_t stdin_line_len;
 static size_t stdin_line_pos;
-static bool stdin_shift;
+static bool stdin_left_shift;
+static bool stdin_right_shift;
+static bool stdin_caps_lock;
 static bool stdin_extended;
+static bool stdin_release_prefix;
 
 static void stdin_echo_backspace(void)
 {
@@ -206,23 +217,50 @@ static void stdin_handle_scancode(uint8_t sc)
 		stdin_extended = true;
 		return;
 	}
+	if (sc == 0xF0) {
+		stdin_release_prefix = true;
+		return;
+	}
 
 	if (stdin_extended) {
 		stdin_extended = false;
 		return;
 	}
+	if (stdin_release_prefix) {
+		stdin_release_prefix = false;
+		if (sc == 0x2A)
+			stdin_left_shift = false;
+		else if (sc == 0x36)
+			stdin_right_shift = false;
+		return;
+	}
+	if (sc == 0x3A || sc == 0x58) {
+		stdin_caps_lock = !stdin_caps_lock;
+		return;
+	}
 
 	if (sc == 0x2A || sc == 0x36) {
-		stdin_shift = true;
+		if (sc == 0x2A)
+			stdin_left_shift = true;
+		else
+			stdin_right_shift = true;
 		return;
 	}
 	if (sc == 0xAA || sc == 0xB6) {
-		stdin_shift = false;
+		if (sc == 0xAA)
+			stdin_left_shift = false;
+		else
+			stdin_right_shift = false;
 		return;
 	}
-
-	if (sc & 0x80)
+	if (sc & 0x80) {
+		uint8_t make = (uint8_t)(sc & 0x7F);
+		if (make == 0x2A)
+			stdin_left_shift = false;
+		else if (make == 0x36)
+			stdin_right_shift = false;
 		return;
+	}
 
 	if (sc == 0x1C) {
 		stdin_push_char('\n');
@@ -233,7 +271,8 @@ static void stdin_handle_scancode(uint8_t sc)
 		return;
 	}
 
-	char ch = stdio_scancode_to_ascii(sc, stdin_shift);
+	bool shift = stdin_left_shift || stdin_right_shift;
+	char ch = stdio_scancode_to_ascii(sc, shift, stdin_caps_lock);
 	if (ch)
 		stdin_push_char(ch);
 }
