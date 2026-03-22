@@ -618,7 +618,14 @@ int64_t sys_execve(const syscall_args_t *args)
 	if (!path)
 		return -EFAULT;
 
-	struct pcb *cur = syscall_current_process();
+	tcb *current = thread_current();
+	struct pcb *cur = current ? current->process : NULL;
+	if (!cur)
+		return -EINVAL;
+
+	if (cur->threads && cur->threads->proc_next)
+		return -EBUSY;
+
 	char *resolved = syscall_resolve_path(cur, path);
 	if (!resolved)
 		return -ENOMEM;
@@ -648,38 +655,108 @@ int64_t sys_execve(const syscall_args_t *args)
 
 	close(f);
 
-	struct pcb *proc = proc_create();
-	if (!proc) {
+	pagetable *new_pm = create_pagemap();
+	if (!new_pm) {
+		kfree(resolved);
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	vctx_t *new_vctx = vinit(new_pm, 0x1000);
+	if (!new_vctx) {
+		destroy_pagemap(new_pm);
+		kfree(resolved);
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	pagetable *old_pm = cur->pm;
+	vctx_t *old_vctx = cur->vctx;
+	char *old_image_elf = cur->image_elf;
+	size_t old_image_size = cur->image_size;
+	uintptr_t old_image_phys_base = cur->image_phys_base;
+	uintptr_t old_image_load_base = cur->image_load_base;
+	uintptr_t old_image_link_base = cur->image_link_base;
+	size_t old_image_exec_size = cur->image_exec_size;
+	uintptr_t old_user_stack_base = cur->user_stack_base;
+	size_t old_user_stack_size = cur->user_stack_size;
+	uintptr_t old_user_rsp = cur->user_rsp;
+
+	cur->pm = new_pm;
+	cur->vctx = new_vctx;
+	cur->image_elf = NULL;
+	cur->image_size = 0;
+	cur->image_phys_base = 0;
+	cur->image_load_base = 0;
+	cur->image_link_base = 0;
+	cur->image_exec_size = 0;
+	cur->user_stack_base = 0;
+	cur->user_stack_size = 0;
+	cur->user_rsp = 0;
+
+	uintptr_t entry = 0;
+	if (!elf_load_user_process(buf, resolved, cur, &entry)) {
+		cur->pm = old_pm;
+		cur->vctx = old_vctx;
+		cur->image_elf = old_image_elf;
+		cur->image_size = old_image_size;
+		cur->image_phys_base = old_image_phys_base;
+		cur->image_load_base = old_image_load_base;
+		cur->image_link_base = old_image_link_base;
+		cur->image_exec_size = old_image_exec_size;
+		cur->user_stack_base = old_user_stack_base;
+		cur->user_stack_size = old_user_stack_size;
+		cur->user_rsp = old_user_rsp;
+		vdestroy(new_vctx);
+		destroy_pagemap(new_pm);
+		kfree(resolved);
+		kfree(buf);
+		return -EINVAL;
+	}
+
+	struct tcb *thread = thread_create_user(cur, (void (*)(void))entry);
+	if (!thread) {
+		cur->pm = old_pm;
+		cur->vctx = old_vctx;
+		cur->image_elf = old_image_elf;
+		cur->image_size = old_image_size;
+		cur->image_phys_base = old_image_phys_base;
+		cur->image_load_base = old_image_load_base;
+		cur->image_link_base = old_image_link_base;
+		cur->image_exec_size = old_image_exec_size;
+		cur->user_stack_base = old_user_stack_base;
+		cur->user_stack_size = old_user_stack_size;
+		cur->user_rsp = old_user_rsp;
+		vdestroy(new_vctx);
+		destroy_pagemap(new_pm);
+		kfree(resolved);
 		kfree(buf);
 		return -ENOMEM;
 	}
 
 	char *name_copy = kmalloc(strlen(resolved) + 1);
-	if (name_copy)
+	if (name_copy) {
 		strcpy(name_copy, resolved);
-	proc->name = (const char *)name_copy;
-
-	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, resolved, proc, &entry)) {
-		kfree(resolved);
-		kfree(buf);
-		proc_destroy(proc);
-		return -EINVAL;
+		if (cur->name)
+			kfree((void *)cur->name);
+		cur->name = (const char *)name_copy;
 	}
+
+#if defined(__x86_64__)
+	write_cr3((uint64_t)cur->pm);
+	current->kthread.cr3 = (uint64_t)cur->pm;
+#endif
+
+	if (old_vctx)
+		vdestroy(old_vctx);
+	if (old_pm)
+		destroy_pagemap(old_pm);
 
 	kfree(resolved);
 	kfree(buf);
 
-	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
-	if (!thread) {
-		proc_destroy(proc);
-		return -ENOMEM;
-	}
-
-	thread->joinable = true;
-	int code = thread_wait(thread);
-	proc_destroy(proc);
-	return code;
+	thread_exit(current, 0);
+	__builtin_unreachable();
 }
 
 int64_t sys_mmap(const syscall_args_t *args)

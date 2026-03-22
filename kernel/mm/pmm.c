@@ -101,8 +101,8 @@ void pmm_init(void)
 			  e->size, type_to_str(e->type));
 	}
 
-	bitmap_pages = high / PAGE_SIZE;
-	bitmap_size = bitmap_pages / 8;
+	bitmap_pages = DIV_ROUND_UP(high, PAGE_SIZE);
+	bitmap_size = DIV_ROUND_UP(bitmap_pages, 8);
 	used_pages = bitmap_pages;
 
 	for (uint64_t i = 0; i < boot_params->mmap_entries; i++) {
@@ -253,9 +253,9 @@ void pfree(void *ptr, size_t pages)
 
 	uint64_t start = (uint64_t)ptr / PAGE_SIZE;
 
-	if (start + pages > bitmap_size * 8) {
-		error("pfree: out of range (start=%llu pages=%zu bitmap_bits=%llu)\n",
-			  start, pages, bitmap_size * 8);
+	if (start + pages > bitmap_pages) {
+		error("pfree: out of range (start=%llu pages=%zu bitmap_pages=%llu)\n",
+			  start, pages, bitmap_pages);
 		kpanicf(NULL, "pmm: pfree range out of bounds");
 	}
 
