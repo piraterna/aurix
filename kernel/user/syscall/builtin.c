@@ -68,6 +68,15 @@
 #define CLOCK_REALTIME 0
 #define CLOCK_MONOTONIC 1
 
+#define FSFD_TARGET_NONE 0
+#define FSFD_TARGET_PATH 1
+#define FSFD_TARGET_FD 2
+#define FSFD_TARGET_FD_PATH 3
+
+#define AT_FDCWD -100
+
+#define DIR_HANDLE_MAX_ENTRIES 256
+
 #if defined(__x86_64__)
 #define MSR_IA32_FS_BASE 0xC0000100
 #endif
@@ -282,6 +291,17 @@ static int proc_fd_alloc_locked(struct pcb *proc, struct fileio *file)
 	return -EMFILE;
 }
 
+static void dir_handle_free(struct fileio *file)
+{
+	if (!file || !file->dir)
+		return;
+
+	if (file->dir->entries)
+		kfree(file->dir->entries);
+	kfree(file->dir);
+	file->dir = NULL;
+}
+
 int64_t sys_exit(const syscall_args_t *args)
 {
 	int64_t code = (int64_t)args->rdi;
@@ -330,6 +350,123 @@ int64_t sys_open(const syscall_args_t *args)
 
 	trace("open(): opened %s with flags %d and mode %o\n", path, flags, mode);
 	return fd;
+}
+
+int64_t sys_opendir(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+	int *handle = (int *)args->rsi;
+
+	if (!path || !handle)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	struct fileio *f = open(resolved, O_RDONLY | O_DIRECTORY, 0);
+	kfree(resolved);
+	if (!f)
+		return -ENOENT;
+
+	dir_handle_t *dir = kmalloc(sizeof(dir_handle_t));
+	if (!dir) {
+		close(f);
+		return -ENOMEM;
+	}
+	memset(dir, 0, sizeof(dir_handle_t));
+	dir->entries = kmalloc(sizeof(struct dirent) * DIR_HANDLE_MAX_ENTRIES);
+	if (!dir->entries) {
+		kfree(dir);
+		close(f);
+		return -ENOMEM;
+	}
+	memset(dir->entries, 0, sizeof(struct dirent) * DIR_HANDLE_MAX_ENTRIES);
+	dir->vnode = (struct vnode *)f->private;
+	dir->count = 0;
+	dir->index = 0;
+
+	f->dir = dir;
+	f->flags |= O_DIRECTORY;
+
+	spinlock_acquire(&proc->fd_lock);
+	int fd = proc_fd_alloc_locked(proc, f);
+	spinlock_release(&proc->fd_lock);
+	if (fd < 0) {
+		dir_handle_free(f);
+		close(f);
+		return fd;
+	}
+
+	*handle = fd;
+	return 0;
+}
+
+int64_t sys_read_entries(const syscall_args_t *args)
+{
+	int fd = (int)args->rdi;
+	void *buffer = (void *)args->rsi;
+	size_t max_size = (size_t)args->rdx;
+	size_t *bytes_read = (size_t *)args->r10;
+
+	if (!bytes_read)
+		return -EFAULT;
+	if (!buffer && max_size)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *f = proc_fd_lookup_locked(proc, fd);
+	if (!f) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+	fio_retain(f);
+	spinlock_release(&proc->fd_lock);
+
+	if (!(f->flags & O_DIRECTORY) || !f->dir) {
+		close(f);
+		return -ENOTDIR;
+	}
+
+	dir_handle_t *dir = f->dir;
+	if (!dir->entries) {
+		close(f);
+		return -ENOMEM;
+	}
+
+	if (dir->count == 0 && dir->index == 0) {
+		size_t count = DIR_HANDLE_MAX_ENTRIES;
+		int ret = vfs_readdir(dir->vnode, dir->entries, &count);
+		if (ret != 0) {
+			close(f);
+			return -EINVAL;
+		}
+		dir->count = count;
+	}
+
+	size_t max_entries = max_size / sizeof(struct dirent);
+	if (max_entries == 0 || dir->index >= dir->count) {
+		*bytes_read = 0;
+		close(f);
+		return 0;
+	}
+
+	size_t remaining = dir->count - dir->index;
+	size_t to_copy = remaining < max_entries ? remaining : max_entries;
+	memcpy(buffer, &dir->entries[dir->index], to_copy * sizeof(struct dirent));
+	dir->index += to_copy;
+	*bytes_read = to_copy * sizeof(struct dirent);
+
+	close(f);
+	return 0;
 }
 
 int64_t sys_read(const syscall_args_t *args)
@@ -422,6 +559,7 @@ int64_t sys_close(const syscall_args_t *args)
 	proc->fds[fd] = NULL;
 	spinlock_release(&proc->fd_lock);
 
+	dir_handle_free(f);
 	int r = close(f);
 	if (r < 0) {
 		error("close(): failed to close file descriptor %d (%s)\n", fd,
@@ -430,6 +568,62 @@ int64_t sys_close(const syscall_args_t *args)
 	}
 
 	return 0;
+}
+
+int64_t sys_stat(const syscall_args_t *args)
+{
+	int target = (int)args->rdi;
+	int fd = (int)args->rsi;
+	const char *path = (const char *)args->rdx;
+	int flags = (int)args->r10;
+	struct stat *st = (struct stat *)args->r8;
+
+	(void)flags;
+
+	if (!st)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	if (target == FSFD_TARGET_FD) {
+		spinlock_acquire(&proc->fd_lock);
+		struct fileio *f = proc_fd_lookup_locked(proc, fd);
+		if (!f) {
+			spinlock_release(&proc->fd_lock);
+			return -EBADF;
+		}
+		fio_retain(f);
+		spinlock_release(&proc->fd_lock);
+
+		struct vnode *vnode = (struct vnode *)f->private;
+		int ret = -EINVAL;
+		if (vnode && vnode->ops && vnode->ops->getattr)
+			ret = vnode->ops->getattr(vnode, st);
+
+		close(f);
+		return ret == 0 ? 0 : -EINVAL;
+	}
+
+	if (target == FSFD_TARGET_FD_PATH && fd != AT_FDCWD) {
+		return -ENOSYS;
+	}
+
+	if (target != FSFD_TARGET_PATH && target != FSFD_TARGET_FD_PATH)
+		return -EINVAL;
+
+	if (!path)
+		return -EFAULT;
+
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	int ret = vfs_stat(resolved, st);
+	kfree(resolved);
+
+	return ret == 0 ? 0 : -ENOENT;
 }
 
 int64_t sys_mount(const syscall_args_t *args)
@@ -1233,4 +1427,7 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_CHDIR, sys_chdir, "chdir");
 	register_syscall(SYS_WAITPID, sys_waitpid, "waitpid");
 	register_syscall(SYS_EXECVE, sys_execve, "execve");
+	register_syscall(SYS_OPENDIR, sys_opendir, "opendir");
+	register_syscall(SYS_READENTRIES, sys_read_entries, "read_entries");
+	register_syscall(SYS_STAT, sys_stat, "stat");
 }

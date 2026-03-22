@@ -46,6 +46,9 @@ enum {
 	SYS_CHDIR = 17,
 	SYS_WAITPID = 18,
 	SYS_EXECVE = 19,
+	SYS_OPENDIR = 20,
+	SYS_READENTRIES = 21,
+	SYS_STAT = 22,
 };
 
 typedef struct {

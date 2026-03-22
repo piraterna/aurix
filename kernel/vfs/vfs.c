@@ -520,7 +520,8 @@ static int vfs_lookup_internal(const char *path, struct vnode **out, int depth,
 	}
 
 	char *path_copy = rel_path;
-	char *component = strtok(path_copy, "/");
+	char *save = NULL;
+	char *component = strtok_r(path_copy, "/", &save);
 
 	while (component) {
 		if (current->vtype != VNODE_DIR) {
@@ -570,7 +571,7 @@ static int vfs_lookup_internal(const char *path, struct vnode **out, int depth,
 		vnode_unref(current);
 		current = resolved;
 
-		component = strtok(NULL, "/");
+		component = strtok_r(NULL, "/", &save);
 	}
 
 	kfree(rel_path);

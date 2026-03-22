@@ -61,17 +61,19 @@ typedef enum fcntl_cmd {
 #define SPECIAL_FILE_TYPE_PIPE (1 << 4)
 #define SPECIAL_FILE_TYPE_DEVICE (1 << 5)
 
+struct vnode;
+struct dirent;
+struct dir_handle;
+
 struct fileio {
 	void *buf_start;
 	size_t size;
 	size_t flags;
 	size_t offset;
 	void *private;
+	struct dir_handle *dir;
 	atomic_size_t refs;
 };
-
-struct vnode;
-struct dirent;
 
 typedef struct dir_handle {
 	struct vnode *vnode;

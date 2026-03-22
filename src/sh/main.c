@@ -3,6 +3,8 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,10 +28,6 @@ static int exec_with_path(const char *file, char *argv[])
 	}
 
 	const char *path_env = getenv("PATH");
-	if (!path_env || !*path_env) {
-		path_env = "/bin:/usr/bin";
-	}
-
 	int last_errno = 0;
 	const char *segment = path_env;
 	while (segment) {
@@ -180,6 +178,221 @@ static int builtin_export(int argc, char *argv[])
 	return 0;
 }
 
+static char *expand_env_token(const char *input)
+{
+	if (!input)
+		return NULL;
+
+	size_t len = strlen(input);
+	size_t cap = len + 1;
+	char *out = malloc(cap);
+	if (!out)
+		return NULL;
+
+	size_t out_len = 0;
+	for (size_t i = 0; i < len; i++) {
+		if (input[i] != '$') {
+			if (out_len + 1 >= cap) {
+				cap = cap * 2 + 16;
+				char *grown = realloc(out, cap);
+				if (!grown) {
+					free(out);
+					return NULL;
+				}
+				out = grown;
+			}
+			out[out_len++] = input[i];
+			continue;
+		}
+
+		size_t var_start = i + 1;
+		size_t var_len = 0;
+		bool braced = false;
+		if (var_start < len && input[var_start] == '{') {
+			braced = true;
+			var_start++;
+			while (var_start + var_len < len &&
+				   input[var_start + var_len] != '}') {
+				var_len++;
+			}
+			if (var_start + var_len >= len) {
+				braced = false;
+				var_start = i + 1;
+				var_len = 0;
+			}
+		}
+
+		if (!braced) {
+			while (var_start + var_len < len) {
+				char c = input[var_start + var_len];
+				if (!(isalnum((unsigned char)c) || c == '_'))
+					break;
+				var_len++;
+			}
+		}
+
+		if (var_len == 0) {
+			if (out_len + 1 >= cap) {
+				cap = cap * 2 + 16;
+				char *grown = realloc(out, cap);
+				if (!grown) {
+					free(out);
+					return NULL;
+				}
+				out = grown;
+			}
+			out[out_len++] = input[i];
+			continue;
+		}
+
+		char *name = strndup(input + var_start, var_len);
+		const char *value = NULL;
+		if (name) {
+			value = getenv(name);
+			free(name);
+		}
+		if (value) {
+			size_t value_len = strlen(value);
+			if (out_len + value_len >= cap) {
+				cap = out_len + value_len + 16;
+				char *grown = realloc(out, cap);
+				if (!grown) {
+					free(out);
+					return NULL;
+				}
+				out = grown;
+			}
+			memcpy(out + out_len, value, value_len);
+			out_len += value_len;
+		}
+
+		i = var_start + var_len - 1;
+		if (braced)
+			i++;
+	}
+
+	out[out_len] = '\0';
+	return out;
+}
+
+static int builtin_echo(int argc, char *argv[])
+{
+	for (int i = 1; i < argc; i++) {
+		char *expanded = expand_env_token(argv[i]);
+		const char *out = expanded ? expanded : argv[i];
+		if (i > 1)
+			putchar(' ');
+		fputs(out, stdout);
+		free(expanded);
+	}
+	putchar('\n');
+	return 0;
+}
+
+static int builtin_cat(int argc, char *argv[])
+{
+	if (argc < 2) {
+		fprintf(stderr, "cat: usage: cat FILE...\n");
+		return 1;
+	}
+
+	int status = 0;
+	char buf[4096];
+	for (int i = 1; i < argc; i++) {
+		int fd = open(argv[i], O_RDONLY, 0);
+		if (fd < 0) {
+			fprintf(stderr, "cat: %s: %s\n", argv[i], strerror(errno));
+			status = 1;
+			continue;
+		}
+
+		for (;;) {
+			ssize_t n = read(fd, buf, sizeof(buf));
+			if (n == 0)
+				break;
+			if (n < 0) {
+				fprintf(stderr, "cat: %s: %s\n", argv[i], strerror(errno));
+				status = 1;
+				break;
+			}
+			ssize_t off = 0;
+			while (off < n) {
+				ssize_t wrote =
+					write(STDOUT_FILENO, buf + off, (size_t)(n - off));
+				if (wrote < 0) {
+					fprintf(stderr, "cat: write: %s\n", strerror(errno));
+					status = 1;
+					break;
+				}
+				off += wrote;
+			}
+			if (off < n)
+				break;
+		}
+
+		close(fd);
+	}
+
+	return status;
+}
+
+static int builtin_help(void)
+{
+	puts("builtins: cd pwd export unset ls cat echo exit help");
+	return 0;
+}
+
+static int builtin_clear(void)
+{
+	fputs("\033[2J\033[H", stdout);
+	fflush(stdout);
+	return 0;
+}
+
+static void ls_print_entry(const char *name)
+{
+	if (!name || name[0] == '\0')
+		return;
+	if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+		return;
+	printf("%s  ", name);
+}
+
+static int builtin_ls(int argc, char *argv[])
+{
+	int status = 0;
+	int first = 1;
+	int count = argc < 2 ? 1 : argc - 1;
+
+	for (int idx = 0; idx < count; idx++) {
+		const char *path = (argc < 2) ? "." : argv[idx + 1];
+		DIR *dir = opendir(path);
+		if (!dir) {
+			struct stat st;
+			if (stat(path, &st) == 0) {
+				printf("%s\n", path);
+				continue;
+			}
+			fprintf(stderr, "ls: %s: %s\n", path, strerror(errno));
+			status = 1;
+			continue;
+		}
+
+		if (!first || count > 1)
+			printf("%s:\n", path);
+		first = 0;
+
+		struct dirent *ent;
+		while ((ent = readdir(dir)) != NULL) {
+			ls_print_entry(ent->d_name);
+		}
+		printf("\n");
+		closedir(dir);
+	}
+
+	return status;
+}
+
 static int builtin_unset(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -199,7 +412,9 @@ static bool is_builtin(const char *cmd)
 {
 	return strcmp(cmd, "cd") == 0 || strcmp(cmd, "pwd") == 0 ||
 		   strcmp(cmd, "exit") == 0 || strcmp(cmd, "export") == 0 ||
-		   strcmp(cmd, "unset") == 0;
+		   strcmp(cmd, "unset") == 0 || strcmp(cmd, "ls") == 0 ||
+		   strcmp(cmd, "cat") == 0 || strcmp(cmd, "echo") == 0 ||
+		   strcmp(cmd, "help") == 0 || strcmp(cmd, "clear") == 0;
 }
 
 static int run_builtin(int argc, char *argv[], bool *should_exit)
@@ -218,6 +433,26 @@ static int run_builtin(int argc, char *argv[], bool *should_exit)
 
 	if (strcmp(argv[0], "unset") == 0) {
 		return builtin_unset(argc, argv);
+	}
+
+	if (strcmp(argv[0], "ls") == 0) {
+		return builtin_ls(argc, argv);
+	}
+
+	if (strcmp(argv[0], "cat") == 0) {
+		return builtin_cat(argc, argv);
+	}
+
+	if (strcmp(argv[0], "echo") == 0) {
+		return builtin_echo(argc, argv);
+	}
+
+	if (strcmp(argv[0], "help") == 0) {
+		return builtin_help();
+	}
+
+	if (strcmp(argv[0], "clear") == 0) {
+		return builtin_clear();
 	}
 
 	if (strcmp(argv[0], "exit") == 0) {

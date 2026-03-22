@@ -343,24 +343,33 @@ int ramfs_open(struct vnode **vnode_r, int flags, bool clone,
 
 	// 2. create a buffer for the file (do not use the original file buffer)
 
-	v_ramfs_node->size = ramfs_get_node_size(ramfs_node);
-	v_ramfs_node->data = kmalloc(v_ramfs_node->size);
-
 	if (v_ramfs_node->type == RAMFS_DIRECTORY) {
-		// TODO
-
-		// 03/08/2025: there's nothing to do i think, but i'll keep it here just
-		// in case
-	} else if (v_ramfs_node->type == RAMFS_SYMLINK) {
-		memcpy(v_ramfs_node->data, ramfs_node->data, v_ramfs_node->size);
+		v_ramfs_node->size = 0;
+		v_ramfs_node->data = NULL;
+		v_ramfs_node->child = ramfs_node->child;
+		v_ramfs_node->sibling = ramfs_node->sibling;
+		kfree(v_ramfs_node);
+		vnode->node_data = ramfs_node;
 	} else {
-		memcpy(v_ramfs_node->data, ramfs_node->data, v_ramfs_node->size);
+		v_ramfs_node->size = ramfs_get_node_size(ramfs_node);
+		if (v_ramfs_node->size == 0) {
+			v_ramfs_node->data = NULL;
+		} else {
+			v_ramfs_node->data = kmalloc(v_ramfs_node->size);
+			if (!v_ramfs_node->data)
+				return -1;
+			if (v_ramfs_node->type == RAMFS_SYMLINK) {
+				memcpy(v_ramfs_node->data, ramfs_node->data,
+					   v_ramfs_node->size);
+			} else {
+				memcpy(v_ramfs_node->data, ramfs_node->data,
+					   v_ramfs_node->size);
+			}
+		}
+		v_ramfs_node->child = NULL;
+		v_ramfs_node->sibling = NULL;
+		vnode->node_data = v_ramfs_node;
 	}
-
-	v_ramfs_node->child = NULL;
-	v_ramfs_node->sibling = NULL;
-
-	vnode->node_data = v_ramfs_node;
 
 	struct fileio *fio = *fio_out;
 	if (!fio || !fio_out) {
@@ -400,6 +409,7 @@ int ramfs_read(struct vnode *vn, size_t *bytes, size_t *offset, void *out)
 
 	void *src = ramfs_node->data + (*offset);
 	memcpy(out, src, (*bytes));
+	*offset += *bytes;
 
 	return 0;
 }
@@ -426,6 +436,7 @@ int ramfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 
 	void *dst = ramfs_node->data + (*offset);
 	memcpy(dst, buf, (*bytes));
+	*offset += *bytes;
 
 	return 0;
 }
@@ -460,6 +471,10 @@ int ramfs_close(struct vnode *vnode, int flags, bool clone)
 
 	if (!ramfs_node_original) {
 		return -1; // this file is probably not ours
+	}
+
+	if (ramfs_node_original == ramfs_node) {
+		return 0;
 	}
 
 	if (ramfs_node_original->data != ramfs_node->data) {
