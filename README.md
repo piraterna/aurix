@@ -138,6 +138,11 @@ Alternatively, you can boot AurixOS on a physical machine by running `dd if=rele
 
 - Drivers and modules: [docs/kernel/DRIVERS_AND_MODULES.md](docs/kernel/DRIVERS_AND_MODULES.md)
 
+## Userland credits
+
+- `specseek` (in `src/specseek`): [https://github.com/Mellurboo/SpecSeek](https://github.com/Mellurboo/SpecSeek)
+- `hexdump` (in `src/hexdump`): [https://github.com/wahern/hexdump](https://github.com/wahern/hexdump)
+
 ## Support
 
 If you have any questions, feel free to open an [issue on our Git instance](https://git.piraterna.org/piraterna/aurix/issues/new?assignees=&labels=question&template=04_SUPPORT_QUESTION.md&title=support%3A+).

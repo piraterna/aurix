@@ -17,7 +17,7 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
-APP_NAME := specspeek
+APP_NAME := specseek
 
 BUILD_DIR := $(BUILD_DIR)/$(APP_NAME)
 APP_FILE := $(BUILD_DIR)/$(APP_NAME)
