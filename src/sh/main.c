@@ -2,9 +2,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +11,8 @@
 #define MAX_ARGS 128
 
 extern char **environ;
+
+#include "builtins.h"
 
 static int exec_with_path(const char *file, char *argv[])
 {
@@ -66,13 +65,128 @@ static int exec_with_path(const char *file, char *argv[])
 
 static void print_prompt(void)
 {
-	char cwd[PATH_MAX];
+	const char *prompt = getenv("PS1");
+	if (!prompt || prompt[0] == '\0')
+		prompt = "$ ";
 
-	if (getcwd(cwd, sizeof(cwd)) != NULL) {
-		printf("%s$ ", cwd);
-	} else {
-		printf("shell$ ");
+	const char *expanded_prompt = prompt;
+	char *escaped = NULL;
+	if (strchr(prompt, '\\') != NULL) {
+		escaped = malloc(strlen(prompt) + 1);
+		if (escaped) {
+			size_t out_len = 0;
+			for (size_t i = 0; prompt[i] != '\0'; i++) {
+				if (prompt[i] != '\\') {
+					escaped[out_len++] = prompt[i];
+					continue;
+				}
+
+				if (prompt[i + 1] == '\0') {
+					escaped[out_len++] = '\\';
+					break;
+				}
+
+				char c = prompt[++i];
+				switch (c) {
+				case 'e':
+					escaped[out_len++] = '\033';
+					break;
+				case 'n':
+					escaped[out_len++] = '\n';
+					break;
+				case 't':
+					escaped[out_len++] = '\t';
+					break;
+				case 'r':
+					escaped[out_len++] = '\r';
+					break;
+				case 'a':
+					escaped[out_len++] = '\a';
+					break;
+				case 'b':
+					escaped[out_len++] = '\b';
+					break;
+				case 'f':
+					escaped[out_len++] = '\f';
+					break;
+				case 'v':
+					escaped[out_len++] = '\v';
+					break;
+				case '\\':
+					escaped[out_len++] = '\\';
+					break;
+				case 'x': {
+					int value = 0;
+					int digits = 0;
+					while (prompt[i + 1] != '\0' && digits < 2 &&
+						   isxdigit((unsigned char)prompt[i + 1])) {
+						char h = prompt[i + 1];
+						value *= 16;
+						if (h >= '0' && h <= '9')
+							value += h - '0';
+						else if (h >= 'a' && h <= 'f')
+							value += 10 + (h - 'a');
+						else if (h >= 'A' && h <= 'F')
+							value += 10 + (h - 'A');
+						i++;
+						digits++;
+					}
+					if (digits > 0)
+						escaped[out_len++] = (char)value;
+					else
+						escaped[out_len++] = 'x';
+					break;
+				}
+				case '0': {
+					int value = 0;
+					int digits = 0;
+					while (prompt[i + 1] != '\0' && digits < 3) {
+						char o = prompt[i + 1];
+						if (o < '0' || o > '7')
+							break;
+						value = value * 8 + (o - '0');
+						i++;
+						digits++;
+					}
+					escaped[out_len++] = (char)value;
+					break;
+				}
+				default:
+					escaped[out_len++] = c;
+					break;
+				}
+			}
+			escaped[out_len] = '\0';
+			expanded_prompt = escaped;
+		}
 	}
+
+	char cwd[PATH_MAX];
+	const char *cwd_value = NULL;
+	if (strstr(expanded_prompt, "%p") != NULL) {
+		if (getcwd(cwd, sizeof(cwd)) != NULL)
+			cwd_value = cwd;
+		else
+			cwd_value = "?";
+	}
+
+	for (const char *p = expanded_prompt; *p != '\0'; p++) {
+		if (p[0] == '%' && p[1] != '\0') {
+			if (p[1] == 'p') {
+				if (cwd_value)
+					fputs(cwd_value, stdout);
+				p++;
+				continue;
+			}
+			if (p[1] == '%') {
+				fputc('%', stdout);
+				p++;
+				continue;
+			}
+		}
+		fputc(*p, stdout);
+	}
+	free(escaped);
 	fflush(stdout);
 }
 
@@ -80,406 +194,82 @@ static int parse_line(char *line, char *argv[], int max_args)
 {
 	int argc = 0;
 	char *p = line;
+	char *out = line;
+	bool in_token = false;
+	bool in_quote = false;
+	char quote = '\0';
 
 	while (*p != '\0') {
-		while (isspace((unsigned char)*p)) {
+		char c = *p;
+
+		if (!in_token) {
+			if (isspace((unsigned char)c)) {
+				p++;
+				continue;
+			}
+			if (argc >= max_args - 1) {
+				fprintf(stderr, "too many arguments\n");
+				break;
+			}
+			argv[argc++] = out;
+			in_token = true;
+		}
+
+		if (in_quote) {
+			if (c == quote) {
+				in_quote = false;
+				p++;
+				continue;
+			}
+			if (quote == '"' && c == '\\' && p[1] != '\0') {
+				char next = p[1];
+				if (next == '"' || next == '\\') {
+					p++;
+					c = *p;
+				}
+			}
+			*out++ = c;
 			p++;
+			continue;
 		}
 
-		if (*p == '\0') {
-			break;
-		}
-
-		if (argc >= max_args - 1) {
-			fprintf(stderr, "too many arguments\n");
-			break;
-		}
-
-		argv[argc++] = p;
-
-		while (*p != '\0' && !isspace((unsigned char)*p)) {
+		if (c == '"' || c == '\'') {
+			in_quote = true;
+			quote = c;
 			p++;
+			continue;
 		}
 
-		if (*p == '\0') {
-			break;
+		if (isspace((unsigned char)c)) {
+			*out++ = '\0';
+			in_token = false;
+			p++;
+			continue;
 		}
 
-		*p = '\0';
+		if (c == '\\' && p[1] != '\0') {
+			char next = p[1];
+			if (isspace((unsigned char)next) || next == '\\' || next == '"' ||
+				next == '\'') {
+				p++;
+				c = *p;
+			} else {
+				*out++ = '\\';
+				p++;
+				c = *p;
+			}
+		}
+
+		*out++ = c;
 		p++;
+	}
+
+	if (in_token) {
+		*out++ = '\0';
 	}
 
 	argv[argc] = NULL;
 	return argc;
-}
-
-static int builtin_cd(int argc, char *argv[])
-{
-	const char *path = NULL;
-
-	if (argc < 2) {
-		path = getenv("HOME");
-		if (path == NULL) {
-			fprintf(stderr, "cd: HOME not set\n");
-			return 1;
-		}
-	} else {
-		path = argv[1];
-	}
-
-	if (chdir(path) != 0) {
-		fprintf(stderr, "cd: %s: %s\n", path, strerror(errno));
-		return 1;
-	}
-
-	return 0;
-}
-
-static int builtin_pwd(void)
-{
-	char cwd[PATH_MAX];
-
-	if (getcwd(cwd, sizeof(cwd)) == NULL) {
-		fprintf(stderr, "pwd: %s\n", strerror(errno));
-		return 1;
-	}
-
-	printf("%s\n", cwd);
-	return 0;
-}
-
-static int builtin_export(int argc, char *argv[])
-{
-	if (argc < 2) {
-		fprintf(stderr, "export: usage: export NAME=VALUE\n");
-		return 1;
-	}
-
-	char *eq = strchr(argv[1], '=');
-	if (eq == NULL) {
-		fprintf(stderr, "export: expected NAME=VALUE\n");
-		return 1;
-	}
-
-	*eq = '\0';
-	const char *name = argv[1];
-	const char *value = eq + 1;
-
-	if (name[0] == '\0') {
-		fprintf(stderr, "export: empty variable name\n");
-		return 1;
-	}
-
-	if (setenv(name, value, 1) != 0) {
-		fprintf(stderr, "export: %s\n", strerror(errno));
-		return 1;
-	}
-
-	return 0;
-}
-
-static char *expand_env_token(const char *input)
-{
-	if (!input)
-		return NULL;
-
-	size_t len = strlen(input);
-	size_t cap = len + 1;
-	char *out = malloc(cap);
-	if (!out)
-		return NULL;
-
-	size_t out_len = 0;
-	for (size_t i = 0; i < len; i++) {
-		if (input[i] != '$') {
-			if (out_len + 1 >= cap) {
-				cap = cap * 2 + 16;
-				char *grown = realloc(out, cap);
-				if (!grown) {
-					free(out);
-					return NULL;
-				}
-				out = grown;
-			}
-			out[out_len++] = input[i];
-			continue;
-		}
-
-		size_t var_start = i + 1;
-		size_t var_len = 0;
-		bool braced = false;
-		if (var_start < len && input[var_start] == '{') {
-			braced = true;
-			var_start++;
-			while (var_start + var_len < len &&
-				   input[var_start + var_len] != '}') {
-				var_len++;
-			}
-			if (var_start + var_len >= len) {
-				braced = false;
-				var_start = i + 1;
-				var_len = 0;
-			}
-		}
-
-		if (!braced) {
-			while (var_start + var_len < len) {
-				char c = input[var_start + var_len];
-				if (!(isalnum((unsigned char)c) || c == '_'))
-					break;
-				var_len++;
-			}
-		}
-
-		if (var_len == 0) {
-			if (out_len + 1 >= cap) {
-				cap = cap * 2 + 16;
-				char *grown = realloc(out, cap);
-				if (!grown) {
-					free(out);
-					return NULL;
-				}
-				out = grown;
-			}
-			out[out_len++] = input[i];
-			continue;
-		}
-
-		char *name = strndup(input + var_start, var_len);
-		const char *value = NULL;
-		if (name) {
-			value = getenv(name);
-			free(name);
-		}
-		if (value) {
-			size_t value_len = strlen(value);
-			if (out_len + value_len >= cap) {
-				cap = out_len + value_len + 16;
-				char *grown = realloc(out, cap);
-				if (!grown) {
-					free(out);
-					return NULL;
-				}
-				out = grown;
-			}
-			memcpy(out + out_len, value, value_len);
-			out_len += value_len;
-		}
-
-		i = var_start + var_len - 1;
-		if (braced)
-			i++;
-	}
-
-	out[out_len] = '\0';
-	return out;
-}
-
-static int builtin_echo(int argc, char *argv[])
-{
-	for (int i = 1; i < argc; i++) {
-		char *expanded = expand_env_token(argv[i]);
-		const char *out = expanded ? expanded : argv[i];
-		if (i > 1)
-			putchar(' ');
-		fputs(out, stdout);
-		free(expanded);
-	}
-	putchar('\n');
-	return 0;
-}
-
-static int builtin_cat(int argc, char *argv[])
-{
-	if (argc < 2) {
-		fprintf(stderr, "cat: usage: cat FILE...\n");
-		return 1;
-	}
-
-	int status = 0;
-	char buf[4096];
-	for (int i = 1; i < argc; i++) {
-		int fd = open(argv[i], O_RDONLY, 0);
-		if (fd < 0) {
-			fprintf(stderr, "cat: %s: %s\n", argv[i], strerror(errno));
-			status = 1;
-			continue;
-		}
-
-		for (;;) {
-			ssize_t n = read(fd, buf, sizeof(buf));
-			if (n == 0)
-				break;
-			if (n < 0) {
-				fprintf(stderr, "cat: %s: %s\n", argv[i], strerror(errno));
-				status = 1;
-				break;
-			}
-			ssize_t off = 0;
-			while (off < n) {
-				ssize_t wrote =
-					write(STDOUT_FILENO, buf + off, (size_t)(n - off));
-				if (wrote < 0) {
-					fprintf(stderr, "cat: write: %s\n", strerror(errno));
-					status = 1;
-					break;
-				}
-				off += wrote;
-			}
-			if (off < n)
-				break;
-		}
-
-		close(fd);
-	}
-
-	return status;
-}
-
-static int builtin_help(void)
-{
-	puts("builtins: cd pwd export unset ls cat clear echo env exit help");
-	return 0;
-}
-
-static int builtin_env(void)
-{
-	if (!environ)
-		return 0;
-	for (char **entry = environ; *entry; entry++) {
-		puts(*entry);
-	}
-	return 0;
-}
-
-static int builtin_clear(void)
-{
-	fputs("\033[2J\033[H", stdout);
-	fflush(stdout);
-	return 0;
-}
-
-static void ls_print_entry(const char *name)
-{
-	if (!name || name[0] == '\0')
-		return;
-	if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-		return;
-	printf("%s  ", name);
-}
-
-static int builtin_ls(int argc, char *argv[])
-{
-	int status = 0;
-	int first = 1;
-	int count = argc < 2 ? 1 : argc - 1;
-
-	for (int idx = 0; idx < count; idx++) {
-		const char *path = (argc < 2) ? "." : argv[idx + 1];
-		DIR *dir = opendir(path);
-		if (!dir) {
-			struct stat st;
-			if (stat(path, &st) == 0) {
-				printf("%s\n", path);
-				continue;
-			}
-			fprintf(stderr, "ls: %s: %s\n", path, strerror(errno));
-			status = 1;
-			continue;
-		}
-
-		if (!first || count > 1)
-			printf("%s:\n", path);
-		first = 0;
-
-		struct dirent *ent;
-		while ((ent = readdir(dir)) != NULL) {
-			ls_print_entry(ent->d_name);
-		}
-		printf("\n");
-		closedir(dir);
-	}
-
-	return status;
-}
-
-static int builtin_unset(int argc, char *argv[])
-{
-	if (argc < 2) {
-		fprintf(stderr, "unset: usage: unset NAME\n");
-		return 1;
-	}
-
-	if (unsetenv(argv[1]) != 0) {
-		fprintf(stderr, "unset: %s\n", strerror(errno));
-		return 1;
-	}
-
-	return 0;
-}
-
-static bool is_builtin(const char *cmd)
-{
-	return strcmp(cmd, "cd") == 0 || strcmp(cmd, "pwd") == 0 ||
-		   strcmp(cmd, "exit") == 0 || strcmp(cmd, "export") == 0 ||
-		   strcmp(cmd, "unset") == 0 || strcmp(cmd, "ls") == 0 ||
-		   strcmp(cmd, "cat") == 0 || strcmp(cmd, "echo") == 0 ||
-		   strcmp(cmd, "help") == 0 || strcmp(cmd, "clear") == 0 ||
-		   strcmp(cmd, "env") == 0;
-}
-
-static int run_builtin(int argc, char *argv[], bool *should_exit)
-{
-	if (strcmp(argv[0], "cd") == 0) {
-		return builtin_cd(argc, argv);
-	}
-
-	if (strcmp(argv[0], "pwd") == 0) {
-		return builtin_pwd();
-	}
-
-	if (strcmp(argv[0], "export") == 0) {
-		return builtin_export(argc, argv);
-	}
-
-	if (strcmp(argv[0], "unset") == 0) {
-		return builtin_unset(argc, argv);
-	}
-
-	if (strcmp(argv[0], "ls") == 0) {
-		return builtin_ls(argc, argv);
-	}
-
-	if (strcmp(argv[0], "cat") == 0) {
-		return builtin_cat(argc, argv);
-	}
-
-	if (strcmp(argv[0], "echo") == 0) {
-		return builtin_echo(argc, argv);
-	}
-
-	if (strcmp(argv[0], "help") == 0) {
-		return builtin_help();
-	}
-
-	if (strcmp(argv[0], "clear") == 0) {
-		return builtin_clear();
-	}
-
-	if (strcmp(argv[0], "env") == 0) {
-		return builtin_env();
-	}
-
-	if (strcmp(argv[0], "exit") == 0) {
-		*should_exit = true;
-
-		if (argc >= 2) {
-			return atoi(argv[1]);
-		}
-		return 0;
-	}
-
-	return 1;
 }
 
 static int run_external(char *argv[])
@@ -517,11 +307,87 @@ static int run_external(char *argv[])
 	return 1;
 }
 
+static int run_command_line(char *line, int *last_status, bool *should_exit)
+{
+	if (!line || !last_status || !should_exit)
+		return 1;
+
+	char *argv[MAX_ARGS];
+	int argc = parse_line(line, argv, MAX_ARGS);
+	if (argc == 0)
+		return 0;
+
+	const struct builtin *builtin = builtin_lookup(argv[0]);
+	if (builtin) {
+		*last_status = builtin->handler(argc, argv, should_exit);
+		return 0;
+	}
+
+	*last_status = run_external(argv);
+	return 0;
+}
+
+static void run_shinit(int *last_status, bool *should_exit)
+{
+	const char *home = getenv("HOME");
+	if (!home || home[0] == '\0')
+		return;
+
+	size_t home_len = strlen(home);
+	const char *suffix = "/.shinit";
+	size_t path_len = home_len + strlen(suffix) + 1;
+	char *path = malloc(path_len);
+	if (!path)
+		return;
+	strcpy(path, home);
+	strcat(path, suffix);
+
+	FILE *file = fopen(path, "r");
+	free(path);
+	if (!file) {
+		if (errno != ENOENT) {
+			fprintf(stderr, "shinit: %s\n", strerror(errno));
+		}
+		return;
+	}
+
+	char *line = NULL;
+	size_t cap = 0;
+	while (!*should_exit) {
+		ssize_t nread = getline(&line, &cap, file);
+		if (nread < 0)
+			break;
+
+		if (nread > 0 && line[nread - 1] == '\n')
+			line[nread - 1] = '\0';
+
+		if (line[0] == '#')
+			continue;
+
+		(void)run_command_line(line, last_status, should_exit);
+		if (*last_status != 0)
+			break;
+	}
+
+	free(line);
+	fclose(file);
+}
+
 int main(void)
 {
 	char *line = NULL;
 	size_t cap = 0;
 	int last_status = 0;
+	bool should_exit = false;
+	const char *home = getenv("HOME");
+	if (!home || home[0] == '\0' || chdir(home) != 0)
+		chdir("/");
+
+	run_shinit(&last_status, &should_exit);
+	if (should_exit) {
+		free(line);
+		return last_status;
+	}
 
 	for (;;) {
 		print_prompt();
@@ -540,23 +406,10 @@ int main(void)
 			line[nread - 1] = '\0';
 		}
 
-		char *argv[MAX_ARGS];
-		int argc = parse_line(line, argv, MAX_ARGS);
-
-		if (argc == 0) {
-			continue;
-		}
-
-		bool should_exit = false;
-
-		if (is_builtin(argv[0])) {
-			last_status = run_builtin(argc, argv, &should_exit);
-			if (should_exit) {
-				break;
-			}
-		} else {
-			last_status = run_external(argv);
-		}
+		should_exit = false;
+		(void)run_command_line(line, &last_status, &should_exit);
+		if (should_exit)
+			break;
 
 		(void)last_status;
 	}

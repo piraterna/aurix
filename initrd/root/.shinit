@@ -1,0 +1,3 @@
+export PATH="/bin:/usr/bin"
+# todo: add proper user and hostname
+export PS1="\e[94mroot\e[0m\e[95m@aurix\e[0m \e[96m%p\e[0m \e[95m»\e[0m "

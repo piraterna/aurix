@@ -68,7 +68,7 @@ int main(void)
 	printf("init: launching /bin/sh\n");
 
 	char *const argv[] = { "/bin/sh", NULL };
-	char *const envp[] = { "HOME=/", "PATH=/bin", NULL };
+	char *const envp[] = { "HOME=/root", NULL };
 	execve("/bin/sh", argv, envp);
 	printf("init: execve /bin/sh failed: %s\n", strerror(errno));
 
