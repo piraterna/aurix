@@ -26,6 +26,10 @@
 #include <arch/cpu/gdt.h>
 #include <arch/cpu/irq.h>
 #include <cpu/trace.h>
+#include <lib/align.h>
+#include <lib/string.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
 #include <sys/panic.h>
 #include <sys/sched.h>
 #include <aurix.h>
@@ -35,6 +39,9 @@
 
 #define IDT_TRAP 0xF
 #define IDT_INTERRUPT 0xE
+
+#define PF_ERR_PRESENT (1 << 0)
+#define PF_ERR_WRITE (1 << 1)
 
 const char *exception_str[32] = {
 	"division by zero",
@@ -118,6 +125,34 @@ static void isr_handle_user_exception(const struct interrupt_frame *frame)
 	}
 
 	if (frame->vector == 14) {
+		uintptr_t fault_addr = frame->cr2;
+		uintptr_t virt = ALIGN_DOWN(fault_addr, PAGE_SIZE);
+		if ((frame->err & PF_ERR_PRESENT) && (frame->err & PF_ERR_WRITE)) {
+			uint64_t flags = vget_flags(current->process->pm, virt);
+			if ((flags & VMM_PRESENT) && (flags & VMM_COW)) {
+				uintptr_t phys = vget_phys(current->process->pm, virt);
+				if (phys) {
+					uintptr_t phys_page = ALIGN_DOWN(phys, PAGE_SIZE);
+					uint32_t refs = pmm_refcount(phys_page);
+					uint64_t new_flags = (flags | VMM_WRITABLE) & ~VMM_COW;
+					if (refs <= 1) {
+						map_page(current->process->pm, virt, phys_page,
+								 new_flags);
+						return;
+					}
+
+					uintptr_t new_phys = (uintptr_t)palloc(1);
+					if (new_phys) {
+						memcpy((void *)PHYS_TO_VIRT(new_phys),
+							   (void *)PHYS_TO_VIRT(phys_page), PAGE_SIZE);
+						map_page(current->process->pm, virt, new_phys,
+								 new_flags);
+						pmm_ref_dec(phys_page, 1);
+						return;
+					}
+				}
+			}
+		}
 		error(
 			"exception %s rip=0x%llx cr2=0x%llx err=0x%llx occured in %s (PID=%u, TID=%u)\n",
 			exception_str[frame->vector], frame->rip, frame->cr2, frame->err,

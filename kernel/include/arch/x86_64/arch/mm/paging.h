@@ -32,6 +32,7 @@
 #define VMM_USER (1 << 2)
 #define VMM_WRITETHROUGH (1 << 3)
 #define VMM_CACHE_DISABLE (1 << 4)
+#define VMM_COW (1 << 9)
 
 #define VMM_NX (1ull << 63)
 

@@ -38,6 +38,10 @@ void pmm_reclaim_bootparms(void);
 void *palloc(size_t pages);
 void pfree(void *ptr, size_t pages);
 
+void pmm_ref_inc(uintptr_t phys, size_t pages);
+void pmm_ref_dec(uintptr_t phys, size_t pages);
+uint32_t pmm_refcount(uintptr_t phys);
+
 uint64_t pmm_free_pages(void);
 uint64_t pmm_used_pages(void);
 uint64_t pmm_usable_pages(void);

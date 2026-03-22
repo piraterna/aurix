@@ -24,6 +24,7 @@
 #include <vfs/fileio.h>
 #include <vfs/vfs.h>
 #include <mm/heap.h>
+#include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <lib/string.h>
 #include <lib/align.h>
@@ -253,20 +254,20 @@ static int syscall_clone_memory(struct pcb *parent, struct pcb *child)
 			if (!(pflags & VMM_PRESENT))
 				continue;
 
-			uintptr_t phys = (uintptr_t)palloc(1);
-			if (!phys)
-				return -ENOMEM;
-
-			map_page(child->pm, virt, phys, pflags);
-
 			uintptr_t src_phys = vget_phys(parent->pm, virt);
-			void *dst = (void *)PHYS_TO_VIRT(phys);
-			if (src_phys) {
-				void *src = (void *)PHYS_TO_VIRT(src_phys);
-				memcpy(dst, src, PAGE_SIZE);
-			} else {
-				memset(dst, 0, PAGE_SIZE);
-			}
+			if (!src_phys)
+				continue;
+			uintptr_t phys_page = ALIGN_DOWN(src_phys, PAGE_SIZE);
+			uint64_t new_flags = pflags;
+			if (pflags & VMM_WRITABLE)
+				new_flags = (pflags & ~VMM_WRITABLE) | VMM_COW;
+			else if (pflags & VMM_COW)
+				new_flags = pflags & ~VMM_WRITABLE;
+
+			pmm_ref_inc(phys_page, 1);
+			map_page(child->pm, virt, phys_page, new_flags);
+			if (new_flags != pflags)
+				map_page(parent->pm, virt, phys_page, new_flags);
 		}
 	}
 

@@ -46,6 +46,8 @@ static spinlock_t pmm_lock;
 static uint64_t page_cache[PAGE_CACHE_SIZE];
 static size_t cache_size;
 static size_t cache_index;
+static uint32_t *page_refcounts;
+static uint64_t refcount_entries;
 
 static inline bool is_aligned(void *addr, size_t align)
 {
@@ -142,6 +144,19 @@ void pmm_init(void)
 		bitmap_set(bitmap, 0);
 	}
 
+	uint64_t refcount_bytes = bitmap_pages * sizeof(uint32_t);
+	uint64_t refcount_pages = ALIGN_UP(refcount_bytes, PAGE_SIZE) / PAGE_SIZE;
+	if (refcount_pages > 0) {
+		void *ref_phys = palloc(refcount_pages);
+		if (!ref_phys) {
+			error("pmm: failed to allocate refcount table\n");
+			kpanicf(NULL, "pmm: failed to allocate refcount table");
+		}
+		page_refcounts = (uint32_t *)PHYS_TO_VIRT(ref_phys);
+		memset(page_refcounts, 0, refcount_pages * PAGE_SIZE);
+		refcount_entries = bitmap_pages;
+	}
+
 	// Register tests
 #ifdef CONFIG_BUILD_TESTS
 	TEST_ADD(pmm_test);
@@ -207,6 +222,8 @@ void *palloc(size_t pages)
 				uint64_t start = bit - pages + 1;
 				for (uint64_t k = 0; k < pages; k++) {
 					bitmap_set(bitmap, start + k);
+					if (page_refcounts && (start + k) < refcount_entries)
+						page_refcounts[start + k] = 1;
 				}
 
 				free_pages -= pages;
@@ -265,6 +282,8 @@ void pfree(void *ptr, size_t pages)
 			free_pages++;
 			if (used_pages > 0)
 				used_pages--;
+			if (page_refcounts && (start + i) < refcount_entries)
+				page_refcounts[start + i] = 0;
 
 			if (pages == 1 && cache_index < cache_size) {
 				page_cache[cache_index++] = start;
@@ -273,6 +292,76 @@ void pfree(void *ptr, size_t pages)
 	}
 
 	spinlock_release(&pmm_lock);
+}
+
+void pmm_ref_inc(uintptr_t phys, size_t pages)
+{
+	if (!page_refcounts || pages == 0)
+		return;
+
+	phys = ALIGN_DOWN(phys, PAGE_SIZE);
+	for (size_t i = 0; i < pages; i++) {
+		uint64_t idx = (phys / PAGE_SIZE) + i;
+		spinlock_acquire(&pmm_lock);
+		if (idx >= refcount_entries) {
+			spinlock_release(&pmm_lock);
+			warn("pmm_ref_inc: out of range idx=%llu\n", idx);
+			continue;
+		}
+		page_refcounts[idx]++;
+		spinlock_release(&pmm_lock);
+	}
+}
+
+void pmm_ref_dec(uintptr_t phys, size_t pages)
+{
+	if (pages == 0)
+		return;
+	if (!page_refcounts) {
+		pfree((void *)ALIGN_DOWN(phys, PAGE_SIZE), pages);
+		return;
+	}
+
+	phys = ALIGN_DOWN(phys, PAGE_SIZE);
+	for (size_t i = 0; i < pages; i++) {
+		uint64_t idx = (phys / PAGE_SIZE) + i;
+		bool free_page = false;
+		spinlock_acquire(&pmm_lock);
+		if (idx >= refcount_entries) {
+			spinlock_release(&pmm_lock);
+			warn("pmm_ref_dec: out of range idx=%llu\n", idx);
+			continue;
+		}
+		if (page_refcounts[idx] == 0) {
+			spinlock_release(&pmm_lock);
+			warn("pmm_ref_dec: underflow idx=%llu\n", idx);
+			continue;
+		}
+		page_refcounts[idx]--;
+		if (page_refcounts[idx] == 0)
+			free_page = true;
+		spinlock_release(&pmm_lock);
+
+		if (free_page)
+			pfree((void *)(phys + i * PAGE_SIZE), 1);
+	}
+}
+
+uint32_t pmm_refcount(uintptr_t phys)
+{
+	if (!page_refcounts)
+		return 0;
+	phys = ALIGN_DOWN(phys, PAGE_SIZE);
+	uint64_t idx = phys / PAGE_SIZE;
+	spinlock_acquire(&pmm_lock);
+	if (idx >= refcount_entries) {
+		spinlock_release(&pmm_lock);
+		warn("pmm_refcount: out of range idx=%llu\n", idx);
+		return 0;
+	}
+	uint32_t count = page_refcounts[idx];
+	spinlock_release(&pmm_lock);
+	return count;
 }
 
 uint64_t pmm_free_pages(void)

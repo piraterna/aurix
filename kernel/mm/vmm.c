@@ -413,9 +413,10 @@ void vfree(vctx_t *ctx, void *ptr)
 
 	for (uint64_t i = 0; i < region->pages; i++) {
 		uint64_t virt = region->start + i * PAGE_SIZE;
-
-		if (vget_phys(ctx->pagemap, virt) != 0) {
+		uintptr_t phys = vget_phys(ctx->pagemap, virt);
+		if (phys) {
 			unmap_page(ctx->pagemap, virt);
+			pmm_ref_dec((uintptr_t)ALIGN_DOWN(phys, PAGE_SIZE), 1);
 		}
 	}
 
@@ -463,7 +464,7 @@ void vfree_range(vctx_t *ctx, uint64_t vaddr, size_t pages)
 			uintptr_t phys = vget_phys(ctx->pagemap, virt);
 			if (phys) {
 				unmap_page(ctx->pagemap, virt);
-				pfree((void *)ALIGN_DOWN(phys, PAGE_SIZE), 1);
+				pmm_ref_dec((uintptr_t)ALIGN_DOWN(phys, PAGE_SIZE), 1);
 			}
 		}
 
