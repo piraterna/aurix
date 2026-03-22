@@ -39,7 +39,7 @@
 #endif
 
 #define SCHED_DEFAULT_SLICE 10
-#define USER_STACK_SIZE (STACK_SIZE)
+#define USER_STACK_SIZE (1024 * 1024)
 
 static uint32_t next_pid = 1;
 static atomic_uint next_tid = ATOMIC_VAR_INIT(0);

@@ -35,6 +35,22 @@
 struct cpu cpuinfo[CONFIG_CPU_MAX_COUNT];
 size_t cpu_count = 0;
 
+static void cpu_enable_sse(void)
+{
+	uint64_t cr0 = read_cr0();
+	cr0 &= ~(1ULL << 2); // EM
+	cr0 &= ~(1ULL << 3); // TS
+	cr0 |= (1ULL << 1); // MP
+	write_cr0(cr0);
+
+	uint64_t cr4 = read_cr4();
+	cr4 |= (1ULL << 9); // OSFXSR
+	cr4 |= (1ULL << 10); // OSXMMEXCPT
+	write_cr4(cr4);
+
+	__asm__ volatile("fninit");
+}
+
 int cpu_early_init()
 {
 	// save cpuinfo
@@ -44,6 +60,7 @@ int cpu_early_init()
 	gdt_init();
 	idt_init();
 	x86_64_syscall_init();
+	cpu_enable_sse();
 
 	cpu_count++;
 
