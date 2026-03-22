@@ -124,7 +124,7 @@ LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
-QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio -cpu host -enable-kvm
+QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
