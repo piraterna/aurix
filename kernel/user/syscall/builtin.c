@@ -105,7 +105,7 @@ static bool vregion_overlaps(vctx_t *ctx, uint64_t vaddr, size_t pages)
 
 static struct fileio *proc_fd_lookup_locked(struct pcb *proc, int fd)
 {
-	if (!proc || fd <= FD_RESERVED_STDIN || fd >= PROC_MAX_FDS)
+	if (!proc || fd < 0 || fd >= PROC_MAX_FDS)
 		return NULL;
 	return proc->fds[fd];
 }

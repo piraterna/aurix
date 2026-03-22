@@ -357,9 +357,18 @@ pcb *proc_create(void)
 	spinlock_init(&proc->fd_lock);
 	memset(proc->fds, 0, sizeof(proc->fds));
 
+	proc->fds[0] = open("/dev/stdin", O_RDONLY, 0);
+	if (!proc->fds[0]) {
+		warn("proc_create: PID=%u failed to open /dev/stdin\n", proc->pid);
+	}
+
 	proc->fds[1] = open("/dev/stdout", O_WRONLY, 0);
 	if (!proc->fds[1]) {
 		warn("proc_create: PID=%u failed to open /dev/stdout\n", proc->pid);
+	}
+	proc->fds[2] = open("/dev/stderr", O_WRONLY, 0);
+	if (!proc->fds[2]) {
+		warn("proc_create: PID=%u failed to open /dev/stderr\n", proc->pid);
 	}
 
 	uintptr_t kvirt = 0xffffffff80000000ULL;
