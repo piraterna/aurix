@@ -165,10 +165,15 @@ static void print_prompt(void)
 	char cwd[PATH_MAX];
 	const char *cwd_value = NULL;
 	if (strstr(expanded_prompt, "%p") != NULL) {
-		if (getcwd(cwd, sizeof(cwd)) != NULL)
-			cwd_value = cwd;
-		else
+		if (getcwd(cwd, sizeof(cwd)) != NULL) {
+			const char *home = getenv("HOME");
+			if (home && strcmp(cwd, home) == 0)
+				cwd_value = "~";
+			else
+				cwd_value = cwd;
+		} else {
 			cwd_value = "?";
+		}
 	}
 
 	for (const char *p = expanded_prompt; *p != '\0'; p++) {
@@ -386,6 +391,103 @@ static ssize_t sh_readline(char **line, size_t *cap)
 	return (ssize_t)len;
 }
 
+static char *expand_env_token(const char *input)
+{
+	if (!input)
+		return NULL;
+
+	size_t len = strlen(input);
+	size_t cap = len + 1;
+	char *out = malloc(cap);
+	if (!out)
+		return NULL;
+
+	size_t out_len = 0;
+	for (size_t i = 0; i < len; i++) {
+		if (input[i] != '$') {
+			if (out_len + 1 >= cap) {
+				cap = cap * 2 + 16;
+				char *grown = realloc(out, cap);
+				if (!grown) {
+					free(out);
+					return NULL;
+				}
+				out = grown;
+			}
+			out[out_len++] = input[i];
+			continue;
+		}
+
+		size_t var_start = i + 1;
+		size_t var_len = 0;
+		bool braced = false;
+		if (var_start < len && input[var_start] == '{') {
+			braced = true;
+			var_start++;
+			while (var_start + var_len < len &&
+				   input[var_start + var_len] != '}') {
+				var_len++;
+			}
+			if (var_start + var_len >= len) {
+				braced = false;
+				var_start = i + 1;
+				var_len = 0;
+			}
+		}
+
+		if (!braced) {
+			while (var_start + var_len < len) {
+				char c = input[var_start + var_len];
+				if (!(isalnum((unsigned char)c) || c == '_'))
+					break;
+				var_len++;
+			}
+		}
+
+		if (var_len == 0) {
+			if (out_len + 1 >= cap) {
+				cap = cap * 2 + 16;
+				char *grown = realloc(out, cap);
+				if (!grown) {
+					free(out);
+					return NULL;
+				}
+				out = grown;
+			}
+			out[out_len++] = input[i];
+			continue;
+		}
+
+		char *name = strndup(input + var_start, var_len);
+		const char *value = NULL;
+		if (name) {
+			value = getenv(name);
+			free(name);
+		}
+		if (value) {
+			size_t value_len = strlen(value);
+			if (out_len + value_len >= cap) {
+				cap = out_len + value_len + 16;
+				char *grown = realloc(out, cap);
+				if (!grown) {
+					free(out);
+					return NULL;
+				}
+				out = grown;
+			}
+			memcpy(out + out_len, value, value_len);
+			out_len += value_len;
+		}
+
+		i = var_start + var_len - 1;
+		if (braced)
+			i++;
+	}
+
+	out[out_len] = '\0';
+	return out;
+}
+
 static int parse_line(char *line, char *argv[], int max_args)
 {
 	int argc = 0;
@@ -513,13 +615,34 @@ static int run_command_line(char *line, int *last_status, bool *should_exit)
 	if (argc == 0)
 		return 0;
 
-	const struct builtin *builtin = builtin_lookup(argv[0]);
+	char *expanded[MAX_ARGS];
+	bool expanded_alloc[MAX_ARGS];
+	for (int i = 0; i < argc; i++) {
+		expanded[i] = expand_env_token(argv[i]);
+		if (expanded[i]) {
+			expanded_alloc[i] = true;
+		} else {
+			expanded[i] = argv[i];
+			expanded_alloc[i] = false;
+		}
+	}
+	expanded[argc] = NULL;
+
+	const struct builtin *builtin = builtin_lookup(expanded[0]);
 	if (builtin) {
-		*last_status = builtin->handler(argc, argv, should_exit);
+		*last_status = builtin->handler(argc, expanded, should_exit);
+		for (int i = 0; i < argc; i++) {
+			if (expanded_alloc[i])
+				free(expanded[i]);
+		}
 		return 0;
 	}
 
-	*last_status = run_external(argv);
+	*last_status = run_external(expanded);
+	for (int i = 0; i < argc; i++) {
+		if (expanded_alloc[i])
+			free(expanded[i]);
+	}
 	return 0;
 }
 

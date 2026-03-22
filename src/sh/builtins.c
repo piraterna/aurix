@@ -137,103 +137,6 @@ static int builtin_export(int argc, char *argv[], bool *should_exit)
 	return 0;
 }
 
-static char *expand_env_token(const char *input)
-{
-	if (!input)
-		return NULL;
-
-	size_t len = strlen(input);
-	size_t cap = len + 1;
-	char *out = malloc(cap);
-	if (!out)
-		return NULL;
-
-	size_t out_len = 0;
-	for (size_t i = 0; i < len; i++) {
-		if (input[i] != '$') {
-			if (out_len + 1 >= cap) {
-				cap = cap * 2 + 16;
-				char *grown = realloc(out, cap);
-				if (!grown) {
-					free(out);
-					return NULL;
-				}
-				out = grown;
-			}
-			out[out_len++] = input[i];
-			continue;
-		}
-
-		size_t var_start = i + 1;
-		size_t var_len = 0;
-		bool braced = false;
-		if (var_start < len && input[var_start] == '{') {
-			braced = true;
-			var_start++;
-			while (var_start + var_len < len &&
-				   input[var_start + var_len] != '}') {
-				var_len++;
-			}
-			if (var_start + var_len >= len) {
-				braced = false;
-				var_start = i + 1;
-				var_len = 0;
-			}
-		}
-
-		if (!braced) {
-			while (var_start + var_len < len) {
-				char c = input[var_start + var_len];
-				if (!(isalnum((unsigned char)c) || c == '_'))
-					break;
-				var_len++;
-			}
-		}
-
-		if (var_len == 0) {
-			if (out_len + 1 >= cap) {
-				cap = cap * 2 + 16;
-				char *grown = realloc(out, cap);
-				if (!grown) {
-					free(out);
-					return NULL;
-				}
-				out = grown;
-			}
-			out[out_len++] = input[i];
-			continue;
-		}
-
-		char *name = strndup(input + var_start, var_len);
-		const char *value = NULL;
-		if (name) {
-			value = getenv(name);
-			free(name);
-		}
-		if (value) {
-			size_t value_len = strlen(value);
-			if (out_len + value_len >= cap) {
-				cap = out_len + value_len + 16;
-				char *grown = realloc(out, cap);
-				if (!grown) {
-					free(out);
-					return NULL;
-				}
-				out = grown;
-			}
-			memcpy(out + out_len, value, value_len);
-			out_len += value_len;
-		}
-
-		i = var_start + var_len - 1;
-		if (braced)
-			i++;
-	}
-
-	out[out_len] = '\0';
-	return out;
-}
-
 static char *expand_echo_escapes(const char *input)
 {
 	if (!input)
@@ -342,12 +245,10 @@ static int builtin_echo(int argc, char *argv[], bool *should_exit)
 	}
 
 	for (int i = start; i < argc; i++) {
-		char *expanded = expand_env_token(argv[i]);
-		const char *raw = expanded ? expanded : argv[i];
 		char *escaped = NULL;
-		const char *out = raw;
+		const char *out = argv[i];
 		if (enable_escapes) {
-			escaped = expand_echo_escapes(raw);
+			escaped = expand_echo_escapes(argv[i]);
 			if (escaped)
 				out = escaped;
 		}
@@ -355,7 +256,6 @@ static int builtin_echo(int argc, char *argv[], bool *should_exit)
 			putchar(' ');
 		fputs(out, stdout);
 		free(escaped);
-		free(expanded);
 	}
 	putchar('\n');
 	return 0;
