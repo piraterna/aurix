@@ -700,7 +700,7 @@ static int cmd_exec(int argc, char **argv)
 	proc->name = (const char *)name_copy;
 
 	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, path, proc, &entry)) {
+	if (!elf_load_user_process(buf, path, proc, NULL, 0, NULL, 0, &entry)) {
 		kprintf("ksh: failed to load ELF: %s\n", path);
 		proc_destroy(proc);
 		kfree(buf);

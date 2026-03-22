@@ -338,7 +338,17 @@ static int builtin_cat(int argc, char *argv[])
 
 static int builtin_help(void)
 {
-	puts("builtins: cd pwd export unset ls cat echo exit help");
+	puts("builtins: cd pwd export unset ls cat clear echo env exit help");
+	return 0;
+}
+
+static int builtin_env(void)
+{
+	if (!environ)
+		return 0;
+	for (char **entry = environ; *entry; entry++) {
+		puts(*entry);
+	}
 	return 0;
 }
 
@@ -414,7 +424,8 @@ static bool is_builtin(const char *cmd)
 		   strcmp(cmd, "exit") == 0 || strcmp(cmd, "export") == 0 ||
 		   strcmp(cmd, "unset") == 0 || strcmp(cmd, "ls") == 0 ||
 		   strcmp(cmd, "cat") == 0 || strcmp(cmd, "echo") == 0 ||
-		   strcmp(cmd, "help") == 0 || strcmp(cmd, "clear") == 0;
+		   strcmp(cmd, "help") == 0 || strcmp(cmd, "clear") == 0 ||
+		   strcmp(cmd, "env") == 0;
 }
 
 static int run_builtin(int argc, char *argv[], bool *should_exit)
@@ -453,6 +464,10 @@ static int run_builtin(int argc, char *argv[], bool *should_exit)
 
 	if (strcmp(argv[0], "clear") == 0) {
 		return builtin_clear();
+	}
+
+	if (strcmp(argv[0], "env") == 0) {
+		return builtin_env();
 	}
 
 	if (strcmp(argv[0], "exit") == 0) {

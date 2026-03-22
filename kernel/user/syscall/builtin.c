@@ -77,6 +77,10 @@
 
 #define DIR_HANDLE_MAX_ENTRIES 256
 
+#define EXEC_MAX_ARGS 128
+#define EXEC_MAX_ENVP 128
+#define EXEC_MAX_STRLEN 4096
+
 #if defined(__x86_64__)
 #define MSR_IA32_FS_BASE 0xC0000100
 #endif
@@ -289,6 +293,72 @@ static int proc_fd_alloc_locked(struct pcb *proc, struct fileio *file)
 	}
 
 	return -EMFILE;
+}
+
+static size_t bounded_strlen(const char *s, size_t max)
+{
+	if (!s)
+		return 0;
+	for (size_t i = 0; i < max; i++) {
+		if (s[i] == '\0')
+			return i;
+	}
+	return max;
+}
+
+static void free_string_vector(char **vec, size_t count)
+{
+	if (!vec)
+		return;
+	for (size_t i = 0; i < count; i++) {
+		if (vec[i])
+			kfree(vec[i]);
+	}
+	kfree(vec);
+}
+
+static int copy_user_string_vector(const char *const *user, size_t max,
+								   char ***out_vec, size_t *out_count)
+{
+	if (!out_vec || !out_count)
+		return -EINVAL;
+	*out_vec = NULL;
+	*out_count = 0;
+
+	if (!user)
+		return 0;
+
+	char **vec = kmalloc(sizeof(char *) * max);
+	if (!vec)
+		return -ENOMEM;
+	memset(vec, 0, sizeof(char *) * max);
+
+	for (size_t i = 0; i < max; i++) {
+		const char *src = user[i];
+		if (!src) {
+			*out_vec = vec;
+			*out_count = i;
+			return 0;
+		}
+
+		size_t len = bounded_strlen(src, EXEC_MAX_STRLEN);
+		if (len == EXEC_MAX_STRLEN) {
+			free_string_vector(vec, i);
+			return -E2BIG;
+		}
+
+		char *dst = kmalloc(len + 1);
+		if (!dst) {
+			free_string_vector(vec, i);
+			return -ENOMEM;
+		}
+		memcpy(dst, src, len);
+		dst[len] = '\0';
+		vec[i] = dst;
+	}
+
+	free_string_vector(vec, max);
+	return -E2BIG;
 }
 
 static void dir_handle_free(struct fileio *file)
@@ -745,18 +815,21 @@ int64_t sys_exec(const syscall_args_t *args)
 
 	if (f->size == 0) {
 		close(f);
+		kfree(resolved);
 		return -EINVAL;
 	}
 
 	char *buf = (char *)kmalloc(f->size);
 	if (!buf) {
 		close(f);
+		kfree(resolved);
 		return -ENOMEM;
 	}
 
 	if (read(f, f->size, buf) != f->size) {
 		close(f);
 		kfree(buf);
+		kfree(resolved);
 		return -EIO;
 	}
 
@@ -774,7 +847,7 @@ int64_t sys_exec(const syscall_args_t *args)
 	proc->name = (const char *)name_copy;
 
 	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, resolved, proc, &entry)) {
+	if (!elf_load_user_process(buf, resolved, proc, NULL, 0, NULL, 0, &entry)) {
 		kfree(resolved);
 		kfree(buf);
 		proc_destroy(proc);
@@ -805,9 +878,6 @@ int64_t sys_execve(const syscall_args_t *args)
 	const char *const *argv = (const char *const *)args->rsi;
 	const char *const *envp = (const char *const *)args->rdx;
 
-	(void)argv;
-	(void)envp;
-
 	if (!path)
 		return -EFAULT;
 
@@ -822,6 +892,25 @@ int64_t sys_execve(const syscall_args_t *args)
 	char *resolved = syscall_resolve_path(cur, path);
 	if (!resolved)
 		return -ENOMEM;
+
+	char **argv_copy = NULL;
+	size_t argv_count = 0;
+	int arg_ret =
+		copy_user_string_vector(argv, EXEC_MAX_ARGS, &argv_copy, &argv_count);
+	if (arg_ret != 0) {
+		kfree(resolved);
+		return arg_ret;
+	}
+
+	char **envp_copy = NULL;
+	size_t envp_count = 0;
+	int env_ret =
+		copy_user_string_vector(envp, EXEC_MAX_ENVP, &envp_copy, &envp_count);
+	if (env_ret != 0) {
+		free_string_vector(argv_copy, argv_count);
+		kfree(resolved);
+		return env_ret;
+	}
 
 	struct fileio *f = open(resolved, O_RDONLY, 0);
 	if (!f) {
@@ -850,6 +939,8 @@ int64_t sys_execve(const syscall_args_t *args)
 
 	pagetable *new_pm = create_pagemap();
 	if (!new_pm) {
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
 		kfree(resolved);
 		kfree(buf);
 		return -ENOMEM;
@@ -858,6 +949,8 @@ int64_t sys_execve(const syscall_args_t *args)
 	vctx_t *new_vctx = vinit(new_pm, 0x1000);
 	if (!new_vctx) {
 		destroy_pagemap(new_pm);
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
 		kfree(resolved);
 		kfree(buf);
 		return -ENOMEM;
@@ -888,7 +981,9 @@ int64_t sys_execve(const syscall_args_t *args)
 	cur->user_rsp = 0;
 
 	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, resolved, cur, &entry)) {
+	if (!elf_load_user_process(
+			buf, resolved, cur, (const char *const *)argv_copy, argv_count,
+			(const char *const *)envp_copy, envp_count, &entry)) {
 		cur->pm = old_pm;
 		cur->vctx = old_vctx;
 		cur->image_elf = old_image_elf;
@@ -902,6 +997,8 @@ int64_t sys_execve(const syscall_args_t *args)
 		cur->user_rsp = old_user_rsp;
 		vdestroy(new_vctx);
 		destroy_pagemap(new_pm);
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
 		kfree(resolved);
 		kfree(buf);
 		return -EINVAL;
@@ -922,6 +1019,8 @@ int64_t sys_execve(const syscall_args_t *args)
 		cur->user_rsp = old_user_rsp;
 		vdestroy(new_vctx);
 		destroy_pagemap(new_pm);
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
 		kfree(resolved);
 		kfree(buf);
 		return -ENOMEM;
@@ -947,6 +1046,8 @@ int64_t sys_execve(const syscall_args_t *args)
 
 	kfree(resolved);
 	kfree(buf);
+	free_string_vector(argv_copy, argv_count);
+	free_string_vector(envp_copy, envp_count);
 
 	thread_exit(current, 0);
 	__builtin_unreachable();

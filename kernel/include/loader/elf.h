@@ -262,6 +262,8 @@ bool elf_lookup_addr(char *elf_data, uintptr_t addr, const char **name_out,
 struct pcb;
 bool elf_get_interpreter(char *data, const char **path_out);
 bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
+						   const char *const *argv, size_t argv_count,
+						   const char *const *envp, size_t envp_count,
 						   uintptr_t *entry_out);
 
 #endif /* _LOADER_ELF_H */

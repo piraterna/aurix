@@ -127,7 +127,7 @@ pcb *load_init(const char *path)
 	proc->name = strdup("init");
 
 	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, path, proc, &entry)) {
+	if (!elf_load_user_process(buf, path, proc, NULL, 0, NULL, 0, &entry)) {
 		error("failed to load ELF: %s\n", path);
 		proc_destroy(proc);
 		kfree(buf);

@@ -690,7 +690,9 @@ static bool write_user_u64(struct pcb *proc, uintptr_t dest, uint64_t value)
 static bool elf_build_user_stack(struct pcb *proc, const char *exec_path,
 								 uintptr_t exec_entry, uintptr_t phdr,
 								 size_t phent, size_t phnum,
-								 uintptr_t interp_base)
+								 uintptr_t interp_base, const char *const *argv,
+								 size_t argv_count, const char *const *envp,
+								 size_t envp_count)
 {
 	if (!proc || proc->user_stack_base)
 		return false;
@@ -722,6 +724,50 @@ static bool elf_build_user_stack(struct pcb *proc, const char *exec_path,
 	if (!write_user_bytes(proc, execfn_ptr, execfn, execfn_len))
 		return false;
 
+	uintptr_t *argv_ptrs = NULL;
+	uintptr_t *envp_ptrs = NULL;
+
+	if (argv_count) {
+		argv_ptrs = kmalloc(sizeof(uintptr_t) * argv_count);
+		if (!argv_ptrs)
+			return false;
+	}
+	if (envp_count) {
+		envp_ptrs = kmalloc(sizeof(uintptr_t) * envp_count);
+		if (!envp_ptrs) {
+			kfree(argv_ptrs);
+			return false;
+		}
+	}
+
+	for (size_t i = envp_count; i > 0; i--) {
+		const char *value = envp[i - 1];
+		if (!value)
+			value = "";
+		size_t len = strlen(value) + 1;
+		sp -= len;
+		if (!write_user_bytes(proc, sp, value, len)) {
+			kfree(argv_ptrs);
+			kfree(envp_ptrs);
+			return false;
+		}
+		envp_ptrs[i - 1] = sp;
+	}
+
+	for (size_t i = argv_count; i > 0; i--) {
+		const char *value = argv[i - 1];
+		if (!value)
+			value = "";
+		size_t len = strlen(value) + 1;
+		sp -= len;
+		if (!write_user_bytes(proc, sp, value, len)) {
+			kfree(argv_ptrs);
+			kfree(envp_ptrs);
+			return false;
+		}
+		argv_ptrs[i - 1] = sp;
+	}
+
 	sp = ALIGN_DOWN(sp, 16);
 
 	struct {
@@ -733,42 +779,84 @@ static bool elf_build_user_stack(struct pcb *proc, const char *exec_path,
 				 { AT_EXECFN, execfn_ptr }, { AT_RANDOM, random_ptr },
 				 { AT_SECURE, 0 },			{ AT_NULL, 0 } };
 
-	size_t argv_count = 1;
-	size_t envp_count = 0;
+	size_t argc = argv_count ? argv_count : 1;
 	size_t auxv_count = sizeof(auxv) / sizeof(auxv[0]);
-	size_t total_words =
-		1 + (argv_count + 1) + (envp_count + 1) + (auxv_count * 2);
+	size_t total_words = 1 + (argc + 1) + (envp_count + 1) + (auxv_count * 2);
 	size_t bytes = total_words * sizeof(uintptr_t);
-	if (bytes > USER_STACK_SIZE)
+	if (bytes > USER_STACK_SIZE) {
+		kfree(argv_ptrs);
+		kfree(envp_ptrs);
 		return false;
+	}
 
 	uintptr_t stack_base = ALIGN_DOWN(sp - bytes, 16);
-	if (stack_base < (uintptr_t)user_stack_base)
+	if (stack_base < (uintptr_t)user_stack_base) {
+		kfree(argv_ptrs);
+		kfree(envp_ptrs);
 		return false;
+	}
 	uintptr_t cursor = stack_base;
 
-	if (!write_user_u64(proc, cursor, (uint64_t)argv_count))
+	if (!write_user_u64(proc, cursor, (uint64_t)argc)) {
+		kfree(argv_ptrs);
+		kfree(envp_ptrs);
 		return false;
+	}
 	cursor += sizeof(uint64_t);
 
-	if (!write_user_u64(proc, cursor, execfn_ptr))
+	if (argv_count) {
+		for (size_t i = 0; i < argv_count; i++) {
+			if (!write_user_u64(proc, cursor, argv_ptrs[i])) {
+				kfree(argv_ptrs);
+				kfree(envp_ptrs);
+				return false;
+			}
+			cursor += sizeof(uint64_t);
+		}
+	} else {
+		if (!write_user_u64(proc, cursor, execfn_ptr)) {
+			kfree(argv_ptrs);
+			kfree(envp_ptrs);
+			return false;
+		}
+		cursor += sizeof(uint64_t);
+	}
+
+	if (!write_user_u64(proc, cursor, 0)) {
+		kfree(argv_ptrs);
+		kfree(envp_ptrs);
 		return false;
+	}
 	cursor += sizeof(uint64_t);
 
-	if (!write_user_u64(proc, cursor, 0))
-		return false;
-	cursor += sizeof(uint64_t);
+	for (size_t i = 0; i < envp_count; i++) {
+		if (!write_user_u64(proc, cursor, envp_ptrs[i])) {
+			kfree(argv_ptrs);
+			kfree(envp_ptrs);
+			return false;
+		}
+		cursor += sizeof(uint64_t);
+	}
 
-	if (!write_user_u64(proc, cursor, 0))
+	if (!write_user_u64(proc, cursor, 0)) {
+		kfree(argv_ptrs);
+		kfree(envp_ptrs);
 		return false;
+	}
 	cursor += sizeof(uint64_t);
 
 	for (size_t i = 0; i < auxv_count; i++) {
-		if (!write_user_u64(proc, cursor, auxv[i].type))
+		if (!write_user_u64(proc, cursor, auxv[i].type)) {
+			kfree(argv_ptrs);
+			kfree(envp_ptrs);
 			return false;
+		}
 		cursor += sizeof(uint64_t);
-		if (!write_user_u64(proc, cursor, auxv[i].value))
+		if (!write_user_u64(proc, cursor, auxv[i].value)) {
+			kfree(argv_ptrs);
+			kfree(envp_ptrs);
 			return false;
+		}
 		cursor += sizeof(uint64_t);
 	}
 
@@ -780,6 +868,8 @@ static bool elf_build_user_stack(struct pcb *proc, const char *exec_path,
 	proc->user_stack_base = (uintptr_t)user_stack_base;
 	proc->user_stack_size = USER_STACK_SIZE;
 	proc->user_rsp = stack_base;
+	kfree(argv_ptrs);
+	kfree(envp_ptrs);
 	return true;
 }
 
@@ -848,6 +938,8 @@ static bool elf_load_interpreter(struct pcb *proc, const char *path,
 }
 
 bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
+						   const char *const *argv, size_t argv_count,
+						   const char *const *envp, size_t envp_count,
 						   uintptr_t *entry_out)
 {
 	if (!data || !proc || !entry_out)
@@ -895,7 +987,8 @@ bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
 	}
 
 	if (!elf_build_user_stack(proc, path, exec_entry, phdr, ehdr->e_phentsize,
-							  ehdr->e_phnum, interp_base)) {
+							  ehdr->e_phnum, interp_base, argv, argv_count,
+							  envp, envp_count)) {
 		return false;
 	}
 
