@@ -142,6 +142,7 @@ Alternatively, you can boot AurixOS on a physical machine by running `dd if=rele
 
 - `specseek` (in `src/specseek`): [https://github.com/Mellurboo/SpecSeek](https://github.com/Mellurboo/SpecSeek)
 - `hexdump` (in `src/hexdump`): [https://github.com/wahern/hexdump](https://github.com/wahern/hexdump)
+- `busybox` (in `src/busybox/upstream`): [https://github.com/mirror/busybox](https://github.com/mirror/busybox), copyright (C) BusyBox authors, licensed under GPL-2.0 only (see `src/busybox/upstream/LICENSE`)
 
 ## Support
 

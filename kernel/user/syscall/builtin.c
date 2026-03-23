@@ -1467,6 +1467,63 @@ int64_t sys_waitpid(const syscall_args_t *args)
 	return pid;
 }
 
+int64_t sys_getpid(const syscall_args_t *args)
+{
+	(void)args;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -ESRCH;
+
+	return (int64_t)proc->pid;
+}
+
+int64_t sys_getppid(const syscall_args_t *args)
+{
+	(void)args;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -ESRCH;
+
+	return (int64_t)proc->parent_pid;
+}
+
+int64_t sys_getuid(const syscall_args_t *args)
+{
+	(void)args;
+	return -ENOSYS;
+}
+
+int64_t sys_geteuid(const syscall_args_t *args)
+{
+	(void)args;
+	return -ENOSYS;
+}
+
+int64_t sys_getgid(const syscall_args_t *args)
+{
+	(void)args;
+	return -ENOSYS;
+}
+
+int64_t sys_getegid(const syscall_args_t *args)
+{
+	(void)args;
+	return -ENOSYS;
+}
+
+int64_t sys_gettid(const syscall_args_t *args)
+{
+	(void)args;
+
+	struct tcb *thr = thread_current();
+	if (!thr)
+		return -ESRCH;
+
+	return (int64_t)thr->tid;
+}
+
 int64_t sys_clock_get(const syscall_args_t *args)
 {
 	int clock = (int)args->rdi;
@@ -1531,4 +1588,11 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_OPENDIR, sys_opendir, "opendir");
 	register_syscall(SYS_READENTRIES, sys_read_entries, "read_entries");
 	register_syscall(SYS_STAT, sys_stat, "stat");
+	register_syscall(SYS_GETPID, sys_getpid, "getpid");
+	register_syscall(SYS_GETUID, sys_getuid, "getuid");
+	register_syscall(SYS_GETEUID, sys_geteuid, "geteuid");
+	register_syscall(SYS_GETGID, sys_getgid, "getgid");
+	register_syscall(SYS_GETEGID, sys_getegid, "getegid");
+	register_syscall(SYS_GETPPID, sys_getppid, "getppid");
+	register_syscall(SYS_GETTID, sys_gettid, "gettid");
 }
