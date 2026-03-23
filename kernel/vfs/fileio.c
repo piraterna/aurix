@@ -120,8 +120,10 @@ int write(struct fileio *file, void *buf, size_t size)
 	struct vnode *vn = file->private;
 
 	if (file->flags & PIPE_WRITE_END) {
-		pipe_write(file, buf, &size);
-		return size;
+		int ret = pipe_write(file, buf, &size);
+		if (ret < 0)
+			return ret;
+		return (int)size;
 	} else if (file->flags & PIPE_READ_END) {
 		return -EBADF;
 	}

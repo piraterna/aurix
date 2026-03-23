@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <sys/types.h>
 #include <mm/vmm.h>
 #include <stdatomic.h>
 #include <sys/spinlock.h>
@@ -73,6 +74,7 @@ typedef struct pcb {
 	struct fileio *fds[PROC_MAX_FDS];
 	const char *name;
 	char *cwd;
+	mode_t umask;
 	uint32_t parent_pid;
 	int exit_code;
 	bool exited;

@@ -360,6 +360,7 @@ pcb *proc_create(void)
 	spinlock_init(&proc->fd_lock);
 	memset(proc->fds, 0, sizeof(proc->fds));
 	proc->cwd = strdup("/");
+	proc->umask = 0022;
 	proc->parent_pid = 0;
 	proc->exit_code = 0;
 	proc->exited = false;

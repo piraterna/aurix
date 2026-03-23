@@ -21,6 +21,8 @@
 #include <vfs/fileio.h>
 #include <mm/heap.h>
 #include <lib/string.h>
+#include <sys/sched.h>
+#include <sys/errno.h>
 
 static inline size_t pipe_space(struct pipe *p)
 {
@@ -101,8 +103,8 @@ int pipe_read(struct fileio *fio, void *buf, size_t *size)
 			}
 
 			spinlock_release(&p->lock);
-			*size = 0;
-			return 0;
+			sched_yield();
+			spinlock_acquire(&p->lock);
 		}
 	}
 	spinlock_release(&p->lock);
@@ -132,10 +134,12 @@ int pipe_write(struct fileio *fio, const void *buf, size_t *size)
 		} else {
 			if (p->readers == 0) {
 				spinlock_release(&p->lock);
-				return -1;
+				return -EPIPE;
 			}
 
-			break;
+			spinlock_release(&p->lock);
+			sched_yield();
+			spinlock_acquire(&p->lock);
 		}
 	}
 	spinlock_release(&p->lock);

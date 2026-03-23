@@ -29,14 +29,23 @@
 #include <lib/string.h>
 #include <lib/align.h>
 #include <sys/errno.h>
+#include <sys/types.h>
 #include <loader/module.h>
 #include <time/time.h>
 #include <ipc/pipe.h>
 #include <aurix.h>
+#include <user/access.h>
 
 #if defined(__x86_64__)
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/syscall.h>
+#endif
+
+#ifndef AT_FDCWD
+#define AT_FDCWD -100
+#endif
+#ifndef AT_REMOVEDIR
+#define AT_REMOVEDIR 0x200
 #endif
 
 #include <loader/elf.h>
@@ -465,6 +474,50 @@ static void dir_handle_free(struct fileio *file)
 	file->dir = NULL;
 }
 
+static int copy_file_data(const char *src, const char *dst, mode_t mode)
+{
+	struct fileio *in = open(src, O_RDONLY, 0);
+	if (!in)
+		return -ENOENT;
+	struct fileio *out = open(dst, O_WRONLY | O_CREAT | O_TRUNC, mode);
+	if (!out) {
+		close(in);
+		return -ENOENT;
+	}
+
+	char buf[4096];
+	int status = 0;
+	for (;;) {
+		size_t n = read(in, sizeof(buf), buf);
+		if (n == 0)
+			break;
+		int wrote = write(out, buf, n);
+		if (wrote < 0 || (size_t)wrote != n) {
+			status = -EIO;
+			break;
+		}
+	}
+
+	close(in);
+	close(out);
+	return status;
+}
+
+static bool mode_is_dir(mode_t mode)
+{
+	return (mode & S_IFMT) == S_IFDIR;
+}
+
+static bool mode_is_link(mode_t mode)
+{
+	return (mode & S_IFMT) == S_IFLNK;
+}
+
+static bool mode_is_reg(mode_t mode)
+{
+	return (mode & S_IFMT) == S_IFREG;
+}
+
 /*********************************************************************************/
 /* Builtin system calls for aurix												 */
 /*********************************************************************************/
@@ -769,8 +822,6 @@ int64_t sys_fcntl(const syscall_args_t *args)
 			close(f);
 			return newfd;
 		}
-
-		close(f);
 		return newfd;
 	}
 
@@ -891,6 +942,366 @@ int64_t sys_readlink(const syscall_args_t *args)
 	return 0;
 }
 
+int64_t sys_mkdir(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+	mode_t mode = (mode_t)args->rsi;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	if (!path)
+		return -EFAULT;
+
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	mode &= ~proc->umask;
+	int ret = vfs_mkdir(resolved, mode);
+	kfree(resolved);
+
+	return ret == 0 ? 0 : -ENOENT;
+}
+
+int64_t sys_mkdirat(const syscall_args_t *args)
+{
+	int dirfd = (int)args->rdi;
+	const char *path = (const char *)args->rsi;
+	mode_t mode = (mode_t)args->rdx;
+
+	if (!path)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	if (dirfd != AT_FDCWD)
+		return -ENOSYS;
+
+	char *resolved = NULL;
+	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
+	if (r)
+		return r;
+
+	mode &= ~proc->umask;
+	int ret = vfs_mkdir(resolved, mode);
+	kfree(resolved);
+
+	return ret == 0 ? 0 : -ENOENT;
+}
+
+int64_t sys_unlinkat(const syscall_args_t *args)
+{
+	int dirfd = (int)args->rdi;
+	const char *path = (const char *)args->rsi;
+	int flags = (int)args->rdx;
+
+	if (!path)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	if (dirfd != AT_FDCWD)
+		return -ENOSYS;
+
+	char *resolved = NULL;
+	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
+	if (r)
+		return r;
+
+	int ret = 0;
+	if (flags & AT_REMOVEDIR)
+		ret = vfs_rmdir(resolved);
+	else
+		ret = vfs_remove(resolved);
+
+	kfree(resolved);
+	return ret == 0 ? 0 : -ENOENT;
+}
+
+int64_t sys_rename(const syscall_args_t *args)
+{
+	const char *old_path = (const char *)args->rdi;
+	const char *new_path = (const char *)args->rsi;
+
+	if (!old_path || !new_path)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved_old = syscall_resolve_path(proc, old_path);
+	if (!resolved_old)
+		return -ENOMEM;
+	char *resolved_new = syscall_resolve_path(proc, new_path);
+	if (!resolved_new) {
+		kfree(resolved_old);
+		return -ENOMEM;
+	}
+
+	struct stat st;
+	if (vfs_stat(resolved_old, &st) != 0) {
+		kfree(resolved_old);
+		kfree(resolved_new);
+		return -ENOENT;
+	}
+
+	if (mode_is_dir(st.st_mode)) {
+		kfree(resolved_old);
+		kfree(resolved_new);
+		return -EPERM;
+	}
+
+	int ret = 0;
+	if (mode_is_link(st.st_mode)) {
+		char target[4096];
+		int rl = vfs_readlink(resolved_old, target, sizeof(target));
+		if (rl < 0) {
+			ret = -EINVAL;
+		} else {
+			target[sizeof(target) - 1] = '\0';
+			if (vfs_symlink(target, resolved_new) != 0)
+				ret = -ENOENT;
+		}
+	} else {
+		mode_t mode = st.st_mode & 0777;
+		ret = copy_file_data(resolved_old, resolved_new, mode);
+	}
+
+	if (ret == 0) {
+		if (vfs_remove(resolved_old) != 0)
+			ret = -ENOENT;
+	}
+
+	kfree(resolved_old);
+	kfree(resolved_new);
+	return ret;
+}
+
+int64_t sys_symlink(const syscall_args_t *args)
+{
+	const char *target = (const char *)args->rdi;
+	const char *linkpath = (const char *)args->rsi;
+
+	if (!target || !linkpath)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved = syscall_resolve_path(proc, linkpath);
+	if (!resolved)
+		return -ENOMEM;
+
+	int ret = vfs_symlink(target, resolved);
+	kfree(resolved);
+	return ret == 0 ? 0 : -ENOENT;
+}
+
+int64_t sys_symlinkat(const syscall_args_t *args)
+{
+	const char *target = (const char *)args->rdi;
+	int dirfd = (int)args->rsi;
+	const char *linkpath = (const char *)args->rdx;
+
+	if (!target || !linkpath)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	if (dirfd != AT_FDCWD)
+		return -ENOSYS;
+
+	char *resolved = NULL;
+	int r = syscall_resolve_path_at(proc, dirfd, linkpath, &resolved);
+	if (r)
+		return r;
+
+	int ret = vfs_symlink(target, resolved);
+	kfree(resolved);
+	return ret == 0 ? 0 : -ENOENT;
+}
+
+int64_t sys_link(const syscall_args_t *args)
+{
+	const char *old_path = (const char *)args->rdi;
+	const char *new_path = (const char *)args->rsi;
+
+	if (!old_path || !new_path)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved_old = syscall_resolve_path(proc, old_path);
+	if (!resolved_old)
+		return -ENOMEM;
+	char *resolved_new = syscall_resolve_path(proc, new_path);
+	if (!resolved_new) {
+		kfree(resolved_old);
+		return -ENOMEM;
+	}
+
+	struct stat st;
+	if (vfs_stat(resolved_old, &st) != 0) {
+		kfree(resolved_old);
+		kfree(resolved_new);
+		return -ENOENT;
+	}
+
+	if (!mode_is_reg(st.st_mode)) {
+		kfree(resolved_old);
+		kfree(resolved_new);
+		return -EPERM;
+	}
+
+	mode_t mode = st.st_mode & 0777;
+	int ret = copy_file_data(resolved_old, resolved_new, mode);
+
+	kfree(resolved_old);
+	kfree(resolved_new);
+	return ret;
+}
+
+int64_t sys_linkat(const syscall_args_t *args)
+{
+	int olddirfd = (int)args->rdi;
+	const char *old_path = (const char *)args->rsi;
+	int newdirfd = (int)args->rdx;
+	const char *new_path = (const char *)args->r10;
+	int flags = (int)args->r8;
+
+	if (!old_path || !new_path)
+		return -EFAULT;
+	if (flags)
+		return -ENOSYS;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	if (olddirfd != AT_FDCWD || newdirfd != AT_FDCWD)
+		return -ENOSYS;
+
+	char *resolved_old = NULL;
+	char *resolved_new = NULL;
+	int r = syscall_resolve_path_at(proc, olddirfd, old_path, &resolved_old);
+	if (r)
+		return r;
+	r = syscall_resolve_path_at(proc, newdirfd, new_path, &resolved_new);
+	if (r) {
+		kfree(resolved_old);
+		return r;
+	}
+
+	struct stat st;
+	if (vfs_stat(resolved_old, &st) != 0) {
+		kfree(resolved_old);
+		kfree(resolved_new);
+		return -ENOENT;
+	}
+
+	if (!mode_is_reg(st.st_mode)) {
+		kfree(resolved_old);
+		kfree(resolved_new);
+		return -EPERM;
+	}
+
+	mode_t mode = st.st_mode & 0777;
+	int ret = copy_file_data(resolved_old, resolved_new, mode);
+
+	kfree(resolved_old);
+	kfree(resolved_new);
+	return ret;
+}
+
+int64_t sys_chmod(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+	mode_t mode = (mode_t)args->rsi;
+
+	if (!path)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	struct stat st;
+	if (vfs_stat(resolved, &st) != 0) {
+		kfree(resolved);
+		return -ENOENT;
+	}
+
+	st.st_mode = (st.st_mode & S_IFMT) | (mode & 07777);
+	int ret = vfs_setstat(resolved, &st);
+	kfree(resolved);
+	return ret == 0 ? 0 : -EINVAL;
+}
+
+int64_t sys_umask(const syscall_args_t *args)
+{
+	mode_t mask = (mode_t)args->rdi;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	mode_t old = proc->umask;
+	proc->umask = mask & 0777;
+	return (int64_t)old;
+}
+
+int64_t sys_kill(const syscall_args_t *args)
+{
+	pid_t pid = (pid_t)args->rdi;
+	int sig = (int)args->rsi;
+
+	if (pid <= 0)
+		return -ESRCH;
+
+	pcb *proc = proc_get_by_pid((uint32_t)pid);
+	if (!proc)
+		return -ESRCH;
+
+	if (sig == 0)
+		return 0;
+
+	if (thread_current() && thread_current()->process == proc) {
+		thread_exit(thread_current(), 128 + sig);
+		return 0;
+	}
+
+	proc_destroy(proc);
+	return 0;
+}
+
+int64_t sys_sleep(const syscall_args_t *args)
+{
+	uint64_t secs = (uint64_t)args->rdi;
+	uint64_t nanos = (uint64_t)args->rsi;
+	if (nanos >= 1000000000ULL)
+		return -EINVAL;
+
+	uint64_t ms = secs * 1000ULL + nanos / 1000000ULL;
+	sleep_ms(ms);
+	return 0;
+}
+
 int64_t sys_poll(const syscall_args_t *args)
 {
 	struct pollfd *fds = (struct pollfd *)args->rdi;
@@ -1003,8 +1414,6 @@ int64_t sys_dup(const syscall_args_t *args)
 		close(f);
 		return newfd;
 	}
-
-	close(f);
 	return newfd;
 }
 
@@ -1042,8 +1451,6 @@ int64_t sys_dup2(const syscall_args_t *args)
 
 	if (to_close)
 		close(to_close);
-
-	close(oldf);
 	return 0;
 }
 
@@ -1083,8 +1490,6 @@ int64_t sys_dup3(const syscall_args_t *args)
 
 	if (to_close)
 		close(to_close);
-
-	close(oldf);
 	return 0;
 }
 
@@ -1814,6 +2219,7 @@ int64_t sys_fork(const syscall_args_t *args)
 	}
 	if (parent->name)
 		child->name = strdup(parent->name);
+	child->umask = parent->umask;
 
 	for (int fd = 0; fd < PROC_MAX_FDS; fd++) {
 		if (child->fds[fd]) {
@@ -2097,4 +2503,16 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_DUP3, sys_dup3, "dup3");
 	register_syscall(SYS_PIPE, sys_pipe, "pipe");
 	register_syscall(SYS_PIPE2, sys_pipe, "pipe2");
+	register_syscall(SYS_MKDIR, sys_mkdir, "mkdir");
+	register_syscall(SYS_MKDIRAT, sys_mkdirat, "mkdirat");
+	register_syscall(SYS_UNLINKAT, sys_unlinkat, "unlinkat");
+	register_syscall(SYS_RENAME, sys_rename, "rename");
+	register_syscall(SYS_SYMLINK, sys_symlink, "symlink");
+	register_syscall(SYS_SYMLINKAT, sys_symlinkat, "symlinkat");
+	register_syscall(SYS_LINK, sys_link, "link");
+	register_syscall(SYS_LINKAT, sys_linkat, "linkat");
+	register_syscall(SYS_CHMOD, sys_chmod, "chmod");
+	register_syscall(SYS_UMASK, sys_umask, "umask");
+	register_syscall(SYS_KILL, sys_kill, "kill");
+	register_syscall(SYS_SLEEP, sys_sleep, "sleep");
 }
