@@ -465,6 +465,9 @@ static void dir_handle_free(struct fileio *file)
 	file->dir = NULL;
 }
 
+/*********************************************************************************/
+/* Builtin system calls for aurix												 */
+/*********************************************************************************/
 int64_t sys_exit(const syscall_args_t *args)
 {
 	int64_t code = (int64_t)args->rdi;
