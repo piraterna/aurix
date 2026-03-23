@@ -2391,25 +2391,25 @@ int64_t sys_getppid(const syscall_args_t *args)
 int64_t sys_getuid(const syscall_args_t *args)
 {
 	(void)args;
-	return -ENOSYS;
+	return 0;
 }
 
 int64_t sys_geteuid(const syscall_args_t *args)
 {
 	(void)args;
-	return -ENOSYS;
+	return 0;
 }
 
 int64_t sys_getgid(const syscall_args_t *args)
 {
 	(void)args;
-	return -ENOSYS;
+	return 0;
 }
 
 int64_t sys_getegid(const syscall_args_t *args)
 {
 	(void)args;
-	return -ENOSYS;
+	return 0;
 }
 
 int64_t sys_gettid(const syscall_args_t *args)
