@@ -443,7 +443,6 @@ int ramfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 
 int ramfs_close(struct vnode *vnode, int flags, bool clone)
 {
-	(void)(flags);
 	(void)(clone);
 
 	// TODO: flags
@@ -474,6 +473,13 @@ int ramfs_close(struct vnode *vnode, int flags, bool clone)
 	}
 
 	if (ramfs_node_original == ramfs_node) {
+		return 0;
+	}
+
+	if (!(flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREATE | O_TRUNC))) {
+		if (ramfs_node->data && ramfs_node->data != ramfs_node_original->data)
+			kfree(ramfs_node->data);
+		kfree(vnode->node_data);
 		return 0;
 	}
 

@@ -56,6 +56,15 @@ enum {
 	SYS_GETEGID = 27,
 	SYS_GETPPID = 28,
 	SYS_GETTID = 29,
+	SYS_FCNTL = 30,
+	SYS_OPENAT = 31,
+	SYS_READLINK = 32,
+	SYS_POLL = 33,
+	SYS_DUP = 34,
+	SYS_DUP2 = 35,
+	SYS_DUP3 = 36,
+	SYS_PIPE = 37,
+	SYS_PIPE2 = 38,
 };
 
 typedef struct {

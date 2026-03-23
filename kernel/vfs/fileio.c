@@ -162,7 +162,7 @@ int close(struct fileio *file)
 		return 0;
 	}
 
-	if (vfs_close(vn) != 0) {
+	if (vfs_close(vn, file->flags, false) != 0) {
 		return -EIO;
 	}
 

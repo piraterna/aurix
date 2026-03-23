@@ -25,6 +25,7 @@
 #include <debug/log.h>
 #include <lib/string.h>
 #include <user/access.h>
+#include <vfs/fileio.h>
 
 #define align4(x) (((x) + 3) & ~3)
 
@@ -329,7 +330,7 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 					if (vfs_create(dup, file->mode) != 0) {
 						warn("cpio: create failed for %s\n", dup);
 					} else {
-						if (vfs_open(dup, 0, &f) == 0) {
+						if ((f = open(dup, O_WRONLY, 0)) != NULL) {
 							write(f, file->data, file->filesize);
 							close(f);
 						} else {

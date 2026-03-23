@@ -23,7 +23,8 @@ TOYBOX_REPO_URL := https://github.com/landley/toybox
 TOYBOX_SRC_DIR := $(CURDIR)/upstream
 TOYBOX_PATCH_DIR := $(CURDIR)/patches
 TOYBOX_MINICONFIG := $(CURDIR)/aurix_miniconfig
-TOYBOX_PATCH_STAMP := $(TOYBOX_SRC_DIR)/.aurix-patched-v4
+TOYBOX_PATCH_REV := v4
+TOYBOX_PATCH_STAMP := $(TOYBOX_SRC_DIR)/.aurix-patched-$(TOYBOX_PATCH_REV)
 TOYBOX_CONFIG_STAMP := $(TOYBOX_SRC_DIR)/.aurix-configured
 TOYBOX_PATCHES := $(wildcard $(TOYBOX_PATCH_DIR)/*.patch)
 
@@ -34,7 +35,8 @@ APP_BUILD_DIR := $(BUILD_DIR)/$(APP_NAME)
 endif
 
 APP_FILE := $(APP_BUILD_DIR)/$(APP_NAME)
-TOYBOX_OUTPUT_FILE := $(TOYBOX_SRC_DIR)/generated/unstripped/toybox
+TOYBOX_OUTPUT_FILE := $(APP_BUILD_DIR)/generated/unstripped/toybox
+TOYBOX_OUTPUT_FILE_FALLBACK := $(TOYBOX_SRC_DIR)/generated/unstripped/toybox
 
 TOYBOX_HOST_CC ?= cc
 TOYBOX_TARGET_CC ?= gcc
@@ -47,7 +49,7 @@ else
 TOYBOX_CROSS_COMPILE := $(AURIX_TARGET)-
 endif
 
-.PHONY: all clean install rebuild clone patches
+.PHONY: all clean distclean install rebuild clone patches
 
 all: $(APP_FILE)
 
@@ -63,32 +65,20 @@ $(TOYBOX_SRC_DIR)/.git:
 	@git clone $(TOYBOX_REPO_URL) $(TOYBOX_SRC_DIR)
 
 $(TOYBOX_PATCH_STAMP): $(TOYBOX_PATCHES) | $(TOYBOX_SRC_DIR)/.git
-	@old_stamps="$$(ls -1 $(TOYBOX_SRC_DIR)/.aurix-patched-* 2>/dev/null || true)"; \
-	if [ -n "$$old_stamps" ] && [ ! -f "$(TOYBOX_PATCH_STAMP)" ]; then \
-		printf "  GIT\treclone toybox (patch rev)\n"; \
-		rm -rf "$(TOYBOX_SRC_DIR)"; \
-		git clone $(TOYBOX_REPO_URL) $(TOYBOX_SRC_DIR); \
-	fi
-	@if [ ! -f "$(TOYBOX_PATCH_STAMP)" ] && [ -n "$$(git -C $(TOYBOX_SRC_DIR) status --porcelain --untracked-files=no 2>/dev/null || true)" ]; then \
-		printf "  GIT\treclone toybox (dirty tree)\n"; \
-		rm -rf "$(TOYBOX_SRC_DIR)"; \
-		git clone $(TOYBOX_REPO_URL) $(TOYBOX_SRC_DIR); \
-	fi
-	@printf "  PATCH\t$(APP_NAME)\n"
-	@if [ -n "$(strip $(TOYBOX_PATCHES))" ]; then \
+	@if [ ! -f "$(TOYBOX_PATCH_STAMP)" ]; then \
+		printf "  GIT\treset toybox\n"; \
+		git -C "$(TOYBOX_SRC_DIR)" reset --hard >/dev/null; \
+		git -C "$(TOYBOX_SRC_DIR)" clean -fdx >/dev/null; \
+		printf "  PATCH\t$(APP_NAME)\n"; \
 		for patch in $(sort $(TOYBOX_PATCHES)); do \
 			printf "    -> %s\n" "$$(basename $$patch)"; \
-			if patch -R -s -f --dry-run -d $(TOYBOX_SRC_DIR) -p1 < "$$patch" >/dev/null 2>&1; then \
-				printf "       already applied\n"; \
-			else \
-				patch -d $(TOYBOX_SRC_DIR) -p1 < "$$patch" || exit $$?; \
-			fi; \
+			patch -d "$(TOYBOX_SRC_DIR)" -p1 < "$$patch" || exit $$?; \
 		done; \
+		rm -f "$(TOYBOX_SRC_DIR)"/.aurix-patched-*; \
+		touch "$(TOYBOX_PATCH_STAMP)"; \
 	fi
-	@touch $@
 
 $(TOYBOX_CONFIG_STAMP): $(TOYBOX_PATCH_STAMP) $(TOYBOX_MINICONFIG)
-	@if [ -f "$(APP_BUILD_DIR)" ]; then rm -f "$(APP_BUILD_DIR)"; fi
 	@mkdir -p $(APP_BUILD_DIR)
 	@printf "  CONF\t$(APP_NAME)\n"
 	@$(MAKE) -C $(TOYBOX_SRC_DIR) $(TOYBOX_MAKE_FLAGS) \
@@ -97,7 +87,6 @@ $(TOYBOX_CONFIG_STAMP): $(TOYBOX_PATCH_STAMP) $(TOYBOX_MINICONFIG)
 	@touch $@
 
 $(APP_FILE): $(TOYBOX_CONFIG_STAMP)
-	@if [ -f "$(APP_BUILD_DIR)" ]; then rm -f "$(APP_BUILD_DIR)"; fi
 	@mkdir -p $(APP_BUILD_DIR)
 	@printf "  MAKE\t$(APP_NAME)\n"
 	@$(MAKE) -C $(TOYBOX_SRC_DIR) $(TOYBOX_MAKE_FLAGS) toybox \
@@ -106,7 +95,11 @@ $(APP_FILE): $(TOYBOX_CONFIG_STAMP)
 		CC=$(TOYBOX_TARGET_CC) \
 		CFLAGS="$(APP_CFLAGS)" \
 		LDFLAGS="$(APP_LDFLAGS)"
-	@cp $(TOYBOX_OUTPUT_FILE) $(APP_FILE)
+	@for out in "$(TOYBOX_OUTPUT_FILE)" "$(TOYBOX_OUTPUT_FILE_FALLBACK)"; do \
+		if [ -f "$$out" ]; then cp "$$out" "$(APP_FILE)"; exit 0; fi; \
+	done; \
+	printf "error: toybox output not found in %s or %s\n" "$(TOYBOX_OUTPUT_FILE)" "$(TOYBOX_OUTPUT_FILE_FALLBACK)" >&2; \
+	exit 1
 ifneq ($(BUILD_TYPE),debug)
 	@if [ -n "$(APP_OBJCOPY)" ]; then \
 		printf "  STRIP\t$(APP_NAME)\n"; \
@@ -116,6 +109,11 @@ endif
 
 clean:
 	@rm -rf $(APP_BUILD_DIR)
+	@rm -f $(TOYBOX_CONFIG_STAMP)
+
+distclean: clean
+	@rm -f $(TOYBOX_PATCH_STAMP)
+	@rm -rf $(TOYBOX_SRC_DIR)
 
 install: all
 	@mkdir -p $(APP_INSTALL_DIR)

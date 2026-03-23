@@ -1,5 +1,5 @@
 From 23888cce9cbafbb72d66d3b11c0a5653fe684212 Mon Sep 17 00:00:00 2001
-From: AurixOS <noreply@aurix.local>
+From: Kevin Alavik <kevin@alavik.se>
 Date: Mon, 23 Mar 2026 00:00:00 +0000
 Subject: [PATCH] portability: fallback when pty.h is missing
 

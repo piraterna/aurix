@@ -1,3 +1,5 @@
+From: Kevin Alavik <kevin@alavik.se>
+
 diff --git a/lib/portability.c b/lib/portability.c
 index 6acb0ec..c2998ba 100644
 --- a/lib/portability.c

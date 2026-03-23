@@ -751,7 +751,7 @@ int vfs_ioctl(struct vnode *vnode, int request, void *arg)
 	return ret;
 }
 
-int vfs_close(struct vnode *vnode)
+int vfs_close(struct vnode *vnode, int flags, bool clone)
 {
 	if (!vnode) {
 		return -1;
@@ -762,7 +762,7 @@ int vfs_close(struct vnode *vnode)
 		return -1;
 	}
 
-	int r = vnode->ops->close(vnode, 0, false);
+	int r = vnode->ops->close(vnode, flags, clone);
 
 	if (r != 0) {
 		vnode_unref(vnode);

@@ -345,4 +345,7 @@ clean:
 
 .PHONY: distclean
 distclean:
+	@$(MAKE) -C boot clean
+	@$(MAKE) -C $(MODULE_DIR) clean
+	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR) $(RELEASE_DIR)

@@ -31,6 +31,7 @@
 #include <sys/errno.h>
 #include <loader/module.h>
 #include <time/time.h>
+#include <ipc/pipe.h>
 #include <aurix.h>
 
 #if defined(__x86_64__)
@@ -42,7 +43,7 @@
 
 #define FD_RESERVED_STDIN 0
 #define FD_STDOUT 1
-#define FD_FIRST_DYNAMIC 2
+#define FD_FIRST_DYNAMIC 3
 
 #define PROT_NONE 0x0
 #define PROT_READ 0x1
@@ -75,6 +76,27 @@
 #define FSFD_TARGET_FD_PATH 3
 
 #define AT_FDCWD -100
+
+#define FCNTL_F_DUPFD 0
+#define FCNTL_F_GETFD 1
+#define FCNTL_F_SETFD 2
+#define FCNTL_F_GETFL 3
+#define FCNTL_F_SETFL 4
+#define FCNTL_F_DUPFD_CLOEXEC 1030
+
+#define FD_CLOEXEC 1
+
+#define POLLIN 0x0001
+#define POLLOUT 0x0004
+#define POLLERR 0x0008
+#define POLLHUP 0x0010
+#define POLLNVAL 0x0020
+
+struct pollfd {
+	int fd;
+	short events;
+	short revents;
+};
 
 #define DIR_HANDLE_MAX_ENTRIES 256
 
@@ -281,12 +303,16 @@ static struct fileio *proc_fd_lookup_locked(struct pcb *proc, int fd)
 	return proc->fds[fd];
 }
 
-static int proc_fd_alloc_locked(struct pcb *proc, struct fileio *file)
+static int proc_fd_alloc_from_locked(struct pcb *proc, struct fileio *file,
+									 int start_fd)
 {
 	if (!proc || !file)
 		return -EINVAL;
 
-	for (int fd = FD_FIRST_DYNAMIC; fd < PROC_MAX_FDS; fd++) {
+	if (start_fd < FD_FIRST_DYNAMIC)
+		start_fd = FD_FIRST_DYNAMIC;
+
+	for (int fd = start_fd; fd < PROC_MAX_FDS; fd++) {
 		if (!proc->fds[fd]) {
 			proc->fds[fd] = file;
 			return fd;
@@ -294,6 +320,72 @@ static int proc_fd_alloc_locked(struct pcb *proc, struct fileio *file)
 	}
 
 	return -EMFILE;
+}
+
+static int proc_fd_alloc_locked(struct pcb *proc, struct fileio *file)
+{
+	return proc_fd_alloc_from_locked(proc, file, FD_FIRST_DYNAMIC);
+}
+
+static int syscall_resolve_path_at(struct pcb *proc, int dirfd,
+								   const char *path, char **resolved)
+{
+	if (!proc || !path || !resolved)
+		return -EFAULT;
+
+	*resolved = NULL;
+
+	if (path[0] == '/' || dirfd == AT_FDCWD) {
+		char *full = syscall_resolve_path(proc, path);
+		if (!full)
+			return -ENOMEM;
+		*resolved = full;
+		return 0;
+	}
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *base_file = proc_fd_lookup_locked(proc, dirfd);
+	if (!base_file || !base_file->private) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+	fio_retain(base_file);
+	spinlock_release(&proc->fd_lock);
+
+	struct vnode *base_vnode = (struct vnode *)base_file->private;
+	if (base_vnode->vtype != VNODE_DIR || !base_vnode->path) {
+		close(base_file);
+		return -ENOTDIR;
+	}
+
+	const char *base = base_vnode->path;
+	size_t base_len = strlen(base);
+	size_t path_len = strlen(path);
+	bool need_slash = (base_len == 0 || base[base_len - 1] != '/');
+
+	size_t total = base_len + (need_slash ? 1 : 0) + path_len + 1;
+	char *combined = kmalloc(total);
+	if (!combined) {
+		close(base_file);
+		return -ENOMEM;
+	}
+
+	memcpy(combined, base, base_len);
+	size_t pos = base_len;
+	if (need_slash)
+		combined[pos++] = '/';
+	memcpy(combined + pos, path, path_len);
+	combined[pos + path_len] = '\0';
+
+	char *full = syscall_normalize_path(combined);
+	kfree(combined);
+	close(base_file);
+
+	if (!full)
+		return -ENOMEM;
+
+	*resolved = full;
+	return 0;
 }
 
 static size_t bounded_strlen(const char *s, size_t max)
@@ -610,7 +702,7 @@ int64_t sys_write(const syscall_args_t *args)
 int64_t sys_close(const syscall_args_t *args)
 {
 	int fd = (int)args->rdi;
-	if (fd <= FD_STDOUT || fd >= PROC_MAX_FDS) {
+	if (fd < 0 || fd >= PROC_MAX_FDS) {
 		error("close(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
 		return -EBADF;
 	}
@@ -637,6 +729,404 @@ int64_t sys_close(const syscall_args_t *args)
 		return r;
 	}
 
+	return 0;
+}
+
+int64_t sys_fcntl(const syscall_args_t *args)
+{
+	int fd = (int)args->rdi;
+	int cmd = (int)args->rsi;
+	uintptr_t arg = (uintptr_t)args->rdx;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	if (fd < 0 || fd >= PROC_MAX_FDS)
+		return -EBADF;
+
+	if (cmd == FCNTL_F_DUPFD || cmd == FCNTL_F_DUPFD_CLOEXEC) {
+		int minfd = (int)arg;
+		if (minfd < 0)
+			return -EINVAL;
+
+		spinlock_acquire(&proc->fd_lock);
+		struct fileio *f = proc_fd_lookup_locked(proc, fd);
+		if (!f) {
+			spinlock_release(&proc->fd_lock);
+			return -EBADF;
+		}
+		fio_retain(f);
+		int newfd = proc_fd_alloc_from_locked(proc, f, minfd);
+		if (newfd >= 0 && cmd == FCNTL_F_DUPFD_CLOEXEC)
+			f->flags |= O_CLOEXEC;
+		spinlock_release(&proc->fd_lock);
+
+		if (newfd < 0) {
+			close(f);
+			return newfd;
+		}
+
+		close(f);
+		return newfd;
+	}
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *f = proc_fd_lookup_locked(proc, fd);
+	if (!f) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+	if (cmd == FCNTL_F_GETFL) {
+		size_t flags = fcntl(f, F_GETFL, NULL);
+		spinlock_release(&proc->fd_lock);
+		return (int64_t)flags;
+	}
+	if (cmd == FCNTL_F_SETFL) {
+		size_t flags = (size_t)arg;
+		(void)fcntl(f, F_SETFL, &flags);
+		spinlock_release(&proc->fd_lock);
+		return 0;
+	}
+	if (cmd == FCNTL_F_GETFD) {
+		int ret = (f->flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+		spinlock_release(&proc->fd_lock);
+		return ret;
+	}
+	if (cmd == FCNTL_F_SETFD) {
+		if ((int)arg & FD_CLOEXEC)
+			f->flags |= O_CLOEXEC;
+		else
+			f->flags &= ~O_CLOEXEC;
+		spinlock_release(&proc->fd_lock);
+		return 0;
+	}
+	spinlock_release(&proc->fd_lock);
+
+	return -EINVAL;
+}
+
+int64_t sys_openat(const syscall_args_t *args)
+{
+	int dirfd = (int)args->rdi;
+	const char *path = (const char *)args->rsi;
+	int flags = (int)args->rdx;
+	mode_t mode = (mode_t)args->r10;
+
+	if (!path)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved = NULL;
+	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
+	if (r)
+		return r;
+
+	struct fileio *f = open(resolved, flags, mode);
+	kfree(resolved);
+	if (!f)
+		return -ENOENT;
+
+	spinlock_acquire(&proc->fd_lock);
+	int fd = proc_fd_alloc_locked(proc, f);
+	spinlock_release(&proc->fd_lock);
+	if (fd < 0) {
+		close(f);
+		return fd;
+	}
+
+	return fd;
+}
+
+int64_t sys_readlink(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+	char *buffer = (char *)args->rsi;
+	size_t max_size = (size_t)args->rdx;
+	size_t *length = (size_t *)args->r10;
+
+	if (!path || !length)
+		return -EFAULT;
+	if (!buffer && max_size)
+		return -EFAULT;
+	if (!max_size) {
+		*length = 0;
+		return 0;
+	}
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved = syscall_resolve_path(proc, path);
+	if (!resolved)
+		return -ENOMEM;
+
+	char *tmp = kmalloc(max_size + 1);
+	if (!tmp) {
+		kfree(resolved);
+		return -ENOMEM;
+	}
+
+	int ret = vfs_readlink(resolved, tmp, max_size + 1);
+	kfree(resolved);
+	if (ret != 0) {
+		kfree(tmp);
+		return -EINVAL;
+	}
+
+	size_t out = strlen(tmp);
+	if (out > max_size)
+		out = max_size;
+	memcpy(buffer, tmp, out);
+	kfree(tmp);
+
+	*length = (size_t)out;
+	return 0;
+}
+
+int64_t sys_poll(const syscall_args_t *args)
+{
+	struct pollfd *fds = (struct pollfd *)args->rdi;
+	size_t count = (size_t)args->rsi;
+	int timeout = (int)args->rdx;
+	int *num_events = (int *)args->r10;
+
+	if (!num_events)
+		return -EFAULT;
+	if (!fds && count)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	int ready_total = 0;
+	for (int pass = 0; pass < 2; pass++) {
+		ready_total = 0;
+
+		for (size_t i = 0; i < count; i++) {
+			struct pollfd *pfd = &fds[i];
+			pfd->revents = 0;
+
+			if (pfd->fd < 0)
+				continue;
+
+			spinlock_acquire(&proc->fd_lock);
+			struct fileio *f = proc_fd_lookup_locked(proc, pfd->fd);
+			if (!f) {
+				spinlock_release(&proc->fd_lock);
+				pfd->revents |= POLLNVAL;
+				ready_total++;
+				continue;
+			}
+			fio_retain(f);
+			spinlock_release(&proc->fd_lock);
+
+			if (f->flags & PIPE_READ_END) {
+				struct pipe *p = (struct pipe *)f->private;
+				if (p) {
+					spinlock_acquire(&p->lock);
+					if ((pfd->events & POLLIN) && p->used > 0)
+						pfd->revents |= POLLIN;
+					if (p->writers == 0)
+						pfd->revents |= POLLHUP;
+					spinlock_release(&p->lock);
+				}
+			} else if (f->flags & PIPE_WRITE_END) {
+				struct pipe *p = (struct pipe *)f->private;
+				if (p) {
+					spinlock_acquire(&p->lock);
+					if ((pfd->events & POLLOUT) && p->used < PIPE_BUFFER_SIZE)
+						pfd->revents |= POLLOUT;
+					if (p->readers == 0)
+						pfd->revents |= POLLERR;
+					spinlock_release(&p->lock);
+				}
+			} else {
+				if (pfd->events & POLLIN)
+					pfd->revents |= POLLIN;
+				if (pfd->events & POLLOUT)
+					pfd->revents |= POLLOUT;
+			}
+
+			if (pfd->revents)
+				ready_total++;
+
+			close(f);
+		}
+
+		if (ready_total > 0 || timeout == 0)
+			break;
+
+		if (timeout > 0 && pass == 0)
+			sleep_ms((uint64_t)timeout);
+		else
+			break;
+	}
+
+	*num_events = ready_total;
+	return 0;
+}
+
+int64_t sys_dup(const syscall_args_t *args)
+{
+	int oldfd = (int)args->rdi;
+	int flags = (int)args->rsi;
+
+	if (flags & ~O_CLOEXEC)
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *f = proc_fd_lookup_locked(proc, oldfd);
+	if (!f) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+	fio_retain(f);
+	int newfd = proc_fd_alloc_locked(proc, f);
+	if (newfd >= 0 && (flags & O_CLOEXEC))
+		f->flags |= O_CLOEXEC;
+	spinlock_release(&proc->fd_lock);
+
+	if (newfd < 0) {
+		close(f);
+		return newfd;
+	}
+
+	close(f);
+	return newfd;
+}
+
+int64_t sys_dup2(const syscall_args_t *args)
+{
+	int oldfd = (int)args->rdi;
+	int newfd = (int)args->rsi;
+	int flags = (int)args->rdx;
+
+	if (flags)
+		return -EINVAL;
+	if (newfd < 0 || newfd >= PROC_MAX_FDS)
+		return -EBADF;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *oldf = proc_fd_lookup_locked(proc, oldfd);
+	if (!oldf) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+
+	if (oldfd == newfd) {
+		spinlock_release(&proc->fd_lock);
+		return 0;
+	}
+
+	fio_retain(oldf);
+	struct fileio *to_close = proc->fds[newfd];
+	proc->fds[newfd] = oldf;
+	spinlock_release(&proc->fd_lock);
+
+	if (to_close)
+		close(to_close);
+
+	close(oldf);
+	return 0;
+}
+
+int64_t sys_dup3(const syscall_args_t *args)
+{
+	int oldfd = (int)args->rdi;
+	int newfd = (int)args->rsi;
+	int flags = (int)args->rdx;
+
+	if (oldfd == newfd)
+		return -EINVAL;
+	if (flags & ~O_CLOEXEC)
+		return -EINVAL;
+	if (newfd < 0 || newfd >= PROC_MAX_FDS)
+		return -EBADF;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *oldf = proc_fd_lookup_locked(proc, oldfd);
+	if (!oldf) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+
+	fio_retain(oldf);
+	if (flags & O_CLOEXEC)
+		oldf->flags |= O_CLOEXEC;
+	else
+		oldf->flags &= ~O_CLOEXEC;
+
+	struct fileio *to_close = proc->fds[newfd];
+	proc->fds[newfd] = oldf;
+	spinlock_release(&proc->fd_lock);
+
+	if (to_close)
+		close(to_close);
+
+	close(oldf);
+	return 0;
+}
+
+int64_t sys_pipe(const syscall_args_t *args)
+{
+	int *fds = (int *)args->rdi;
+	int flags = (int)args->rsi & O_CLOEXEC;
+
+	if (!fds)
+		return -EFAULT;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	struct fileio *ends[2] = { NULL, NULL };
+	if (pipe(ends) != 0)
+		return -ENOMEM;
+
+	if (flags & O_CLOEXEC) {
+		ends[0]->flags |= O_CLOEXEC;
+		ends[1]->flags |= O_CLOEXEC;
+	}
+
+	spinlock_acquire(&proc->fd_lock);
+	int read_fd = proc_fd_alloc_locked(proc, ends[0]);
+	if (read_fd < 0) {
+		spinlock_release(&proc->fd_lock);
+		close(ends[0]);
+		close(ends[1]);
+		return read_fd;
+	}
+
+	int write_fd = proc_fd_alloc_locked(proc, ends[1]);
+	if (write_fd < 0) {
+		proc->fds[read_fd] = NULL;
+		spinlock_release(&proc->fd_lock);
+		close(ends[0]);
+		close(ends[1]);
+		return write_fd;
+	}
+	spinlock_release(&proc->fd_lock);
+
+	fds[0] = read_fd;
+	fds[1] = write_fd;
 	return 0;
 }
 
@@ -1595,4 +2085,13 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_GETEGID, sys_getegid, "getegid");
 	register_syscall(SYS_GETPPID, sys_getppid, "getppid");
 	register_syscall(SYS_GETTID, sys_gettid, "gettid");
+	register_syscall(SYS_FCNTL, sys_fcntl, "fcntl");
+	register_syscall(SYS_OPENAT, sys_openat, "openat");
+	register_syscall(SYS_READLINK, sys_readlink, "readlink");
+	register_syscall(SYS_POLL, sys_poll, "poll");
+	register_syscall(SYS_DUP, sys_dup, "dup");
+	register_syscall(SYS_DUP2, sys_dup2, "dup2");
+	register_syscall(SYS_DUP3, sys_dup3, "dup3");
+	register_syscall(SYS_PIPE, sys_pipe, "pipe");
+	register_syscall(SYS_PIPE2, sys_pipe, "pipe2");
 }

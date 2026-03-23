@@ -59,7 +59,7 @@ endif
 
 $(MAKE_TARGETS):
 	@for dir in $(APP_DIRS); do \
-		printf ">>> Building app '%s'...\n" "$${dir%/}"; \
+		printf ">>> MAKE $(MAKECMDGOALS) -> '%s'...\n" "$${dir%/}"; \
 		$(MAKE) -C "$$dir" $(MAKECMDGOALS) \
 			APP_CFLAGS="$(APP_CFLAGS)" \
 			APP_LDFLAGS="$(APP_LDFLAGS)" \

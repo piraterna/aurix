@@ -1,5 +1,5 @@
 From 17c48f106d815b73e4461d0f39b67e896deee302 Mon Sep 17 00:00:00 2001
-From: AurixOS <noreply@aurix.local>
+From: Kevin Alavik <kevin@alavik.se>
 Date: Mon, 23 Mar 2026 00:00:00 +0000
 Subject: [PATCH] portability: only include sys/mount.h on linux
 

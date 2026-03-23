@@ -31,14 +31,48 @@ int stdout_write(struct device *dev, const void *buf, size_t len,
 				 size_t offset);
 int stdin_read(struct device *dev, void *buf, size_t len, size_t offset);
 int stdin_poll(struct device *dev);
+int stdio_ioctl(struct device *dev, uint64_t cmd, void *arg);
 int stdio_probe(struct device *dev);
+
+#define STDIO_TCGETS 0x5401
+#define STDIO_TCSETS 0x5402
+#define STDIO_TCSETSW 0x5403
+#define STDIO_TCSETSF 0x5404
+#define STDIO_TIOCGWINSZ 0x5413
+#define STDIO_TIOCSWINSZ 0x5414
+#define STDIO_FIONREAD 0x541B
+
+struct stdio_termios {
+	uint32_t c_iflag;
+	uint32_t c_oflag;
+	uint32_t c_cflag;
+	uint32_t c_lflag;
+	uint8_t c_line;
+	uint8_t c_cc[32];
+	uint32_t c_ispeed;
+	uint32_t c_ospeed;
+};
+
+struct stdio_winsize {
+	uint16_t ws_row;
+	uint16_t ws_col;
+	uint16_t ws_xpixel;
+	uint16_t ws_ypixel;
+};
+
+static struct stdio_winsize stdio_ws = {
+	.ws_row = 25,
+	.ws_col = 80,
+	.ws_xpixel = 0,
+	.ws_ypixel = 0,
+};
 
 struct device_ops stdout_ops = {
 	.open = NULL,
 	.close = NULL,
 	.read = NULL,
 	.write = stdout_write,
-	.ioctl = NULL,
+	.ioctl = stdio_ioctl,
 	.poll = NULL,
 };
 
@@ -47,7 +81,7 @@ struct device_ops stdin_ops = {
 	.close = NULL,
 	.read = stdin_read,
 	.write = NULL,
-	.ioctl = NULL,
+	.ioctl = stdio_ioctl,
 	.poll = stdin_poll,
 };
 
@@ -377,6 +411,51 @@ int stdin_poll(struct device *dev)
 		return 1;
 
 	return 0;
+}
+
+int stdio_ioctl(struct device *dev, uint64_t cmd, void *arg)
+{
+	(void)dev;
+
+	switch (cmd) {
+	case STDIO_TCGETS: {
+		if (!arg)
+			return -1;
+		struct stdio_termios *t = (struct stdio_termios *)arg;
+		memset(t, 0, sizeof(*t));
+		return 0;
+	}
+	case STDIO_TCSETS:
+	case STDIO_TCSETSW:
+	case STDIO_TCSETSF:
+		return 0;
+	case STDIO_TIOCGWINSZ: {
+		if (!arg)
+			return -1;
+		struct stdio_winsize *ws = (struct stdio_winsize *)arg;
+		*ws = stdio_ws;
+		return 0;
+	}
+	case STDIO_TIOCSWINSZ: {
+		if (!arg)
+			return -1;
+		struct stdio_winsize *ws = (struct stdio_winsize *)arg;
+		if (ws->ws_row)
+			stdio_ws.ws_row = ws->ws_row;
+		if (ws->ws_col)
+			stdio_ws.ws_col = ws->ws_col;
+		stdio_ws.ws_xpixel = ws->ws_xpixel;
+		stdio_ws.ws_ypixel = ws->ws_ypixel;
+		return 0;
+	}
+	case STDIO_FIONREAD:
+		if (!arg)
+			return -1;
+		*(int *)arg = stdin_rb_count();
+		return 0;
+	default:
+		return -1;
+	}
 }
 
 int stdio_probe(struct device *dev)

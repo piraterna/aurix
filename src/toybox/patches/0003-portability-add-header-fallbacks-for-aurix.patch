@@ -1,3 +1,5 @@
+From: Kevin Alavik <kevin@alavik.se>
+
 diff --git a/lib/portability.h b/lib/portability.h
 --- a/lib/portability.h
 +++ b/lib/portability.h

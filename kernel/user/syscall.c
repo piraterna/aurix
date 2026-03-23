@@ -21,6 +21,7 @@
 #include <debug/log.h>
 #include <sys/errno.h>
 #include <arch/cpu/cpu.h>
+#include <sys/sched.h>
 
 syscall_entry_t syscall_table[MAX_SYSCALLS] = { 0 };
 

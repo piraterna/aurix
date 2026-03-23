@@ -228,7 +228,7 @@ int vfs_open(const char *path, int flags, struct fileio **out);
 int vfs_read(struct vnode *vnode, size_t size, size_t offset, void *out);
 int vfs_write(struct vnode *vnode, void *buf, size_t size, size_t offset);
 int vfs_ioctl(struct vnode *vnode, int request, void *arg);
-int vfs_close(struct vnode *vnode);
+int vfs_close(struct vnode *vnode, int flags, bool clone);
 
 int vfs_readdir(struct vnode *vnode, struct dirent *entries, size_t *count);
 int vfs_mkdir(const char *path, int mode);
