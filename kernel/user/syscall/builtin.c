@@ -644,19 +644,52 @@ int64_t sys_read_entries(const syscall_args_t *args)
 	struct fileio *f = proc_fd_lookup_locked(proc, fd);
 	if (!f) {
 		spinlock_release(&proc->fd_lock);
+		error("read_entries(): invalid file descriptor (%s)\n",
+			  ERRNO_NAME(EBADF));
 		return -EBADF;
 	}
 	fio_retain(f);
 	spinlock_release(&proc->fd_lock);
 
+	if (!f->dir) {
+		struct vnode *vnode = (struct vnode *)f->private;
+		if (!vnode || vnode->vtype != VNODE_DIR) {
+			close(f);
+			error("read_entries(): file descriptor %d is not a directory.\n",
+				  fd);
+			return -ENOTDIR;
+		}
+
+		dir_handle_t *dir = kmalloc(sizeof(dir_handle_t));
+		if (!dir) {
+			close(f);
+			return -ENOMEM;
+		}
+		memset(dir, 0, sizeof(dir_handle_t));
+		dir->entries = kmalloc(sizeof(struct dirent) * DIR_HANDLE_MAX_ENTRIES);
+		if (!dir->entries) {
+			kfree(dir);
+			close(f);
+			return -ENOMEM;
+		}
+		memset(dir->entries, 0, sizeof(struct dirent) * DIR_HANDLE_MAX_ENTRIES);
+		dir->vnode = vnode;
+		f->dir = dir;
+		f->flags |= O_DIRECTORY;
+	}
+
 	if (!(f->flags & O_DIRECTORY) || !f->dir) {
 		close(f);
+		error("read_entries(): file descriptor %d is not a directory.\n", fd);
 		return -ENOTDIR;
 	}
 
 	dir_handle_t *dir = f->dir;
 	if (!dir->entries) {
 		close(f);
+		error(
+			"read_entries(): directory handle has no entries buffer for fd %d\n",
+			fd);
 		return -ENOMEM;
 	}
 
@@ -665,6 +698,8 @@ int64_t sys_read_entries(const syscall_args_t *args)
 		int ret = vfs_readdir(dir->vnode, dir->entries, &count);
 		if (ret != 0) {
 			close(f);
+			error("read_entries() failed for fd %d (%s)\n", fd,
+				  ERRNO_NAME(ret));
 			return -EINVAL;
 		}
 		dir->count = count;
