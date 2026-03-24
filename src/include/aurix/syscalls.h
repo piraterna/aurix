@@ -44,6 +44,7 @@ enum {
 	SYS_DUP3 = 36,
 	SYS_PIPE = 37,
 	SYS_PIPE2 = 38,
+	SYS_SIGACTION = 51,
 };
 
 #define PROT_READ 0x01

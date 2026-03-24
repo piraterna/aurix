@@ -77,6 +77,7 @@ enum {
 	SYS_UMASK = 48,
 	SYS_KILL = 49,
 	SYS_SLEEP = 50,
+	SYS_SIGACTION = 51,
 };
 
 typedef struct {

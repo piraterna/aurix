@@ -1325,6 +1325,12 @@ int64_t sys_kill(const syscall_args_t *args)
 	return 0;
 }
 
+int64_t sys_sigaction(const syscall_args_t *args)
+{
+	(void)args;
+	return -ENOSYS;
+}
+
 int64_t sys_sleep(const syscall_args_t *args)
 {
 	uint64_t secs = (uint64_t)args->rdi;
@@ -2550,4 +2556,5 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_UMASK, sys_umask, "umask");
 	register_syscall(SYS_KILL, sys_kill, "kill");
 	register_syscall(SYS_SLEEP, sys_sleep, "sleep");
+	register_syscall(SYS_SIGACTION, sys_sigaction, "sigaction");
 }
