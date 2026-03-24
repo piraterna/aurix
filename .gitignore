@@ -18,7 +18,7 @@ Brewfile.lock.json
 uefi_nvram.json
 .config*
 
-initrd/bin
+initrd/**/bin
 
 src/toybox/upstream/
 
