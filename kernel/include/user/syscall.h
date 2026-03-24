@@ -78,6 +78,8 @@ enum {
 	SYS_KILL = 49,
 	SYS_SLEEP = 50,
 	SYS_SIGACTION = 51,
+	SYS_FACCESSAT = 52,
+	SYS_UTIMENSAT = 53,
 };
 
 typedef struct {

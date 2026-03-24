@@ -47,6 +47,22 @@
 #ifndef AT_REMOVEDIR
 #define AT_REMOVEDIR 0x200
 #endif
+#ifndef AT_SYMLINK_NOFOLLOW
+#define AT_SYMLINK_NOFOLLOW 0x100
+#endif
+#ifndef AT_EACCESS
+#define AT_EACCESS 0x200
+#endif
+#ifndef AT_EMPTY_PATH
+#define AT_EMPTY_PATH 0x1000
+#endif
+
+#ifndef UTIME_NOW
+#define UTIME_NOW 0x3fffffff
+#endif
+#ifndef UTIME_OMIT
+#define UTIME_OMIT 0x3ffffffe
+#endif
 
 #include <loader/elf.h>
 
@@ -105,6 +121,11 @@ struct pollfd {
 	int fd;
 	short events;
 	short revents;
+};
+
+struct aurix_timespec {
+	int64_t tv_sec;
+	long tv_nsec;
 };
 
 #define DIR_HANDLE_MAX_ENTRIES 256
@@ -518,6 +539,36 @@ static bool mode_is_reg(mode_t mode)
 	return (mode & S_IFMT) == S_IFREG;
 }
 
+static uint32_t clamp_ts_sec(int64_t sec)
+{
+	if (sec < 0)
+		return 0;
+	if ((uint64_t)sec > 0xffffffffull)
+		return 0xffffffffu;
+	return (uint32_t)sec;
+}
+
+static void apply_utimens(struct stat *st, const struct aurix_timespec times[2])
+{
+	uint32_t now = (uint32_t)(get_ms() / 1000ull);
+
+	if (!times) {
+		st->st_atim = now;
+		st->st_mtim = now;
+		return;
+	}
+
+	if (times[0].tv_nsec != UTIME_OMIT)
+		st->st_atim = (times[0].tv_nsec == UTIME_NOW) ?
+						  now :
+						  clamp_ts_sec(times[0].tv_sec);
+
+	if (times[1].tv_nsec != UTIME_OMIT)
+		st->st_mtim = (times[1].tv_nsec == UTIME_NOW) ?
+						  now :
+						  clamp_ts_sec(times[1].tv_sec);
+}
+
 /*********************************************************************************/
 /* Builtin system calls for aurix												 */
 /*********************************************************************************/
@@ -928,6 +979,45 @@ int64_t sys_openat(const syscall_args_t *args)
 	}
 
 	return fd;
+}
+
+int64_t sys_faccessat(const syscall_args_t *args)
+{
+	int dirfd = (int)args->rdi;
+	const char *path = (const char *)args->rsi;
+	int mode = (int)args->rdx;
+	int flags = (int)args->r10;
+
+	if (!path)
+		return -EFAULT;
+	if (mode & ~(R_OK | W_OK | X_OK))
+		return -EINVAL;
+	if (flags & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW))
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	char *resolved = NULL;
+	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
+	if (r)
+		return r;
+
+	struct stat st;
+	int ret = vfs_stat(resolved, &st);
+	kfree(resolved);
+	if (ret != 0)
+		return -ENOENT;
+
+	if ((mode & R_OK) && !(st.st_mode & (S_IRUSR | S_IRGRP | S_IROTH)))
+		return -EACCES;
+	if ((mode & W_OK) && !(st.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)))
+		return -EACCES;
+	if ((mode & X_OK) && !(st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)))
+		return -EACCES;
+
+	return 0;
 }
 
 int64_t sys_readlink(const syscall_args_t *args)
@@ -1615,24 +1705,89 @@ int64_t sys_stat(const syscall_args_t *args)
 		return ret == 0 ? 0 : -EINVAL;
 	}
 
-	if (target == FSFD_TARGET_FD_PATH && fd != AT_FDCWD) {
-		return -ENOSYS;
-	}
-
 	if (target != FSFD_TARGET_PATH && target != FSFD_TARGET_FD_PATH)
 		return -EINVAL;
 
 	if (!path)
 		return -EFAULT;
 
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	char *resolved = NULL;
+	int r = syscall_resolve_path_at(
+		proc, target == FSFD_TARGET_FD_PATH ? fd : AT_FDCWD, path, &resolved);
+	if (r)
+		return r;
 
 	int ret = vfs_stat(resolved, st);
 	kfree(resolved);
 
 	return ret == 0 ? 0 : -ENOENT;
+}
+
+int64_t sys_utimensat(const syscall_args_t *args)
+{
+	int dirfd = (int)args->rdi;
+	const char *path = (const char *)args->rsi;
+	const struct aurix_timespec *times =
+		(const struct aurix_timespec *)args->rdx;
+	int flags = (int)args->r10;
+
+	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
+		return -EINVAL;
+
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -EINVAL;
+
+	struct stat st;
+	int stat_ret;
+	int set_ret;
+
+	if (!path || ((flags & AT_EMPTY_PATH) && path[0] == '\0')) {
+		spinlock_acquire(&proc->fd_lock);
+		struct fileio *f = proc_fd_lookup_locked(proc, dirfd);
+		if (!f) {
+			spinlock_release(&proc->fd_lock);
+			return -EBADF;
+		}
+		fio_retain(f);
+		spinlock_release(&proc->fd_lock);
+
+		struct vnode *vnode = (struct vnode *)f->private;
+		if (!vnode || !vnode->ops || !vnode->ops->getattr ||
+			!vnode->ops->setattr) {
+			close(f);
+			return -EINVAL;
+		}
+
+		stat_ret = vnode->ops->getattr(vnode, &st);
+		if (stat_ret != 0) {
+			close(f);
+			return -EINVAL;
+		}
+
+		apply_utimens(&st, times);
+		set_ret = vnode->ops->setattr(vnode, &st);
+		close(f);
+
+		return set_ret == 0 ? 0 : -EINVAL;
+	}
+
+	char *resolved = NULL;
+	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
+	if (r)
+		return r;
+
+	stat_ret = vfs_stat(resolved, &st);
+	if (stat_ret != 0) {
+		kfree(resolved);
+		return -ENOENT;
+	}
+
+	apply_utimens(&st, times);
+	set_ret = vfs_setstat(resolved, &st);
+	kfree(resolved);
+
+	return set_ret == 0 ? 0 : -EINVAL;
 }
 
 int64_t sys_mount(const syscall_args_t *args)
@@ -2557,4 +2712,6 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_KILL, sys_kill, "kill");
 	register_syscall(SYS_SLEEP, sys_sleep, "sleep");
 	register_syscall(SYS_SIGACTION, sys_sigaction, "sigaction");
+	register_syscall(SYS_FACCESSAT, sys_faccessat, "faccessat");
+	register_syscall(SYS_UTIMENSAT, sys_utimensat, "utimensat");
 }
