@@ -55,7 +55,7 @@ struct axboot_cfg cfg = { .default_entry = DEFAULT_ENTRY,
 						  .bootlog_filename = NULL,
 						  .modules = { "\\System\\support\\serial16550.sys",
 									   "\\System\\support\\i8042_ps2.sys",
-									//    "\\System\\support\\pci.sys",
+									   //    "\\System\\support\\pci.sys",
 									   "\\System\\initrd.cpio", NULL } };
 
 struct axboot_entry entries[2] = {
