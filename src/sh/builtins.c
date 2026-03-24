@@ -14,54 +14,12 @@
 
 extern char **environ;
 
-static int builtin_cd(int argc, char *argv[], bool *should_exit);
-static int builtin_pwd(int argc, char *argv[], bool *should_exit);
 static int builtin_export(int argc, char *argv[], bool *should_exit);
 static int builtin_unset(int argc, char *argv[], bool *should_exit);
-static int builtin_ls(int argc, char *argv[], bool *should_exit);
-static int builtin_cat(int argc, char *argv[], bool *should_exit);
-static int builtin_echo(int argc, char *argv[], bool *should_exit);
-static int builtin_help(int argc, char *argv[], bool *should_exit);
-static int builtin_clear(int argc, char *argv[], bool *should_exit);
-static int builtin_env(int argc, char *argv[], bool *should_exit);
-static int builtin_exit(int argc, char *argv[], bool *should_exit);
-static int builtin_mkdir(int argc, char *argv[], bool *should_exit);
-static int builtin_rmdir(int argc, char *argv[], bool *should_exit);
-static int builtin_rm(int argc, char *argv[], bool *should_exit);
-static int builtin_mv(int argc, char *argv[], bool *should_exit);
-static int builtin_cp(int argc, char *argv[], bool *should_exit);
-static int builtin_ln(int argc, char *argv[], bool *should_exit);
-static int builtin_stat(int argc, char *argv[], bool *should_exit);
-static int builtin_chmod(int argc, char *argv[], bool *should_exit);
-static int builtin_touch(int argc, char *argv[], bool *should_exit);
-static int builtin_sleep(int argc, char *argv[], bool *should_exit);
-static int builtin_kill(int argc, char *argv[], bool *should_exit);
-static int builtin_umask(int argc, char *argv[], bool *should_exit);
 
 #define BUILTIN_LIST          \
-	X(cd, builtin_cd)         \
-	X(pwd, builtin_pwd)       \
 	X(export, builtin_export) \
-	X(unset, builtin_unset)   \
-	X(ls, builtin_ls)         \
-	X(cat, builtin_cat)       \
-	X(echo, builtin_echo)     \
-	X(help, builtin_help)     \
-	X(clear, builtin_clear)   \
-	X(env, builtin_env)       \
-	X(exit, builtin_exit)     \
-	X(mkdir, builtin_mkdir)   \
-	X(rmdir, builtin_rmdir)   \
-	X(rm, builtin_rm)         \
-	X(mv, builtin_mv)         \
-	X(cp, builtin_cp)         \
-	X(ln, builtin_ln)         \
-	X(stat, builtin_stat)     \
-	X(chmod, builtin_chmod)   \
-	X(touch, builtin_touch)   \
-	X(sleep, builtin_sleep)   \
-	X(kill, builtin_kill)     \
-	X(umask, builtin_umask)
+	X(unset, builtin_unset)
 
 static const struct builtin builtin_table[] = {
 #define X(name, fn) { #name, fn },

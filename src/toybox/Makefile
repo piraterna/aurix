@@ -116,5 +116,10 @@ distclean: clean
 	@rm -rf $(TOYBOX_SRC_DIR)
 
 install: all
-	@mkdir -p $(APP_INSTALL_DIR)
-	@cp $(APP_FILE) $(APP_INSTALL_DIR)
+	@mkdir -p $(APP_INSTALL_DIR)/bin
+	@printf "  INSTALL\t$(APP_NAME)\n"
+	@$(MAKE) -C $(TOYBOX_SRC_DIR) $(TOYBOX_MAKE_FLAGS) install_flat \
+		HOSTCC=$(TOYBOX_HOST_CC) \
+		CROSS_COMPILE=$(TOYBOX_CROSS_COMPILE) \
+		CC=$(TOYBOX_TARGET_CC) \
+		PREFIX=$(APP_INSTALL_DIR)
