@@ -103,20 +103,27 @@ static log_sink_t g_log_sinks[LOG_SINK_MAX] = {
 	{ flanterm_kprintf, LOG_VERBOSITY_DISPLAY }
 };
 
-#define _log_dispatch(tag_style, line_style, level_str, level_val, fmt, ...) \
-	do {                                                                     \
-		uint64_t __ms = get_ms();                                            \
-		uint32_t __s = (uint32_t)(__ms / 1000ull);                           \
-		uint32_t __msr = (uint32_t)(__ms % 1000ull);                         \
-		for (int __i = 0; __i < LOG_SINK_MAX; __i++) {                       \
-			if (level_val <= g_log_sinks[__i].verbosity) {                   \
-				g_log_sinks[__i].fn(LOG_STYLE_PREFIX                         \
-									"[%u.%03u] " LOG_STYLE_RESET tag_style   \
-									" %s " LOG_STYLE_RESET                   \
-									" " line_style fmt LOG_STYLE_RESET,      \
-									__s, __msr, level_str, ##__VA_ARGS__);   \
-			}                                                                \
-		}                                                                    \
+#if defined(__GNUC__) || defined(__clang__)
+#define LOG_FUNC __PRETTY_FUNCTION__
+#else
+#define LOG_FUNC __func__
+#endif
+
+#define _log_dispatch(tag_style, line_style, level_str, level_val, fmt, ...)  \
+	do {                                                                      \
+		uint64_t __ms = get_ms();                                             \
+		uint32_t __s = (uint32_t)(__ms / 1000ull);                            \
+		uint32_t __msr = (uint32_t)(__ms % 1000ull);                          \
+		klog_sink("[%u.%03u] %s: " fmt, __s, __msr, LOG_FUNC, ##__VA_ARGS__); \
+		for (int __i = 0; __i < LOG_SINK_MAX; __i++) {                        \
+			if (level_val <= g_log_sinks[__i].verbosity) {                    \
+				g_log_sinks[__i].fn(LOG_STYLE_PREFIX                          \
+									"[%u.%03u] " LOG_STYLE_RESET tag_style    \
+									" %s " LOG_STYLE_RESET                    \
+									" " line_style fmt LOG_STYLE_RESET,       \
+									__s, __msr, level_str, ##__VA_ARGS__);    \
+			}                                                                 \
+		}                                                                     \
 	} while (0)
 
 #define critical(fmt, ...)                                      \

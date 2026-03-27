@@ -30,6 +30,10 @@ int serial_kprintf(const char *fmt, ...);
 int flanterm_kprintf(const char *fmt, ...);
 int snprintf(char *buf, size_t size, const char *fmt, ...);
 
+int klog_sink(const char *fmt, ...);
+size_t klog_get_size(void);
+size_t klog_read_at(void *out, size_t bytes, size_t offset);
+
 void _log_force_unlock(void);
 
 #endif /* _UTIL_PRINT_H */

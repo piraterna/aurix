@@ -111,7 +111,12 @@ ssize_t sh_readline(char **line, size_t *cap)
 				memmove(*line + cursor - 1, *line + cursor, len - cursor + 1);
 				cursor--;
 				len--;
-				sh_line_redraw(*line, len, cursor);
+				if (cursor == len) {
+					fputs("\b \b", stdout);
+					fflush(stdout);
+				} else {
+					sh_line_redraw(*line, len, cursor);
+				}
 			}
 			continue;
 		}

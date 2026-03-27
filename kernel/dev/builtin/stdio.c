@@ -20,10 +20,12 @@
 #include <dev/builtin/stdio.h>
 #include <dev/driver.h>
 #include <dev/device.h>
-#include <util/kprintf.h>
+#include <boot/axprot.h>
 #include <debug/log.h>
+#include <flanterm/flanterm.h>
 #include <lib/string.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <time/time.h>
 
@@ -92,7 +94,7 @@ struct device_ops stdin_ops = {
 struct device stdout = {
 	.name = "stdout",
 	.class_name = "stdio",
-	.dev_node_path = "/stdout",
+	.dev_node_path = "stdout",
 	.driver_data = NULL,
 	.bound_driver = NULL,
 	.ops = &stdout_ops,
@@ -102,7 +104,7 @@ struct device stdout = {
 struct device stdin = {
 	.name = "stdin",
 	.class_name = "stdio",
-	.dev_node_path = "/stdin",
+	.dev_node_path = "stdin",
 	.driver_data = NULL,
 	.bound_driver = NULL,
 	.ops = &stdin_ops,
@@ -112,7 +114,7 @@ struct device stdin = {
 struct device stderr = {
 	.name = "stderr",
 	.class_name = "stdio",
-	.dev_node_path = "/stderr",
+	.dev_node_path = "stderr",
 	.driver_data = NULL,
 	.bound_driver = NULL,
 	.ops = &stdout_ops, // same as stdout for now
@@ -131,7 +133,8 @@ int stdout_write(struct device *dev, const void *buf, size_t len, size_t offset)
 	(void)dev;
 	(void)offset;
 
-	kprintf("%.*s", (int)len, (const char *)buf);
+	if (ft_ctx)
+		flanterm_write(ft_ctx, (const char *)buf, len);
 
 	struct device *serial_devs[MAX_DEVICES];
 	size_t serial_count =
@@ -163,7 +166,6 @@ static struct device *stdio_find_dev(const char *path)
 }
 
 #define STDIO_SERIAL_PREFIX "/raw/serial/com"
-#define STDIO_COM1_PATH "/raw/serial/com1"
 
 static size_t stdio_collect_serial_devs(struct device **out, size_t max,
 										bool need_read, bool need_write)
@@ -188,19 +190,6 @@ static size_t stdio_collect_serial_devs(struct device **out, size_t max,
 			continue;
 		if (count < max)
 			out[count++] = dev;
-	}
-
-	if (count == 1 && strcmp(out[0]->dev_node_path, STDIO_COM1_PATH) != 0)
-		return 0;
-
-	if (count > 1) {
-		size_t write_idx = 0;
-		for (size_t i = 0; i < count; i++) {
-			if (strcmp(out[i]->dev_node_path, STDIO_COM1_PATH) == 0)
-				continue;
-			out[write_idx++] = out[i];
-		}
-		count = write_idx;
 	}
 
 	return count;

@@ -50,6 +50,7 @@
 #include <loader/elf.h>
 #include <user/syscall.h>
 #include <dev/builtin/stdio.h>
+#include <util/kprintf.h>
 #include <lib/align.h>
 
 struct aurix_parameters *boot_params = NULL;
@@ -189,7 +190,10 @@ static bool stage_module_file(const char *name, void *phys_addr, size_t size,
 static void stage_boot_modules_to_ramfs(void)
 {
 	if (vfs_mkdir("/sys", 0755) != 0) {
-		kpanic(NULL, "Failed to create /sys directory");
+		struct fileio *sysdir = open("/sys", O_RDONLY | O_DIRECTORY, 0);
+		if (!sysdir)
+			kpanic(NULL, "Failed to create /sys directory");
+		close(sysdir);
 	}
 
 	struct fileio *manifest =
@@ -320,6 +324,13 @@ void _start(struct aurix_parameters *params)
 
 	platform_timekeeper_init();
 	stage_boot_modules_to_ramfs();
+	struct fileio *klog_file =
+		open("/sys/klog", O_CREATE | O_WRONLY | O_TRUNC, 0644);
+	if (!klog_file) {
+		warn("Failed to open /sys/klog\n");
+	} else {
+		close(klog_file);
+	}
 
 	debug("Current time: %04d-%02d-%02d %02d:%02d:%02d\n", time_get_year(),
 		  time_get_month(), time_get_day(), time_get_hour(), time_get_minute(),

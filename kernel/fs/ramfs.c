@@ -23,6 +23,7 @@
 #include <fs/ramfs.h>
 #include <lib/string.h>
 #include <debug/log.h>
+#include <util/kprintf.h>
 #include <mm/heap.h>
 #include <user/access.h>
 
@@ -380,6 +381,10 @@ int ramfs_open(struct vnode **vnode_r, int flags, bool clone,
 	fio->size = v_ramfs_node->size;
 	fio->private = vnode;
 
+	if (vnode->path && strcmp(vnode->path, "/sys/klog") == 0) {
+		fio->size = klog_get_size();
+	}
+
 	return 0;
 }
 
@@ -387,6 +392,13 @@ int ramfs_read(struct vnode *vn, size_t *bytes, size_t *offset, void *out)
 {
 	if (!vn) {
 		return -1;
+	}
+
+	if (vn->path && strcmp(vn->path, "/sys/klog") == 0) {
+		size_t read_bytes = klog_read_at(out, *bytes, *offset);
+		*bytes = read_bytes;
+		*offset += read_bytes;
+		return 0;
 	}
 
 	memset(out, 0, (*bytes));
@@ -437,6 +449,24 @@ int ramfs_write(struct vnode *vn, void *buf, size_t *bytes, size_t *offset)
 	void *dst = ramfs_node->data + (*offset);
 	memcpy(dst, buf, (*bytes));
 	*offset += *bytes;
+
+	if (vn->path && strcmp(vn->path, "/sys/klog") == 0) {
+		struct ramfs *ramfs = vn->root_vfs->vfs_data;
+		if (ramfs) {
+			struct ramfs_node *ramfs_node_original = NULL;
+			char *path = vn->path + strlen(vn->root_vfs->root_vnode->path);
+			if (path[0] == '/')
+				path++;
+			ramfs_find_node(ramfs, path, &ramfs_node_original);
+			if (ramfs_node_original && ramfs_node_original != ramfs_node) {
+				if (ramfs_node_original->data != ramfs_node->data) {
+					kfree(ramfs_node_original->data);
+					ramfs_node_original->data = ramfs_node->data;
+				}
+				ramfs_node_original->size = ramfs_node->size;
+			}
+		}
+	}
 
 	return 0;
 }
@@ -905,6 +935,11 @@ int ramfs_getattr(struct vnode *vnode, struct stat *st)
 		return -1;
 	}
 
+	size_t node_size = ramfs_node->size;
+	if (vnode->path && strcmp(vnode->path, "/sys/klog") == 0) {
+		node_size = klog_get_size();
+	}
+
 	st->st_dev = 1;
 	st->st_ino = (uint64_t)ramfs_node;
 	st->st_nlink = 1;
@@ -912,9 +947,9 @@ int ramfs_getattr(struct vnode *vnode, struct stat *st)
 	st->st_uid = vnode->uid;
 	st->st_gid = vnode->gid;
 	st->st_rdev = 0;
-	st->st_size = ramfs_node->size;
+	st->st_size = node_size;
 	st->st_blksize = 4096;
-	st->st_blocks = (ramfs_node->size + 4095) / 4096;
+	st->st_blocks = (node_size + 4095) / 4096;
 	st->st_atim = st->st_mtim = st->st_ctim = 0;
 
 	return 0;
