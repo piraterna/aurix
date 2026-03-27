@@ -34,6 +34,9 @@ int stdin_poll(struct device *dev);
 int stdio_ioctl(struct device *dev, uint64_t cmd, void *arg);
 int stdio_probe(struct device *dev);
 
+static size_t stdio_collect_serial_devs(struct device **out, size_t max,
+										bool need_read, bool need_write);
+
 #define STDIO_TCGETS 0x5401
 #define STDIO_TCSETS 0x5402
 #define STDIO_TCSETSW 0x5403
@@ -130,6 +133,15 @@ int stdout_write(struct device *dev, const void *buf, size_t len, size_t offset)
 
 	kprintf("%.*s", (int)len, (const char *)buf);
 
+	struct device *serial_devs[MAX_DEVICES];
+	size_t serial_count =
+		stdio_collect_serial_devs(serial_devs, MAX_DEVICES, false, true);
+	for (size_t i = 0; i < serial_count; i++) {
+		struct device *serial = serial_devs[i];
+		if (serial)
+			serial->ops->write(serial, buf, len, 0);
+	}
+
 	return (int)len;
 }
 
@@ -148,6 +160,50 @@ static struct device *stdio_find_dev(const char *path)
 	}
 
 	return NULL;
+}
+
+#define STDIO_SERIAL_PREFIX "/raw/serial/com"
+#define STDIO_COM1_PATH "/raw/serial/com1"
+
+static size_t stdio_collect_serial_devs(struct device **out, size_t max,
+										bool need_read, bool need_write)
+{
+	if (!out || max == 0)
+		return 0;
+
+	size_t count = 0;
+	for (int i = 0; i < device_count; i++) {
+		struct device *dev = device_list[i];
+		if (!dev || !dev->dev_node_path)
+			continue;
+		if (strncmp(dev->dev_node_path, STDIO_SERIAL_PREFIX,
+					sizeof(STDIO_SERIAL_PREFIX) - 1) != 0) {
+			continue;
+		}
+		if (!dev->ops)
+			continue;
+		if (need_read && !dev->ops->read)
+			continue;
+		if (need_write && !dev->ops->write)
+			continue;
+		if (count < max)
+			out[count++] = dev;
+	}
+
+	if (count == 1 && strcmp(out[0]->dev_node_path, STDIO_COM1_PATH) != 0)
+		return 0;
+
+	if (count > 1) {
+		size_t write_idx = 0;
+		for (size_t i = 0; i < count; i++) {
+			if (strcmp(out[i]->dev_node_path, STDIO_COM1_PATH) == 0)
+				continue;
+			out[write_idx++] = out[i];
+		}
+		count = write_idx;
+	}
+
+	return count;
 }
 
 static int stdio_dev_has_data(struct device *dev)
@@ -354,9 +410,11 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 		return 0;
 
 	struct device *kbd = stdio_find_dev("/raw/ps2/kbd0");
-	struct device *com1 = stdio_find_dev("/raw/serial/com1");
+	struct device *serial_devs[MAX_DEVICES];
+	size_t serial_count =
+		stdio_collect_serial_devs(serial_devs, MAX_DEVICES, true, false);
 
-	if (!kbd && !com1)
+	if (!kbd && serial_count == 0)
 		return -1;
 
 	char *out = buf;
@@ -373,12 +431,15 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 			}
 		}
 
-		if (com1 && com1->ops && com1->ops->read && stdio_dev_has_data(com1)) {
-			uint8_t ch = 0;
-			int got = com1->ops->read(com1, &ch, 1, 0);
-			if (got > 0) {
-				stdin_handle_ascii(ch);
-				did_work = true;
+		for (size_t i = 0; i < serial_count; i++) {
+			struct device *serial = serial_devs[i];
+			if (serial && stdio_dev_has_data(serial)) {
+				uint8_t ch = 0;
+				int got = serial->ops->read(serial, &ch, 1, 0);
+				if (got > 0) {
+					stdin_handle_ascii(ch);
+					did_work = true;
+				}
 			}
 		}
 
@@ -401,14 +462,18 @@ int stdin_poll(struct device *dev)
 	(void)dev;
 
 	struct device *kbd = stdio_find_dev("/raw/ps2/kbd0");
-	struct device *com1 = stdio_find_dev("/raw/serial/com1");
+	struct device *serial_devs[MAX_DEVICES];
+	size_t serial_count =
+		stdio_collect_serial_devs(serial_devs, MAX_DEVICES, true, false);
 
 	if (stdin_rb_count() > 0)
 		return 1;
 	if (stdio_dev_has_data(kbd))
 		return 1;
-	if (stdio_dev_has_data(com1))
-		return 1;
+	for (size_t i = 0; i < serial_count; i++) {
+		if (stdio_dev_has_data(serial_devs[i]))
+			return 1;
+	}
 
 	return 0;
 }
