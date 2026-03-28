@@ -440,6 +440,125 @@ static void free_string_vector(char **vec, size_t count)
 	kfree(vec);
 }
 
+static char *dup_cstring(const char *src)
+{
+	if (!src)
+		return NULL;
+	size_t len = strlen(src);
+	char *dst = kmalloc(len + 1);
+	if (!dst)
+		return NULL;
+	memcpy(dst, src, len);
+	dst[len] = '\0';
+	return dst;
+}
+
+static int parse_shebang(const char *buf, size_t size, char **interp_out,
+						 char **arg_out)
+{
+	if (interp_out)
+		*interp_out = NULL;
+	if (arg_out)
+		*arg_out = NULL;
+	if (!buf || size < 2)
+		return 0;
+	if (buf[0] != '#' || buf[1] != '!')
+		return 0;
+
+	size_t i = 2;
+	while (i < size && (buf[i] == ' ' || buf[i] == '\t'))
+		i++;
+	if (i >= size || buf[i] == '\n' || buf[i] == '\r')
+		return 0;
+
+	size_t path_start = i;
+	while (i < size && buf[i] != '\n' && buf[i] != '\r' && buf[i] != ' ' &&
+		   buf[i] != '\t')
+		i++;
+	if (i == path_start)
+		return 0;
+
+	size_t path_len = i - path_start;
+	char *interp = kmalloc(path_len + 1);
+	if (!interp)
+		return -ENOMEM;
+	memcpy(interp, buf + path_start, path_len);
+	interp[path_len] = '\0';
+
+	while (i < size && (buf[i] == ' ' || buf[i] == '\t'))
+		i++;
+	char *arg = NULL;
+	if (i < size && buf[i] != '\n' && buf[i] != '\r') {
+		size_t arg_start = i;
+		while (i < size && buf[i] != '\n' && buf[i] != '\r')
+			i++;
+		size_t arg_len = i - arg_start;
+		arg = kmalloc(arg_len + 1);
+		if (!arg) {
+			kfree(interp);
+			return -ENOMEM;
+		}
+		memcpy(arg, buf + arg_start, arg_len);
+		arg[arg_len] = '\0';
+	}
+
+	if (interp_out)
+		*interp_out = interp;
+	else
+		kfree(interp);
+	if (arg_out)
+		*arg_out = arg;
+	else if (arg)
+		kfree(arg);
+
+	return 1;
+}
+
+static int build_shebang_argv(const char *interp, const char *interp_arg,
+							  const char *script, char **orig,
+							  size_t orig_count, char ***out_argv,
+							  size_t *out_count)
+{
+	if (!interp || !script || !out_argv || !out_count)
+		return -EINVAL;
+
+	size_t tail = orig_count > 1 ? (orig_count - 1) : 0;
+	size_t total = 1 + (interp_arg ? 1 : 0) + 1 + tail;
+	if (total > EXEC_MAX_ARGS)
+		return -E2BIG;
+
+	char **vec = kmalloc(sizeof(char *) * total);
+	if (!vec)
+		return -ENOMEM;
+	memset(vec, 0, sizeof(char *) * total);
+
+	size_t idx = 0;
+	vec[idx++] = dup_cstring(interp);
+	if (!vec[idx - 1])
+		goto fail;
+	if (interp_arg) {
+		vec[idx++] = dup_cstring(interp_arg);
+		if (!vec[idx - 1])
+			goto fail;
+	}
+	vec[idx++] = dup_cstring(script);
+	if (!vec[idx - 1])
+		goto fail;
+	for (size_t i = 1; i < orig_count; i++) {
+		vec[idx++] = dup_cstring(orig[i]);
+		if (!vec[idx - 1])
+			goto fail;
+	}
+
+	*out_argv = vec;
+	*out_count = total;
+	return 0;
+
+fail:
+	free_string_vector(vec, idx);
+	return -ENOMEM;
+}
+
 static int copy_user_string_vector(const char *const *user, size_t max,
 								   char ***out_vec, size_t *out_count)
 {
@@ -1914,14 +2033,15 @@ int64_t sys_exec(const syscall_args_t *args)
 		return -EINVAL;
 	}
 
-	char *buf = (char *)kmalloc(f->size);
+	size_t image_size = f->size;
+	char *buf = (char *)kmalloc(image_size);
 	if (!buf) {
 		close(f);
 		kfree(resolved);
 		return -ENOMEM;
 	}
 
-	if (read(f, f->size, buf) != f->size) {
+	if (read(f, image_size, buf) != image_size) {
 		close(f);
 		kfree(buf);
 		kfree(resolved);
@@ -1930,26 +2050,147 @@ int64_t sys_exec(const syscall_args_t *args)
 
 	close(f);
 
+	char *script_path = resolved;
+	char *exec_path = resolved;
+	char *interp = NULL;
+	char *interp_arg = NULL;
+	char *interp_resolved = NULL;
+	char **shebang_argv = NULL;
+	size_t shebang_argc = 0;
+
+	int sb = parse_shebang(buf, image_size, &interp, &interp_arg);
+	if (sb < 0) {
+		kfree(buf);
+		kfree(resolved);
+		return sb;
+	}
+
+	if (sb > 0) {
+		interp_resolved = syscall_resolve_path(cur, interp);
+		if (!interp_resolved) {
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -ENOMEM;
+		}
+
+		struct fileio *interp_file = open(interp_resolved, O_RDONLY, 0);
+		if (!interp_file) {
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -ENOENT;
+		}
+
+		if (interp_file->size == 0) {
+			close(interp_file);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -EINVAL;
+		}
+
+		size_t interp_size = interp_file->size;
+		char *interp_buf = (char *)kmalloc(interp_size);
+		if (!interp_buf) {
+			close(interp_file);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -ENOMEM;
+		}
+
+		if (read(interp_file, interp_size, interp_buf) != interp_size) {
+			close(interp_file);
+			kfree(interp_buf);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -EIO;
+		}
+
+		close(interp_file);
+		kfree(buf);
+		buf = interp_buf;
+		image_size = interp_size;
+
+		int argv_ret =
+			build_shebang_argv(interp_resolved, interp_arg, script_path, NULL,
+							   0, &shebang_argv, &shebang_argc);
+		if (argv_ret != 0) {
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return argv_ret;
+		}
+
+		exec_path = interp_resolved;
+	}
+
 	struct pcb *proc = proc_create();
 	if (!proc) {
+		if (shebang_argv)
+			free_string_vector(shebang_argv, shebang_argc);
+		if (interp)
+			kfree(interp);
+		if (interp_arg)
+			kfree(interp_arg);
+		if (exec_path != script_path)
+			kfree(exec_path);
+		kfree(script_path);
 		kfree(buf);
 		return -ENOMEM;
 	}
 
-	char *name_copy = kmalloc(strlen(resolved) + 1);
+	char *name_copy = kmalloc(strlen(exec_path) + 1);
 	if (name_copy)
-		strcpy(name_copy, resolved);
+		strcpy(name_copy, exec_path);
 	proc->name = (const char *)name_copy;
 
 	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, resolved, proc, NULL, 0, NULL, 0, &entry)) {
-		kfree(resolved);
+	if (!elf_load_user_process(buf, exec_path, proc,
+							   (const char *const *)shebang_argv, shebang_argc,
+							   NULL, 0, &entry)) {
+		if (shebang_argv)
+			free_string_vector(shebang_argv, shebang_argc);
+		if (interp)
+			kfree(interp);
+		if (interp_arg)
+			kfree(interp_arg);
+		if (exec_path != script_path)
+			kfree(exec_path);
+		kfree(script_path);
 		kfree(buf);
 		proc_destroy(proc);
 		return -EINVAL;
 	}
 
-	kfree(resolved);
+	if (shebang_argv)
+		free_string_vector(shebang_argv, shebang_argc);
+	if (interp)
+		kfree(interp);
+	if (interp_arg)
+		kfree(interp_arg);
+	if (exec_path != script_path)
+		kfree(exec_path);
+	kfree(script_path);
 
 	kfree(buf);
 
@@ -2018,13 +2259,14 @@ int64_t sys_execve(const syscall_args_t *args)
 		return -EINVAL;
 	}
 
-	char *buf = (char *)kmalloc(f->size);
+	size_t image_size = f->size;
+	char *buf = (char *)kmalloc(image_size);
 	if (!buf) {
 		close(f);
 		return -ENOMEM;
 	}
 
-	if (read(f, f->size, buf) != f->size) {
+	if (read(f, image_size, buf) != image_size) {
 		close(f);
 		kfree(buf);
 		return -EIO;
@@ -2032,11 +2274,128 @@ int64_t sys_execve(const syscall_args_t *args)
 
 	close(f);
 
+	char *script_path = resolved;
+	char *exec_path = resolved;
+	char *interp = NULL;
+	char *interp_arg = NULL;
+	char *interp_resolved = NULL;
+	char **shebang_argv = NULL;
+	size_t shebang_argc = 0;
+
+	int sb = parse_shebang(buf, image_size, &interp, &interp_arg);
+	if (sb < 0) {
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
+		kfree(buf);
+		kfree(resolved);
+		return sb;
+	}
+
+	if (sb > 0) {
+		interp_resolved = syscall_resolve_path(cur, interp);
+		if (!interp_resolved) {
+			free_string_vector(argv_copy, argv_count);
+			free_string_vector(envp_copy, envp_count);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -ENOMEM;
+		}
+
+		struct fileio *interp_file = open(interp_resolved, O_RDONLY, 0);
+		if (!interp_file) {
+			free_string_vector(argv_copy, argv_count);
+			free_string_vector(envp_copy, envp_count);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -ENOENT;
+		}
+
+		if (interp_file->size == 0) {
+			close(interp_file);
+			free_string_vector(argv_copy, argv_count);
+			free_string_vector(envp_copy, envp_count);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -EINVAL;
+		}
+
+		size_t interp_size = interp_file->size;
+		char *interp_buf = (char *)kmalloc(interp_size);
+		if (!interp_buf) {
+			close(interp_file);
+			free_string_vector(argv_copy, argv_count);
+			free_string_vector(envp_copy, envp_count);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -ENOMEM;
+		}
+
+		if (read(interp_file, interp_size, interp_buf) != interp_size) {
+			close(interp_file);
+			kfree(interp_buf);
+			free_string_vector(argv_copy, argv_count);
+			free_string_vector(envp_copy, envp_count);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return -EIO;
+		}
+
+		close(interp_file);
+		kfree(buf);
+		buf = interp_buf;
+		image_size = interp_size;
+
+		int argv_ret = build_shebang_argv(interp_resolved, interp_arg,
+										  script_path, argv_copy, argv_count,
+										  &shebang_argv, &shebang_argc);
+		if (argv_ret != 0) {
+			free_string_vector(argv_copy, argv_count);
+			free_string_vector(envp_copy, envp_count);
+			kfree(interp_resolved);
+			kfree(interp);
+			if (interp_arg)
+				kfree(interp_arg);
+			kfree(buf);
+			kfree(resolved);
+			return argv_ret;
+		}
+
+		free_string_vector(argv_copy, argv_count);
+		argv_copy = shebang_argv;
+		argv_count = shebang_argc;
+		exec_path = interp_resolved;
+	}
+
 	pagetable *new_pm = create_pagemap();
 	if (!new_pm) {
 		free_string_vector(argv_copy, argv_count);
 		free_string_vector(envp_copy, envp_count);
-		kfree(resolved);
+		if (interp)
+			kfree(interp);
+		if (interp_arg)
+			kfree(interp_arg);
+		if (exec_path != script_path)
+			kfree(exec_path);
+		kfree(script_path);
 		kfree(buf);
 		return -ENOMEM;
 	}
@@ -2046,7 +2405,13 @@ int64_t sys_execve(const syscall_args_t *args)
 		destroy_pagemap(new_pm);
 		free_string_vector(argv_copy, argv_count);
 		free_string_vector(envp_copy, envp_count);
-		kfree(resolved);
+		if (interp)
+			kfree(interp);
+		if (interp_arg)
+			kfree(interp_arg);
+		if (exec_path != script_path)
+			kfree(exec_path);
+		kfree(script_path);
 		kfree(buf);
 		return -ENOMEM;
 	}
@@ -2077,7 +2442,7 @@ int64_t sys_execve(const syscall_args_t *args)
 
 	uintptr_t entry = 0;
 	if (!elf_load_user_process(
-			buf, resolved, cur, (const char *const *)argv_copy, argv_count,
+			buf, exec_path, cur, (const char *const *)argv_copy, argv_count,
 			(const char *const *)envp_copy, envp_count, &entry)) {
 		cur->pm = old_pm;
 		cur->vctx = old_vctx;
@@ -2094,7 +2459,13 @@ int64_t sys_execve(const syscall_args_t *args)
 		destroy_pagemap(new_pm);
 		free_string_vector(argv_copy, argv_count);
 		free_string_vector(envp_copy, envp_count);
-		kfree(resolved);
+		if (interp)
+			kfree(interp);
+		if (interp_arg)
+			kfree(interp_arg);
+		if (exec_path != script_path)
+			kfree(exec_path);
+		kfree(script_path);
 		kfree(buf);
 		return -EINVAL;
 	}
@@ -2116,14 +2487,20 @@ int64_t sys_execve(const syscall_args_t *args)
 		destroy_pagemap(new_pm);
 		free_string_vector(argv_copy, argv_count);
 		free_string_vector(envp_copy, envp_count);
-		kfree(resolved);
+		if (interp)
+			kfree(interp);
+		if (interp_arg)
+			kfree(interp_arg);
+		if (exec_path != script_path)
+			kfree(exec_path);
+		kfree(script_path);
 		kfree(buf);
 		return -ENOMEM;
 	}
 
-	char *name_copy = kmalloc(strlen(resolved) + 1);
+	char *name_copy = kmalloc(strlen(exec_path) + 1);
 	if (name_copy) {
-		strcpy(name_copy, resolved);
+		strcpy(name_copy, exec_path);
 		if (cur->name)
 			kfree((void *)cur->name);
 		cur->name = (const char *)name_copy;
@@ -2139,7 +2516,13 @@ int64_t sys_execve(const syscall_args_t *args)
 	if (old_pm)
 		destroy_pagemap(old_pm);
 
-	kfree(resolved);
+	if (interp)
+		kfree(interp);
+	if (interp_arg)
+		kfree(interp_arg);
+	if (exec_path != script_path)
+		kfree(exec_path);
+	kfree(script_path);
 	kfree(buf);
 	free_string_vector(argv_copy, argv_count);
 	free_string_vector(envp_copy, envp_count);

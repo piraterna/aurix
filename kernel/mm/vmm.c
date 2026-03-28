@@ -86,8 +86,9 @@ void *valloc(vctx_t *ctx, size_t pages, uint64_t flags)
 	vregion_t *last = ctx->root;
 
 	while (region) {
+		uint64_t region_end = region->start + (region->pages * PAGE_SIZE);
 		if (region->next == NULL ||
-			region->start + (region->pages * PAGE_SIZE) < region->next->start) {
+			region->next->start - region_end >= pages * PAGE_SIZE) {
 			new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 			if (!new)
 				return NULL;
@@ -95,7 +96,7 @@ void *valloc(vctx_t *ctx, size_t pages, uint64_t flags)
 			memset(new, 0, sizeof(vregion_t));
 			new->pages = pages;
 			new->flags = VFLAGS_TO_PFLAGS(flags);
-			new->start = region->start + (region->pages * PAGE_SIZE);
+			new->start = region_end;
 			new->next = region->next;
 			new->prev = region;
 			region->next = new;
@@ -296,8 +297,9 @@ void *vallocatp(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys)
 	phys = ALIGN_DOWN(phys, PAGE_SIZE);
 
 	while (region) {
+		uint64_t region_end = region->start + (region->pages * PAGE_SIZE);
 		if (region->next == NULL ||
-			region->start + (pages * PAGE_SIZE) < region->next->start) {
+			region->next->start - region_end >= pages * PAGE_SIZE) {
 			new = (vregion_t *)PHYS_TO_VIRT(palloc(1));
 			if (!new)
 				return NULL;
@@ -305,7 +307,7 @@ void *vallocatp(vctx_t *ctx, size_t pages, uint64_t flags, uint64_t phys)
 			memset(new, 0, sizeof(vregion_t));
 			new->pages = pages;
 			new->flags = VFLAGS_TO_PFLAGS(flags);
-			new->start = region->start + (region->pages * PAGE_SIZE);
+			new->start = region_end;
 			new->next = region->next;
 			new->prev = region;
 			region->next = new;

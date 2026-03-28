@@ -226,7 +226,7 @@ initrd: apps __FORCE_initrd
 	 done
 
 	@mkdir -p $(SYSROOT_DIR)/System
-	@cd $(BUILD_DIR)/initrd && find . \( -type f -o -type l \) | cpio -H newc -o > $(INITRD_CPIO)
+	@cd $(BUILD_DIR)/initrd && find . \( -type f -o -type l \) | cpio -R root:root -H newc -o > $(INITRD_CPIO)
 
 .PHONY: __FORCE_initrd
 __FORCE_initrd:
