@@ -602,12 +602,12 @@ int64_t sys_open(const syscall_args_t *args)
 	char *resolved = syscall_resolve_path(proc, path);
 	if (!resolved)
 		return -ENOMEM;
-
 	struct fileio *f = open(resolved, flags, mode);
-	kfree(resolved);
 	if (!f) {
+		kfree(resolved);
 		return -ENOENT;
 	}
+	kfree(resolved);
 
 	spinlock_acquire(&proc->fd_lock);
 	int fd = proc_fd_alloc_locked(proc, f);
@@ -2416,6 +2416,10 @@ int64_t sys_fork(const syscall_args_t *args)
 	if (parent->name)
 		child->name = strdup(parent->name);
 	child->umask = parent->umask;
+	child->uid = parent->uid;
+	child->gid = parent->gid;
+	child->euid = parent->euid;
+	child->egid = parent->egid;
 
 	for (int fd = 0; fd < PROC_MAX_FDS; fd++) {
 		if (child->fds[fd]) {
@@ -2587,25 +2591,37 @@ int64_t sys_getppid(const syscall_args_t *args)
 int64_t sys_getuid(const syscall_args_t *args)
 {
 	(void)args;
-	return 0;
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -ESRCH;
+	return (int64_t)proc->uid;
 }
 
 int64_t sys_geteuid(const syscall_args_t *args)
 {
 	(void)args;
-	return 0;
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -ESRCH;
+	return (int64_t)proc->euid;
 }
 
 int64_t sys_getgid(const syscall_args_t *args)
 {
 	(void)args;
-	return 0;
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -ESRCH;
+	return (int64_t)proc->gid;
 }
 
 int64_t sys_getegid(const syscall_args_t *args)
 {
 	(void)args;
-	return 0;
+	struct pcb *proc = syscall_current_process();
+	if (!proc)
+		return -ESRCH;
+	return (int64_t)proc->egid;
 }
 
 int64_t sys_gettid(const syscall_args_t *args)

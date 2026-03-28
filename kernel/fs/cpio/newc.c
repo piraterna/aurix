@@ -26,6 +26,7 @@
 #include <lib/string.h>
 #include <user/access.h>
 #include <vfs/fileio.h>
+#include <fs/ramfs.h>
 
 #define align4(x) (((x) + 3) & ~3)
 
@@ -308,6 +309,11 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 					} else {
 						v->gid = file->gid;
 						v->uid = file->uid;
+						if (v->node_data) {
+							struct ramfs_node *node = v->node_data;
+							node->gid = file->gid;
+							node->uid = file->uid;
+						}
 					}
 				} else if (type == S_IFLNK) {
 					if (!file->data || file->filesize == 0) {
@@ -326,6 +332,17 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 						return -1;
 					}
 					kfree(target);
+					if (vfs_lookup_nofollow(dup, &v) != 0) {
+						warn("cpio: lookup failed after symlink for %s\n", dup);
+						return -1;
+					}
+					v->gid = file->gid;
+					v->uid = file->uid;
+					if (v->node_data) {
+						struct ramfs_node *node = v->node_data;
+						node->gid = file->gid;
+						node->uid = file->uid;
+					}
 				} else if (type == S_IFREG) {
 					if (vfs_create(dup, file->mode) != 0) {
 						warn("cpio: create failed for %s\n", dup);
@@ -343,6 +360,11 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 						} else {
 							v->gid = file->gid;
 							v->uid = file->uid;
+							if (v->node_data) {
+								struct ramfs_node *node = v->node_data;
+								node->gid = file->gid;
+								node->uid = file->uid;
+							}
 						}
 					}
 				} else {

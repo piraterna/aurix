@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pwd.h>
 
 #include <aurix/syscalls.h>
 
@@ -67,9 +68,19 @@ int main(void)
 	printf("init: module load phase complete\n");
 	printf("init: launching /bin/sh\n");
 
-	char *const argv[] = { "/bin/sh", NULL };
-	char *const envp[] = { "HOME=/root", NULL };
+	struct passwd *pw = getpwuid(getuid());
+	if (pw && pw->pw_dir) {
+		chdir(pw->pw_dir);
+	}
+
+	char *const argv[] = { "/bin/sh", "-c", ". /etc/profile; exec /bin/sh -i",
+						   NULL };
+
+	char *const envp[] = { "PS1=\\$ ", "USER=unknown", "HOSTNAME=unknown",
+						   "TERM=flanterm", NULL };
+
 	execve("/bin/sh", argv, envp);
+
 	printf("init: execve /bin/sh failed: %s\n", strerror(errno));
 
 	return 1;

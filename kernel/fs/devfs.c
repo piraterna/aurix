@@ -49,6 +49,8 @@ struct devfs_node *devfs_create_fs_node(devfs_ftype_t ftype)
 
 	memset(node, 0, sizeof(struct devfs_node));
 	node->type = ftype;
+	node->uid = 0;
+	node->gid = 0;
 
 	switch (ftype) {
 	case DEVFS_TYPE_DIR:
@@ -484,6 +486,8 @@ int devfs_lookup(struct vnode *parent, const char *name, struct vnode **out)
 			struct vnode *vn = vnode_create(parent->root_vfs, path, t, c);
 			memcpy(vn->ops, parent->ops, sizeof(struct vnode_ops));
 			vn->mode = c->mode;
+			vn->uid = c->uid;
+			vn->gid = c->gid;
 
 			*out = vn;
 			return 0;
@@ -550,8 +554,8 @@ static int devfs_getattr(struct vnode *vnode, struct stat *st)
 	st->st_ino = (uint64_t)node;
 	st->st_nlink = 1;
 	st->st_mode = node->mode;
-	st->st_uid = 0;
-	st->st_gid = 0;
+	st->st_uid = node->uid;
+	st->st_gid = node->gid;
 
 	if (node->device) {
 		st->st_size = 0;
@@ -585,8 +589,10 @@ static int devfs_setattr(struct vnode *vnode, struct stat *st)
 	}
 
 	node->mode = st->st_mode;
-	vnode->uid = st->st_uid;
-	vnode->gid = st->st_gid;
+	node->uid = st->st_uid;
+	node->gid = st->st_gid;
+	vnode->uid = node->uid;
+	vnode->gid = node->gid;
 
 	return 0;
 }
@@ -719,6 +725,8 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
 	root_node->sibling = NULL;
 	root_node->child = NULL;
 	root_node->type = DEVFS_TYPE_DIR;
+	root_node->uid = 0;
+	root_node->gid = 0;
 
 	vfs->root_vnode = vnode_create(vfs, mount_point, VNODE_DIR, root_node);
 	if (!vfs->root_vnode) {
@@ -730,6 +738,8 @@ static int devfs_fstype_mount(void *device, char *mount_point, void *mount_data,
 	}
 	vfs->root_vnode->node_data = root_node;
 	vfs->root_vnode->mode = root_node->mode;
+	vfs->root_vnode->uid = root_node->uid;
+	vfs->root_vnode->gid = root_node->gid;
 
 	memcpy(vfs->root_vnode->ops, &devfs_vnops, sizeof(struct vnode_ops));
 

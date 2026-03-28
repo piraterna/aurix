@@ -27,12 +27,76 @@
 #include <stddef.h>
 #include <lib/string.h>
 #include <debug/assert.h>
+#include <sys/sched.h>
+#include <user/access.h>
 
 struct vfs *vfs_list = NULL;
 static struct vfs_fstype *registered_fstypes = NULL;
 static uint16_t next_fstype_id = 1;
 
 #define MAX_SYMLINK_DEPTH 8
+
+static void vfs_current_creds(uid_t *uid, gid_t *gid)
+{
+	tcb *current = thread_current();
+	if (current && !current->user) {
+		*uid = 0;
+		*gid = 0;
+		return;
+	}
+	if (current && current->process) {
+		*uid = current->process->euid;
+		*gid = current->process->egid;
+		return;
+	}
+
+	*uid = 0;
+	*gid = 0;
+}
+
+int vfs_check_access(struct vnode *vnode, int mask)
+{
+	if (!vnode)
+		return -1;
+
+	uid_t uid = 0;
+	gid_t gid = 0;
+	vfs_current_creds(&uid, &gid);
+
+	if (uid == 0)
+		return 0;
+
+	int allowed = 0;
+	mode_t mode = vnode->mode;
+
+	if (uid == vnode->uid) {
+		if (mode & S_IRUSR)
+			allowed |= R_OK;
+		if (mode & S_IWUSR)
+			allowed |= W_OK;
+		if (mode & S_IXUSR)
+			allowed |= X_OK;
+	} else if (gid == vnode->gid) {
+		if (mode & S_IRGRP)
+			allowed |= R_OK;
+		if (mode & S_IWGRP)
+			allowed |= W_OK;
+		if (mode & S_IXGRP)
+			allowed |= X_OK;
+	} else {
+		if (mode & S_IROTH)
+			allowed |= R_OK;
+		if (mode & S_IWOTH)
+			allowed |= W_OK;
+		if (mode & S_IXOTH)
+			allowed |= X_OK;
+	}
+
+	if ((mask & ~allowed) != 0)
+		return -1;
+
+	return 0;
+}
 
 int vfs_register_fstype(struct vfs_fstype *fstype)
 {
@@ -275,15 +339,20 @@ void vnode_unref(struct vnode *vnode)
 	if (!vnode)
 		return;
 
-	vnode->refcount--;
-
-	if (vnode->refcount == 0) {
-		if (vnode->path)
-			kfree(vnode->path);
-		if (vnode->ops)
-			kfree(vnode->ops);
-		kfree(vnode);
+	spinlock_acquire(&vnode->vnode_lock);
+	if (vnode->refcount > 0)
+		vnode->refcount--;
+	if (vnode->refcount != 0) {
+		spinlock_release(&vnode->vnode_lock);
+		return;
 	}
+	spinlock_release(&vnode->vnode_lock);
+
+	if (vnode->path)
+		kfree(vnode->path);
+	if (vnode->ops)
+		kfree(vnode->ops);
+	kfree(vnode);
 }
 
 int vfs_resolve_mount(const char *path, struct vfs **out, char **remaining_path)
@@ -530,7 +599,11 @@ static int vfs_lookup_internal(const char *path, struct vnode **out, int depth,
 			return -1;
 		}
 
-		// TODO: perms
+		if (vfs_check_access(current, X_OK) != 0) {
+			vnode_unref(current);
+			kfree(rel_path);
+			return -1;
+		}
 
 		if (!current->ops || !current->ops->lookup) {
 			vnode_unref(current);
@@ -582,6 +655,11 @@ static int vfs_lookup_internal(const char *path, struct vnode **out, int depth,
 int vfs_lookup(const char *path, struct vnode **out)
 {
 	return vfs_lookup_internal(path, out, 0, true);
+}
+
+int vfs_lookup_nofollow(const char *path, struct vnode **out)
+{
+	return vfs_lookup_internal(path, out, 0, false);
 }
 
 int vfs_lookup_parent(const char *path, struct vnode **parent, char **filename)
@@ -637,6 +715,12 @@ int vfs_create(const char *path, mode_t mode)
 		return ret;
 
 	if (!parent->ops || !parent->ops->create) {
+		vnode_unref(parent);
+		kfree(fname);
+		return -1;
+	}
+
+	if (vfs_check_access(parent, W_OK | X_OK) != 0) {
 		vnode_unref(parent);
 		kfree(fname);
 		return -1;
@@ -700,7 +784,6 @@ int vfs_open(const char *path, int flags, struct fileio **out)
 		vnode_unref(vnode);
 		return -1;
 	}
-
 	ret = vnode->ops->open(&vnode, flags, false, &fio);
 	if (ret != 0) {
 		kfree(fio);
@@ -808,6 +891,12 @@ int vfs_mkdir(const char *path, int mode)
 		return -1;
 	}
 
+	if (vfs_check_access(parent, W_OK | X_OK) != 0) {
+		vnode_unref(parent);
+		kfree(dirname);
+		return -1;
+	}
+
 	// TODO: perms
 
 	ret = parent->ops->mkdir(parent, dirname, mode);
@@ -835,6 +924,12 @@ int vfs_rmdir(const char *path)
 		return -1;
 	}
 
+	if (vfs_check_access(parent, W_OK | X_OK) != 0) {
+		vnode_unref(parent);
+		kfree(dirname);
+		return -1;
+	}
+
 	// TODO: perms
 
 	ret = parent->ops->rmdir(parent, dirname);
@@ -857,6 +952,12 @@ int vfs_remove(const char *path)
 		return ret;
 
 	if (!parent->ops || !parent->ops->remove) {
+		vnode_unref(parent);
+		kfree(filename);
+		return -1;
+	}
+
+	if (vfs_check_access(parent, W_OK | X_OK) != 0) {
 		vnode_unref(parent);
 		kfree(filename);
 		return -1;
@@ -910,6 +1011,12 @@ int vfs_symlink(const char *target, const char *linkpath)
 		return ret;
 
 	if (!parent->ops || !parent->ops->symlink) {
+		vnode_unref(parent);
+		kfree(linkname);
+		return -1;
+	}
+
+	if (vfs_check_access(parent, W_OK | X_OK) != 0) {
 		vnode_unref(parent);
 		kfree(linkname);
 		return -1;

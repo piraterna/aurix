@@ -49,7 +49,7 @@
 #include <fs/cpio/newc.h>
 #include <loader/elf.h>
 #include <user/syscall.h>
-#include <dev/builtin/stdio.h>
+#include <dev/builtin/builtin.h>
 #include <util/kprintf.h>
 #include <lib/align.h>
 
@@ -317,7 +317,7 @@ void _start(struct aurix_parameters *params)
 		kpanic(NULL, "Failed to initialize devfs");
 
 	driver_core_init(devfs);
-	stdio_init();
+	builtin_dev_init(builtin_dev_list, builtin_dev_count);
 	cpu_init_mp();
 	syscall_builtin_init();
 	sched_init();

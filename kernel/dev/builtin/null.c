@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  syscall.c */
+/* Module Name:  null.c */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,46 +17,64 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <user/syscall.h>
-#include <debug/log.h>
-#include <sys/errno.h>
-#include <arch/cpu/cpu.h>
+#include <dev/builtin/null.h>
+#include <dev/driver.h>
 
-syscall_entry_t syscall_table[MAX_SYSCALLS] = { 0 };
-
-int register_syscall(uint32_t id, syscall_handler_t handler, const char *name)
+static int null_read(struct device *dev, void *buf, size_t len, size_t offset)
 {
-	if (id >= MAX_SYSCALLS || !handler) {
-		error("Failed to register syscall with invalid ID %u\n", id);
-		return -1;
-	}
-	syscall_table[id].handler = handler;
-	syscall_table[id].valid = 1;
-	syscall_table[id].name = name;
+	(void)dev;
+	(void)buf;
+	(void)len;
+	(void)offset;
+
 	return 0;
 }
 
-int unregister_syscall(uint32_t id)
+static int null_write(struct device *dev, const void *buf, size_t len,
+					  size_t offset)
 {
-	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
-		error("Failed to unregister syscall with invalid ID %u\n", id);
-		return -1;
-	}
-	syscall_table[id].handler = NULL;
-	syscall_table[id].valid = 0;
-	return 0;
+	(void)dev;
+	(void)buf;
+	(void)offset;
+
+	return (int)len;
 }
 
-int64_t syscall_dispatch(uint32_t id, const syscall_args_t *args)
+static int null_ioctl(struct device *dev, uint64_t cmd, void *arg)
 {
-	cpu_disable_interrupts();
-	if (id >= MAX_SYSCALLS || !syscall_table[id].valid) {
-		trace("Unknown syscall: %u\n", id);
-		cpu_enable_interrupts();
-		return -ENOSYS;
-	}
+	(void)dev;
+	(void)cmd;
+	(void)arg;
 
-	int64_t r = syscall_table[id].handler(args);
-	cpu_enable_interrupts();
-	return r;
+	return -1;
+}
+
+static int null_poll(struct device *dev)
+{
+	(void)dev;
+	return 1;
+}
+
+static struct device_ops null_ops = {
+	.open = NULL,
+	.close = NULL,
+	.read = null_read,
+	.write = null_write,
+	.ioctl = null_ioctl,
+	.poll = null_poll,
+};
+
+static struct device null_dev = {
+	.name = "null",
+	.class_name = "misc",
+	.dev_node_path = "null",
+	.driver_data = NULL,
+	.bound_driver = NULL,
+	.ops = &null_ops,
+	.next = NULL,
+};
+
+void null_init(void)
+{
+	device_register(&null_dev);
 }

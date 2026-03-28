@@ -41,6 +41,8 @@ struct ramfs_node {
 	void *data;
 
 	int mode;
+	uid_t uid;
+	gid_t gid;
 
 	struct ramfs_node *sibling;
 	struct ramfs_node *child;

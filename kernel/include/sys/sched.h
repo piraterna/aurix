@@ -75,6 +75,10 @@ typedef struct pcb {
 	const char *name;
 	char *cwd;
 	mode_t umask;
+	uid_t uid;
+	gid_t gid;
+	uid_t euid;
+	gid_t egid;
 	uint32_t parent_pid;
 	int exit_code;
 	bool exited;

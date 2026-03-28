@@ -40,6 +40,8 @@ struct devfs_node {
 	struct device *device;
 
 	mode_t mode;
+	uid_t uid;
+	gid_t gid;
 
 	struct devfs_node *sibling;
 	struct devfs_node *child;

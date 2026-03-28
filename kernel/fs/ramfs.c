@@ -26,6 +26,25 @@
 #include <util/kprintf.h>
 #include <mm/heap.h>
 #include <user/access.h>
+#include <sys/sched.h>
+
+static void ramfs_current_creds(uid_t *uid, gid_t *gid)
+{
+	tcb *current = thread_current();
+	if (current && !current->user) {
+		*uid = 0;
+		*gid = 0;
+		return;
+	}
+	if (current && current->process) {
+		*uid = current->process->euid;
+		*gid = current->process->egid;
+		return;
+	}
+
+	*uid = 0;
+	*gid = 0;
+}
 
 struct ramfs *ramfs_create_fs()
 {
@@ -39,6 +58,8 @@ struct ramfs_node *ramfs_create_node(enum ramfs_ftype ftype)
 	struct ramfs_node *node = kmalloc(sizeof(struct ramfs_node));
 	memset(node, 0, sizeof(struct ramfs_node));
 	node->type = ftype;
+	node->uid = 0;
+	node->gid = 0;
 
 	switch (ftype) {
 	case RAMFS_DIRECTORY:
@@ -90,7 +111,6 @@ int ramfs_find_node(struct ramfs *ramfs, char *path, struct ramfs_node **out)
 	while (dir) {
 		struct ramfs_node *child = cur_node->child;
 		struct ramfs_node *match = NULL;
-
 		while (child) {
 			if (strcmp(child->name, dir) == 0) {
 				match = child;
@@ -152,6 +172,7 @@ int ramfs_node_add(struct ramfs *ramfs, char *path, struct ramfs_node **out)
 				// finally, create the entry
 				struct ramfs_node *n = ramfs_create_node(rt);
 				n->name = strdup(dir);
+				ramfs_current_creds(&n->uid, &n->gid);
 				continue;
 			}
 
@@ -174,6 +195,7 @@ int ramfs_node_add(struct ramfs *ramfs, char *path, struct ramfs_node **out)
 			if (!cur_node->child) {
 				struct ramfs_node *n = ramfs_create_node(rt);
 				n->name = strdup(temp);
+				ramfs_current_creds(&n->uid, &n->gid);
 				ramfs_append_child(cur_node, n);
 			}
 
@@ -338,39 +360,9 @@ int ramfs_open(struct vnode **vnode_r, int flags, bool clone,
 		}
 	}
 
-	// this is the RAMFS node to be attached to the vnode
-	struct ramfs_node *v_ramfs_node = kmalloc(sizeof(struct ramfs_node));
-	memcpy(v_ramfs_node, ramfs_node, sizeof(struct ramfs_node));
-
-	// 2. create a buffer for the file (do not use the original file buffer)
-
-	if (v_ramfs_node->type == RAMFS_DIRECTORY) {
-		v_ramfs_node->size = 0;
-		v_ramfs_node->data = NULL;
-		v_ramfs_node->child = ramfs_node->child;
-		v_ramfs_node->sibling = ramfs_node->sibling;
-		kfree(v_ramfs_node);
-		vnode->node_data = ramfs_node;
-	} else {
-		v_ramfs_node->size = ramfs_get_node_size(ramfs_node);
-		if (v_ramfs_node->size == 0) {
-			v_ramfs_node->data = NULL;
-		} else {
-			v_ramfs_node->data = kmalloc(v_ramfs_node->size);
-			if (!v_ramfs_node->data)
-				return -1;
-			if (v_ramfs_node->type == RAMFS_SYMLINK) {
-				memcpy(v_ramfs_node->data, ramfs_node->data,
-					   v_ramfs_node->size);
-			} else {
-				memcpy(v_ramfs_node->data, ramfs_node->data,
-					   v_ramfs_node->size);
-			}
-		}
-		v_ramfs_node->child = NULL;
-		v_ramfs_node->sibling = NULL;
-		vnode->node_data = v_ramfs_node;
-	}
+	// attach the RAMFS node directly to avoid large heap copies
+	struct ramfs_node *v_ramfs_node = ramfs_node;
+	vnode->node_data = ramfs_node;
 
 	struct fileio *fio = *fio_out;
 	if (!fio || !fio_out) {
@@ -378,7 +370,7 @@ int ramfs_open(struct vnode **vnode_r, int flags, bool clone,
 	}
 
 	fio->buf_start = v_ramfs_node->data;
-	fio->size = v_ramfs_node->size;
+	fio->size = ramfs_get_node_size(v_ramfs_node);
 	fio->private = vnode;
 
 	if (vnode->path && strcmp(vnode->path, "/sys/klog") == 0) {
@@ -487,6 +479,10 @@ int ramfs_close(struct vnode *vnode, int flags, bool clone)
 		return -1;
 	}
 
+	if (!(flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREATE | O_TRUNC))) {
+		return 0;
+	}
+
 	// we'll sync the new buffer
 
 	struct ramfs *ramfs = vnode->root_vfs->vfs_data;
@@ -503,13 +499,6 @@ int ramfs_close(struct vnode *vnode, int flags, bool clone)
 	}
 
 	if (ramfs_node_original == ramfs_node) {
-		return 0;
-	}
-
-	if (!(flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREATE | O_TRUNC))) {
-		if (ramfs_node->data && ramfs_node->data != ramfs_node_original->data)
-			kfree(ramfs_node->data);
-		kfree(vnode->node_data);
 		return 0;
 	}
 
@@ -594,15 +583,14 @@ int ramfs_lookup(struct vnode *parent, const char *name, struct vnode **out)
 			struct vnode *child_vnode =
 				vnode_create(parent->root_vfs, child_path, vtype, child);
 			child_vnode->mode = child->mode;
-			child_vnode->uid = 0;
-			child_vnode->gid = 0;
+			child_vnode->uid = child->uid;
+			child_vnode->gid = child->gid;
 			memcpy(child_vnode->ops, parent->ops, sizeof(struct vnode_ops));
 
 			*out = child_vnode;
 			return 0;
 		}
 	}
-
 	return -1;
 }
 
@@ -726,6 +714,7 @@ int ramfs_mkdir(struct vnode *parent, const char *name, int mode)
 	struct ramfs_node *new_dir = ramfs_create_node(RAMFS_DIRECTORY);
 	new_dir->name = strdup(name);
 	new_dir->mode = S_IFDIR | (mode & 0777);
+	ramfs_current_creds(&new_dir->uid, &new_dir->gid);
 
 	ramfs_append_child(parent_node, new_dir);
 	return 0;
@@ -816,6 +805,7 @@ int ramfs_create(struct vnode *parent, const char *name, mode_t mode,
 	new_file->size = 0;
 	new_file->data = NULL;
 	new_file->mode = S_IFREG | mode;
+	ramfs_current_creds(&new_file->uid, &new_file->gid);
 
 	ramfs_append_child(parent_node, new_file);
 
@@ -832,9 +822,8 @@ int ramfs_create(struct vnode *parent, const char *name, mode_t mode,
 		vnode_create(parent->root_vfs, file_path, VNODE_REGULAR, new_file);
 	memcpy(file_vnode->ops, parent->ops, sizeof(struct vnode_ops));
 	file_vnode->mode = new_file->mode;
-
-	file_vnode->uid = 0;
-	file_vnode->gid = 0;
+	file_vnode->uid = new_file->uid;
+	file_vnode->gid = new_file->gid;
 
 	*out = file_vnode;
 	return 0;
@@ -919,6 +908,7 @@ int ramfs_symlink(struct vnode *parent, const char *name, const char *target)
 	new_link->name = strdup(name);
 	new_link->size = strlen(target) + 1;
 	new_link->data = strdup(target);
+	ramfs_current_creds(&new_link->uid, &new_link->gid);
 
 	ramfs_append_child(parent_node, new_link);
 	return 0;
@@ -944,8 +934,8 @@ int ramfs_getattr(struct vnode *vnode, struct stat *st)
 	st->st_ino = (uint64_t)ramfs_node;
 	st->st_nlink = 1;
 	st->st_mode = ramfs_node->mode;
-	st->st_uid = vnode->uid;
-	st->st_gid = vnode->gid;
+	st->st_uid = ramfs_node->uid;
+	st->st_gid = ramfs_node->gid;
 	st->st_rdev = 0;
 	st->st_size = node_size;
 	st->st_blksize = 4096;
@@ -967,8 +957,10 @@ int ramfs_setattr(struct vnode *vnode, struct stat *st)
 	}
 
 	ramfs_node->mode = st->st_mode;
-	vnode->uid = st->st_uid;
-	vnode->gid = st->st_gid;
+	ramfs_node->uid = st->st_uid;
+	ramfs_node->gid = st->st_gid;
+	vnode->uid = ramfs_node->uid;
+	vnode->gid = ramfs_node->gid;
 
 	return 0;
 }
@@ -1073,11 +1065,15 @@ static int ramfs_fstype_mount(void *device, char *mount_point, void *mount_data,
 		ramfs = ramfs_create_fs();
 		ramfs->root_node = ramfs_create_node(RAMFS_DIRECTORY);
 		ramfs->root_node->name = strdup("/");
+		ramfs->root_node->uid = 0;
+		ramfs->root_node->gid = 0;
 	}
 
 	if (!ramfs->root_node) {
 		ramfs->root_node = ramfs_create_node(RAMFS_DIRECTORY);
 		ramfs->root_node->name = strdup("/");
+		ramfs->root_node->uid = 0;
+		ramfs->root_node->gid = 0;
 	}
 
 	struct vfs_fstype fstype;
@@ -1101,8 +1097,8 @@ static int ramfs_fstype_mount(void *device, char *mount_point, void *mount_data,
 
 	memcpy(vfs->root_vnode->ops, &ramfs_vnops, sizeof(struct vnode_ops));
 	vfs->root_vnode->mode = ramfs->root_node->mode;
-	vfs->root_vnode->uid = 0;
-	vfs->root_vnode->gid = 0;
+	vfs->root_vnode->uid = ramfs->root_node->uid;
+	vfs->root_vnode->gid = ramfs->root_node->gid;
 	*out = vfs;
 	return 0;
 }

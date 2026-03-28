@@ -300,6 +300,11 @@ void sched_init(void)
 		kernel_proc.next_tid = 0;
 		spinlock_init(&kernel_proc.fd_lock);
 		memset(kernel_proc.fds, 0, sizeof(kernel_proc.fds));
+		kernel_proc.umask = 0022;
+		kernel_proc.uid = 0;
+		kernel_proc.gid = 0;
+		kernel_proc.euid = 0;
+		kernel_proc.egid = 0;
 		kernel_proc_inited = 1;
 	}
 
@@ -361,6 +366,10 @@ pcb *proc_create(void)
 	memset(proc->fds, 0, sizeof(proc->fds));
 	proc->cwd = strdup("/");
 	proc->umask = 0022;
+	proc->uid = 0;
+	proc->gid = 0;
+	proc->euid = 0;
+	proc->egid = 0;
 	proc->parent_pid = 0;
 	proc->exit_code = 0;
 	proc->exited = false;

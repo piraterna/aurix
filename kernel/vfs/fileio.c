@@ -73,6 +73,30 @@ struct fileio *open(const char *path, int flags, mode_t mode)
 		return NULL;
 	}
 
+	struct vnode *vn = f ? (struct vnode *)f->private : NULL;
+	if (vn) {
+		int acc = 0;
+		switch (flags & O_ACCMODE) {
+		case O_WRONLY:
+			acc = W_OK;
+			break;
+		case O_RDWR:
+			acc = R_OK | W_OK;
+			break;
+		default:
+			acc = R_OK;
+			break;
+		}
+
+		if (vn->vtype == VNODE_DIR)
+			acc |= X_OK;
+
+		if (vfs_check_access(vn, acc) != 0) {
+			close(f);
+			return NULL;
+		}
+	}
+
 	f->offset = 0;
 	f->flags = flags |= f->flags;
 
@@ -167,7 +191,6 @@ int close(struct fileio *file)
 	if (vfs_close(vn, file->flags, false) != 0) {
 		return -EIO;
 	}
-
 	kfree(file);
 	return 0;
 }
