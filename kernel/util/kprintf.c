@@ -44,6 +44,8 @@
 
 #include <arch/cpu/cpu.h>
 
+#include <platform/debug/uart.h>
+
 int32_t _fltused = 0;
 int32_t __eqdf2 = 0;
 int32_t __ltdf2 = 0;
@@ -134,7 +136,7 @@ int kprintf(const char *fmt, ...)
 
 	if (length >= 0 && length < (int)sizeof(buffer)) {
 		klog_append_locked(buffer, (size_t)length);
-		serial_sendstr(buffer);
+		serial_sendbuf(buffer, (size_t)length);
 		if (ft_ctx)
 			flanterm_write(ft_ctx, (char *)buffer, length);
 	}
@@ -182,7 +184,7 @@ int serial_kprintf(const char *fmt, ...)
 	int length = npf_vsnprintf(buffer, sizeof(buffer), fmt, args);
 
 	if (length >= 0 && length < (int)sizeof(buffer)) {
-		serial_sendstr(buffer);
+		port_sendstr(COM1, buffer);
 	}
 
 	va_end(args);

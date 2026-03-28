@@ -24,10 +24,14 @@
 #define _DEBUG_SERIAL_H
 
 #include <platform/debug/uart.h>
+#include <stddef.h>
+#include <stdint.h>
 
 void serial_init(void);
 
 void serial_send(char c);
+void serial_sendbuf(const char *buf, size_t len);
 void serial_sendstr(char *s);
+void port_sendstr(uint16_t port, char *s);
 
 #endif /* _DEBUG_SERIAL_H */

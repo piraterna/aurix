@@ -32,6 +32,12 @@ void serial_send(char c)
 {
 }
 
+void serial_sendbuf(const char *buf, size_t len)
+{
+	(void)buf;
+	(void)len;
+}
+
 void serial_sendstr(char *s)
 {
 }
