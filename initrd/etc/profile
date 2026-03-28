@@ -1,19 +1,2 @@
-PATH="/usr/local/sbin:/usr/local/bin:/usr/bin${PATH:+:$PATH}"
-export PATH
-
-if [ -d /etc/profile.d ]; then
-    for f in /etc/profile.d/*.sh; do
-        [ -r "$f" ] && . "$f"
-    done
-    unset f
-fi
-
-unset GLOBSORT
-
-C0='\[\e[0m\]'
-C1='\[\e[94m\]'
-C2='\[\e[95m\]'
-C3='\[\e[96m\]'
-
-PS1="${C1}\u${C0}${C2}@\h${C0}:${C3}\w${C0}${C2}>${C0} "
-export PS1
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/bin${PATH:+:$PATH}"
+export PS1="[\u@\h \W]\$ "
