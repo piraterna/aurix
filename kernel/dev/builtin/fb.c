@@ -29,12 +29,12 @@
 #include <stdint.h>
 #include <aurix.h>
 
-int fb_write(struct device *dev, const void *buf, size_t len,
-				 size_t offset);
+int fb_write(struct device *dev, const void *buf, size_t len, size_t offset);
 int fb_read(struct device *dev, void *buf, size_t len, size_t offset);
 int fb_ioctl(struct device *dev, uint64_t cmd, void *arg);
 
 uintptr_t framebuf_addr = 0;
+size_t framebuf_size = 0;
 
 struct device_ops fb_ops = {
 	.open = NULL,
@@ -58,7 +58,15 @@ struct device fb_dev = {
 int fb_write(struct device *dev, const void *buf, size_t len, size_t offset)
 {
 	(void)dev;
-	memcpy((void *)((uint8_t *)framebuf_addr + offset), buf, len * 4);
+	if (!buf)
+		return -1;
+	if (offset >= framebuf_size)
+		return 0;
+
+	if (len > (framebuf_size - offset))
+		len = framebuf_size - offset;
+
+	memcpy((void *)((uint8_t *)framebuf_addr + offset), buf, len);
 	return (int)len;
 }
 
@@ -69,6 +77,11 @@ int fb_read(struct device *dev, void *buf, size_t len, size_t offset)
 		return -1;
 	if (len == 0)
 		return 0;
+	if (offset >= framebuf_size)
+		return 0;
+
+	if (len > (framebuf_size - offset))
+		len = framebuf_size - offset;
 
 	memcpy(buf, (void *)((uint8_t *)framebuf_addr + offset), len);
 
@@ -87,6 +100,8 @@ int fb_ioctl(struct device *dev, uint64_t cmd, void *arg)
 void fb_init()
 {
 	framebuf_addr = boot_params->framebuffer.addr;
+	framebuf_size = (size_t)boot_params->framebuffer.pitch *
+					(size_t)boot_params->framebuffer.height;
 	if (framebuf_addr == 0) {
 		error("fb: address is null!\n");
 		return;
