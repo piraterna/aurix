@@ -106,12 +106,6 @@ export APPS_DIR ?= $(ROOT_DIR)/src
 
 export NOUEFI ?= n
 
-ifeq ($(CONFIG_USE_HOSTTOOLCHAIN),y)
-export USE_HOST_TOOLCHAIN := y
-else
-export USE_HOST_TOOLCHAIN := n
-endif
-
 ##
 # Image generation and running
 #
