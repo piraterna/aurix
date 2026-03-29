@@ -17,6 +17,8 @@
 ## SOFTWARE.                                                                     ##
 ###################################################################################
 
+MAKEFLAGS += --quiet
+
 .DEFAULT_GOAL := all
 
 GITREV := $(shell git rev-parse --short HEAD)
