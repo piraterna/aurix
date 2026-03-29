@@ -55,9 +55,9 @@ index ccff928..148be5b 100644
  	eelf_mipsel_haiku.c \
  	eelf_x86_64.c \
 +	eelf_x86_64_aurix.c \
- 	eelf_x86_64_cloudabi.c \
  	eelf_x86_64_fbsd.c \
  	eelf_x86_64_haiku.c \
+	eelf_x86_64_sol2.c \
 diff --git binutils-clean/ld/Makefile.in binutils-workdir/ld/Makefile.in
 index 3e24bd4..869875f 100644
 --- binutils-clean/ld/Makefile.in
@@ -83,9 +83,9 @@ index 3e24bd4..869875f 100644
  	eelf_mipsel_haiku.c \
  	eelf_x86_64.c \
 +	eelf_x86_64_aurix.c \
- 	eelf_x86_64_cloudabi.c \
  	eelf_x86_64_fbsd.c \
  	eelf_x86_64_haiku.c \
+	eelf_x86_64_sol2.c \
 @@ -1476,6 +1479,7 @@ distclean-compile:
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64tilegx.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64tilegx_be.Po@am__quote@
@@ -99,9 +99,9 @@ index 3e24bd4..869875f 100644
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_s390.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64.Po@am__quote@
 +@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_aurix.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_cloudabi.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_fbsd.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_haiku.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_sol2.Po@am__quote@
 diff --git binutils-clean/ld/configure.tgt binutils-workdir/ld/configure.tgt
 index ea01ccf..3bcd521 100644
 --- binutils-clean/ld/configure.tgt

@@ -10,7 +10,7 @@ PATCH_DIR="$(pwd)/patches"
 
 GNU_MIRROR="https://ftp.sunet.se/mirror/gnu.org/gnu"
 
-BINUTILS_VER="2.45.1"
+BINUTILS_VER="2.46.0"
 BINUTILS_ARCHIVE="binutils-${BINUTILS_VER}.tar.xz"
 BINUTILS_DIR="binutils-${BINUTILS_VER}"
 BINUTILS_URL="${GNU_MIRROR}/binutils/${BINUTILS_ARCHIVE}"
@@ -143,6 +143,8 @@ extract_if_missing "$GCC_ARCHIVE" "$GCC_DIR"
 apply_patch_if_needed "$GCC_DIR" "$GCC_PATCH" ".patched-gcc"
 
 pushd "$GCC_DIR" >/dev/null
+
+./contrib/download_prerequisites
 
 mkdir -p build
 pushd build >/dev/null
