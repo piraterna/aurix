@@ -40,6 +40,7 @@ export ARCH ?= x86_64
 export PLATFORM ?= generic-pc
 export BUILD_TYPE ?= debug
 
+
 ##
 # Docker build wrapper
 #
@@ -67,6 +68,11 @@ export DOCKER ?= docker
 export ROOT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 ROOT_DIR_NOSLASH := $(patsubst %/,%,$(ROOT_DIR))
+
+export TOOLCHAIN_DIR ?= $(ROOT_DIR)/libc/toolchain/usr/bin
+ifneq (,$(wildcard $(TOOLCHAIN_DIR)/$(ARCH)-aurix-gcc))
+export PATH := $(TOOLCHAIN_DIR):$(PATH)
+endif
 
 define _docker_ensure_image
 	@command -v $(DOCKER) >/dev/null 2>&1 || (printf "Docker not found. Install docker or set DOCKER=podman.\n" && exit 127)
