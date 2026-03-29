@@ -52,6 +52,8 @@
 static void elf64_apply_relocations_ex(Elf64_Ehdr *header, uintptr_t phys_base,
 									   uintptr_t load_base,
 									   uintptr_t link_base);
+static bool elf_check_needed_libs(char *data, const char *const *envp,
+								  size_t envp_count);
 
 uintptr_t elf32_load(char *data, uintptr_t *addr, size_t *size,
 					 pagetable *pagemap)
@@ -874,6 +876,7 @@ static bool elf_build_user_stack(struct pcb *proc, const char *exec_path,
 }
 
 static bool elf_load_interpreter(struct pcb *proc, const char *path,
+								 const char *const *envp, size_t envp_count,
 								 uintptr_t *entry_out, uintptr_t *base_out)
 {
 	if (!proc || !path || !entry_out || !base_out)
@@ -903,6 +906,11 @@ static bool elf_load_interpreter(struct pcb *proc, const char *path,
 	}
 
 	close(f);
+
+	if (!elf_check_needed_libs(buf, envp, envp_count)) {
+		kfree(buf);
+		return false;
+	}
 
 	uintptr_t link_base = 0;
 	size_t exec_size = 0;
@@ -937,6 +945,198 @@ static bool elf_load_interpreter(struct pcb *proc, const char *path,
 	return true;
 }
 
+static bool elf_vaddr_to_segment(Elf64_Ehdr *ehdr, uint64_t vaddr,
+								 uint64_t *off_out, uint64_t *limit_out)
+{
+	if (!ehdr || !off_out || !limit_out || !ehdr->e_phoff || ehdr->e_phnum == 0)
+		return false;
+
+	Elf64_Phdr *phdrs = (Elf64_Phdr *)((uint8_t *)ehdr + ehdr->e_phoff);
+	for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
+		Elf64_Phdr *ph = &phdrs[i];
+		if (ph->p_type != PT_LOAD)
+			continue;
+		if (vaddr < ph->p_vaddr)
+			continue;
+		uint64_t delta = vaddr - ph->p_vaddr;
+		if (delta >= ph->p_filesz)
+			continue;
+		*off_out = ph->p_offset + delta;
+		*limit_out = ph->p_offset + ph->p_filesz;
+		return true;
+	}
+
+	return false;
+}
+
+static bool elf_vaddr_to_offset(Elf64_Ehdr *ehdr, uint64_t vaddr,
+								uint64_t *off_out)
+{
+	uint64_t limit = 0;
+	return elf_vaddr_to_segment(ehdr, vaddr, off_out, &limit);
+}
+
+static size_t elf_bounded_strlen(const char *s, size_t max)
+{
+	for (size_t i = 0; i < max; i++) {
+		if (s[i] == '\0')
+			return i;
+	}
+	return max;
+}
+
+static bool elf_try_open(const char *path)
+{
+	if (!path || !*path)
+		return false;
+
+	struct fileio *f = open(path, O_RDONLY, 0);
+	if (!f)
+		return false;
+
+	close(f);
+	return true;
+}
+
+static bool elf_find_library(const char *name, const char *const *envp,
+							 size_t envp_count)
+{
+	if (!name || !*name)
+		return false;
+
+	if (strchr(name, '/'))
+		return elf_try_open(name);
+
+	const char *ld_path = NULL;
+	for (size_t i = 0; i < envp_count; i++) {
+		const char *entry = envp[i];
+		if (!entry)
+			continue;
+		if (strncmp(entry, "LD_LIBRARY_PATH=", 16) == 0) {
+			ld_path = entry + 16;
+			break;
+		}
+	}
+
+	if (ld_path && *ld_path) {
+		const char *cursor = ld_path;
+		while (*cursor) {
+			const char *sep = strchr(cursor, ':');
+			size_t dir_len = sep ? (size_t)(sep - cursor) : strlen(cursor);
+			if (dir_len > 0) {
+				size_t total = dir_len + 1 + strlen(name) + 1;
+				char *candidate = (char *)kmalloc(total);
+				if (candidate) {
+					memcpy(candidate, cursor, dir_len);
+					candidate[dir_len] = '/';
+					strcpy(candidate + dir_len + 1, name);
+					if (elf_try_open(candidate)) {
+						kfree(candidate);
+						return true;
+					}
+					kfree(candidate);
+				}
+			}
+			if (!sep)
+				break;
+			cursor = sep + 1;
+		}
+	}
+
+	{
+		size_t total = strlen("/lib/") + strlen(name) + 1;
+		char *candidate = (char *)kmalloc(total);
+		if (candidate) {
+			strcpy(candidate, "/lib/");
+			strcat(candidate, name);
+			if (elf_try_open(candidate)) {
+				kfree(candidate);
+				return true;
+			}
+			kfree(candidate);
+		}
+	}
+
+	{
+		size_t total = strlen("/usr/lib/") + strlen(name) + 1;
+		char *candidate = (char *)kmalloc(total);
+		if (candidate) {
+			strcpy(candidate, "/usr/lib/");
+			strcat(candidate, name);
+			if (elf_try_open(candidate)) {
+				kfree(candidate);
+				return true;
+			}
+			kfree(candidate);
+		}
+	}
+
+	return false;
+}
+
+static bool elf_check_needed_libs(char *data, const char *const *envp,
+								  size_t envp_count)
+{
+	if (!data)
+		return false;
+
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)data;
+	if (!ehdr->e_phoff || ehdr->e_phnum == 0)
+		return true;
+
+	Elf64_Phdr *phdrs = (Elf64_Phdr *)((uint8_t *)data + ehdr->e_phoff);
+	Elf64_Phdr *dyn_ph = NULL;
+	for (uint16_t i = 0; i < ehdr->e_phnum; i++) {
+		if (phdrs[i].p_type == PT_DYNAMIC) {
+			dyn_ph = &phdrs[i];
+			break;
+		}
+	}
+	if (!dyn_ph || dyn_ph->p_filesz == 0)
+		return true;
+
+	Elf64_Dyn *dyn = (Elf64_Dyn *)(data + dyn_ph->p_offset);
+	size_t dyn_count = dyn_ph->p_filesz / sizeof(Elf64_Dyn);
+	uint64_t strtab_vaddr = 0;
+	uint64_t strtab_size = 0;
+	for (size_t i = 0; i < dyn_count; i++) {
+		if (dyn[i].d_tag == DT_STRTAB) {
+			strtab_vaddr = (uint64_t)dyn[i].d_un.d_ptr;
+		} else if (dyn[i].d_tag == DT_STRSZ) {
+			strtab_size = (uint64_t)dyn[i].d_un.d_val;
+			break;
+		}
+	}
+	if (!strtab_vaddr || strtab_size == 0)
+		return true;
+
+	uint64_t strtab_off = 0;
+	uint64_t strtab_limit = 0;
+	if (!elf_vaddr_to_segment(ehdr, strtab_vaddr, &strtab_off, &strtab_limit))
+		return true;
+	if (strtab_off + strtab_size > strtab_limit)
+		return true;
+
+	char *strtab = data + strtab_off;
+	for (size_t i = 0; i < dyn_count; i++) {
+		if (dyn[i].d_tag != DT_NEEDED)
+			continue;
+		uint64_t off = dyn[i].d_un.d_val;
+		if (off >= strtab_size)
+			return false;
+		const char *name = strtab + off;
+		size_t max = (size_t)(strtab_size - off);
+		if (elf_bounded_strlen(name, max) == max)
+			return false;
+		if (!elf_find_library(name, envp, envp_count)) {
+			error("missing shared library: %s\n", name);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
 						   const char *const *argv, size_t argv_count,
 						   const char *const *envp, size_t envp_count,
@@ -951,6 +1151,9 @@ bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
 		trace("ELF PT_INTERP: %s\n", interp_path);
 	else
 		trace("ELF PT_INTERP: none\n");
+
+	if (!elf_check_needed_libs(data, envp, envp_count))
+		return false;
 
 	uint64_t addr = 0;
 	size_t size = 0;
@@ -979,8 +1182,8 @@ bool elf_load_user_process(char *data, const char *path, struct pcb *proc,
 	uintptr_t interp_entry = 0;
 	uintptr_t interp_base = 0;
 	if (has_interp && interp_path && *interp_path) {
-		if (!elf_load_interpreter(proc, interp_path, &interp_entry,
-								  &interp_base)) {
+		if (!elf_load_interpreter(proc, interp_path, envp, envp_count,
+								  &interp_entry, &interp_base)) {
 			error("failed to load interpreter: %s\n", interp_path);
 			return false;
 		}
