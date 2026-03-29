@@ -40,17 +40,10 @@ DEFINES += __$(ARCH)__
 
 KERNEL_NASM := nasm
 
-ifeq ($(USE_HOST_TOOLCHAIN),y)
-KERNEL_AS      := gcc
-KERNEL_CC      := gcc
-KERNEL_LD      := ld
-KERNEL_OBJCOPY := objcopy
-else
-KERNEL_AS      := $(ARCH)-elf-gcc
-KERNEL_CC      := $(ARCH)-elf-gcc
-KERNEL_LD      := $(ARCH)-elf-ld
-KERNEL_OBJCOPY := $(ARCH)-elf-objcopy
-endif
+KERNEL_AS      := $(ARCH)-aurix-gcc
+KERNEL_CC      := $(ARCH)-aurix-gcc
+KERNEL_LD      := $(ARCH)-aurix-ld
+KERNEL_OBJCOPY := $(ARCH)-aurix-objcopy
 
 KERNEL_ASFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d)

@@ -34,19 +34,11 @@ ifeq ($(ARCH),x86_64)
 export MOD_CFLAGS += -mcmodel=large -mno-red-zone
 endif
 
-ifeq ($(USE_HOST_TOOLCHAIN),y)
-export MOD_AS := gcc
-export MOD_CC := gcc
-export MOD_LD := ld
-export MOD_AR := ar
-export MOD_OBJCOPY := objcopy
-else
-export MOD_AS := $(ARCH)-elf-gcc
-export MOD_CC := $(ARCH)-elf-gcc
-export MOD_LD := $(ARCH)-elf-ld
-export MOD_AR := $(ARCH)-elf-ar
-export MOD_OBJCOPY := $(ARCH)-elf-objcopy
-endif
+export MOD_AS := $(ARCH)-aurix-gcc
+export MOD_CC := $(ARCH)-aurix-gcc
+export MOD_LD := $(ARCH)-aurix-ld
+export MOD_AR := $(ARCH)-aurix-ar
+export MOD_OBJCOPY := $(ARCH)-aurix-objcopy
 
 ifeq ($(BUILD_TYPE),debug)
 export MOD_CFLAGS += -O0 -g3 -D_DEBUG
