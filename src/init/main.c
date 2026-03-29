@@ -59,6 +59,100 @@ static void load_modules(void)
 	}
 }
 
+static const char *resolve_shell(const struct passwd *pw)
+{
+	if (pw && pw->pw_shell && pw->pw_shell[0] != '\0') {
+		return pw->pw_shell;
+	}
+
+	return "/bin/sh";
+}
+
+static const char *resolve_home(const struct passwd *pw)
+{
+	if (pw && pw->pw_dir && pw->pw_dir[0] != '\0') {
+		return pw->pw_dir;
+	}
+
+	return "/";
+}
+
+static const char *resolve_user(const struct passwd *pw)
+{
+	if (pw && pw->pw_name && pw->pw_name[0] != '\0') {
+		return pw->pw_name;
+	}
+
+	return "root";
+}
+
+static void setup_shell_env(const struct passwd *pw, const char *shell,
+							const char *home, const char *user)
+{
+	char hostname[256];
+
+	if (setenv("HOME", home, 1) < 0)
+		printf("init: failed to set HOME: %s\n", strerror(errno));
+
+	if (setenv("USER", user, 1) < 0)
+		printf("init: failed to set USER: %s\n", strerror(errno));
+
+	if (setenv("LOGNAME", user, 1) < 0)
+		printf("init: failed to set LOGNAME: %s\n", strerror(errno));
+
+	if (setenv("SHELL", shell, 1) < 0)
+		printf("init: failed to set SHELL: %s\n", strerror(errno));
+
+	if (setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin", 0) < 0)
+		printf("init: failed to set PATH: %s\n", strerror(errno));
+
+	if (setenv("TERM", "flanterm", 0) < 0)
+		printf("init: failed to set TERM: %s\n", strerror(errno));
+
+	if (gethostname(hostname, sizeof(hostname) - 1) == 0) {
+		hostname[sizeof(hostname) - 1] = '\0';
+		if (hostname[0] != '\0' && setenv("HOSTNAME", hostname, 1) < 0)
+			printf("init: failed to set HOSTNAME: %s\n", strerror(errno));
+	}
+
+	if (pw == NULL)
+		printf("init: no passwd entry for uid %ld, using fallback defaults\n",
+			   (long)getuid());
+}
+
+static void exec_shell(const struct passwd *pw)
+{
+	const char *shell = resolve_shell(pw);
+	const char *home = resolve_home(pw);
+	const char *user = resolve_user(pw);
+	char *const argv[] = { (char *)shell, "-c",
+						   ". /etc/profile; exec \"$0\" -i",
+						   (char *)shell, NULL };
+	char *const fallback_argv[] = {
+		"/bin/sh", "-c", ". /etc/profile; exec \"$0\" -i",
+		"/bin/sh", NULL
+	};
+
+	setup_shell_env(pw, shell, home, user);
+
+	if (chdir(home) < 0) {
+		printf("init: failed to chdir to %s: %s\n", home, strerror(errno));
+		if (chdir("/") < 0)
+			printf("init: failed to chdir to /: %s\n", strerror(errno));
+	}
+
+	printf("init: launching %s\n", shell);
+	execv(shell, argv);
+
+	printf("init: execv %s failed: %s\n", shell, strerror(errno));
+
+	if (strcmp(shell, "/bin/sh") != 0) {
+		printf("init: falling back to /bin/sh\n");
+		execv("/bin/sh", fallback_argv);
+		printf("init: execv /bin/sh failed: %s\n", strerror(errno));
+	}
+}
+
 int main(void)
 {
 	printf("init: userspace starting\n");
@@ -66,22 +160,9 @@ int main(void)
 	load_modules();
 
 	printf("init: module load phase complete\n");
-	printf("init: launching /bin/sh\n");
 
 	struct passwd *pw = getpwuid(getuid());
-	if (pw && pw->pw_dir) {
-		chdir(pw->pw_dir);
-	}
-
-	char *const argv[] = { "/bin/sh", "-c", ". /etc/profile; exec /bin/sh -i",
-						   NULL };
-
-	char *const envp[] = { "PS1=\\$ ", "USER=unknown", "HOSTNAME=unknown",
-						   "TERM=flanterm", NULL };
-
-	execve("/bin/sh", argv, envp);
-
-	printf("init: execve /bin/sh failed: %s\n", strerror(errno));
+	exec_shell(pw);
 
 	return 1;
 }
