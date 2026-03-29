@@ -1,5 +1,5 @@
 /*********************************************************************************/
-/* Module Name:  builtin.c */
+/* Module Name:  fb.h */
 /* Project:      AurixOS */
 /*                                                                               */
 /* Copyright (c) 2024-2026 Jozef Nagy */
@@ -17,29 +17,9 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#include <dev/builtin/builtin.h>
-#include <dev/builtin/null.h>
-#include <dev/builtin/stdio.h>
-#include <dev/builtin/fb.h>
+#ifndef _DEV_BUILTIN_FB_H
+#define _DEV_BUILTIN_FB_H
 
-const struct builtin_dev_entry builtin_dev_list[] = {
-	{ .name = "stdio", .init = stdio_init },
-	{ .name = "null", .init = null_init },
-	{ .name = "fb", .init = fb_init },
-};
+void fb_init();
 
-const size_t builtin_dev_count =
-	sizeof(builtin_dev_list) / sizeof(builtin_dev_list[0]);
-
-void builtin_dev_init(const struct builtin_dev_entry *list, size_t count)
-{
-	if (!list || count == 0) {
-		return;
-	}
-
-	for (size_t i = 0; i < count; i++) {
-		if (list[i].init) {
-			list[i].init();
-		}
-	}
-}
+#endif // _DEV_BUILTIN_FB_H
