@@ -52,6 +52,7 @@ static void load_modules(void)
 					   strerror(errno));
 			} else {
 				printf("init: loaded module: %s\n", line);
+				usleep(100 * 1000);
 			}
 		}
 
@@ -66,22 +67,22 @@ int main(void)
 	load_modules();
 
 	printf("init: module load phase complete\n");
-	printf("init: launching /bin/sh\n");
+	printf("init: launching /bin/bash\n");
 
-	struct passwd *pw = getpwuid(getuid());
-	if (pw && pw->pw_dir) {
-		chdir(pw->pw_dir);
-	}
+	struct passwd *pw = getpwuid(0);
+	const char *home = (pw && pw->pw_dir) ? pw->pw_dir : "/";
+	chdir(home);
 
-	char *const argv[] = { "/bin/sh", "-c", ". /etc/profile; exec /bin/sh -i",
-						   NULL };
+	char *const argv[] = { "/bin/bash", "-li", NULL };
 
-	char *const envp[] = { "PS1=\\$ ", "USER=unknown", "HOSTNAME=unknown",
-						   "TERM=flanterm", NULL };
+	char *const envp[] = { "PS1=\\$ ",			 "USER=root",
+						   "HOSTNAME=unknown",	 "TERM=flanterm",
+						   "HOME=/root",		 "SHELL=/bin/bash",
+						   "PATH=/bin:/usr/bin", NULL };
 
-	execve("/bin/sh", argv, envp);
+	execve("/bin/bash", argv, envp);
 
-	printf("init: execve /bin/sh failed: %s\n", strerror(errno));
+	printf("init: execve /bin/bash failed: %s\n", strerror(errno));
 
 	return 1;
 }

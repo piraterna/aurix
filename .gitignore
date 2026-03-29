@@ -18,9 +18,8 @@ Brewfile.lock.json
 uefi_nvram.json
 .config*
 
-initrd/**/bin
 
-src/toybox/upstream/
+src/*/upstream/
 
 libc/mlibc-sysroot
 libc/toolchain
@@ -28,7 +27,13 @@ libc/toolchain
 binutils*/
 gcc*/
 
-binutils*.tar*
-gcc*.tar*
+*.tar*
+*.tar*
 
 kernel/include/config.h
+
+initrd/**/bin
+initrd/**/lib
+initrd/**/lib64
+initrd/**/include
+initrd/**/share

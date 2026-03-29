@@ -1,0 +1,11 @@
+--- a/support/config.sub
++++ b/support/config.sub
+@@ -1744,7 +1744,7 @@ case $os in
+ 	     | midipix* | mingw32* | mingw64* | mint* \
+ 	     | uxpv* | beos* | mpeix* | udk* | moxiebox* \
+ 	     | interix* | uwin* | mks* | rhapsody* | darwin* \
+-	     | openstep* | oskit* | conix* | pw32* | nonstopux* \
++	     | openstep* | oskit* | conix* | pw32* | nonstopux* | aurix* \
+ 	     | storm-chaos* | tops10* | tenex* | tops20* | its* \
+ 	     | os2* | vos* | palmos* | uclinux* | nucleus* | morphos* \
+ 	     | scout* | superux* | sysv* | rtmk* | tpf* | windiss* \
