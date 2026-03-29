@@ -37,7 +37,7 @@ char *smbios_get_str(void *addr, uint8_t index)
 
 size_t smbios_struct_len(struct smbios_hdr *hdr)
 {
-	size_t i;
+	size_t i = 0;
 	char *sp = (char *)hdr + hdr->len;
 
 	while (*sp != '\0' && *(sp - 1) != '\0') {

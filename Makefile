@@ -126,7 +126,41 @@ LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
 
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
-QEMU_FLAGS := -m 2G -smp 4 -rtc base=localtime -serial stdio
+HOST_OS := $(shell uname -s 2>/dev/null || printf "Unknown")
+
+ifeq ($(HOST_OS),Linux)
+QEMU_ACCEL_DEFAULT := kvm
+else ifeq ($(HOST_OS),Darwin)
+QEMU_ACCEL_DEFAULT := hvf
+else ifneq (,$(findstring MINGW,$(HOST_OS)))
+QEMU_ACCEL_DEFAULT := whpx
+else ifneq (,$(findstring MSYS,$(HOST_OS)))
+QEMU_ACCEL_DEFAULT := whpx
+else ifneq (,$(findstring CYGWIN,$(HOST_OS)))
+QEMU_ACCEL_DEFAULT := whpx
+else
+QEMU_ACCEL_DEFAULT := tcg,thread=multi,tb-size=1024
+endif
+
+QEMU_ACCEL ?= -accel $(QEMU_ACCEL_DEFAULT)
+QEMU_CPU ?= $(if $(filter tcg%,$(QEMU_ACCEL)),max,host)
+QEMU_SMP ?= 4
+QEMU_DEBUG ?= 1
+
+QEMU_FLAGS := -m 2G -smp $(QEMU_SMP) -rtc base=localtime $(QEMU_ACCEL)
+
+ifeq ($(QEMU_ACCELL),none)
+else ifeq($(QEMU_ACCEL),)
+QEMU_ACCEL :=
+else
+QEMU_FLAGS += -cpu $(QEMU_CPU)
+endif
+
+ifeq ($(QEMU_DEBUG),1)
+QEMU_FLAGS += -serial stdio
+else
+QEMU_FLAGS += -serial none
+endif
 
 #QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
