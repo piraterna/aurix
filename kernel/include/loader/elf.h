@@ -200,6 +200,22 @@ typedef struct {
 	Elf64_Xword st_size;
 } __attribute__((packed)) Elf64_Sym;
 
+///
+// Dynamic Table
+
+typedef struct {
+	Elf64_Sxword d_tag;
+	union {
+		Elf64_Xword d_val;
+		Elf64_Addr d_ptr;
+	} d_un;
+} __attribute__((packed)) Elf64_Dyn;
+
+#define DT_NULL 0
+#define DT_NEEDED 1
+#define DT_STRTAB 5
+#define DT_STRSZ 10
+
 typedef struct {
 	Elf64_Addr r_offset;
 	Elf64_Xword r_info;
