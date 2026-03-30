@@ -225,7 +225,8 @@ size_t fcntl(struct fileio *file, fcntl_cmd_t cmd, void *arg)
 		return file->flags;
 	case F_SETFL:
 		size_t flags = *(size_t *)arg;
-		file->flags |= (flags & (O_APPEND));
+		size_t settable = O_APPEND | O_NONBLOCK;
+		file->flags = (file->flags & ~settable) | (flags & settable);
 		break;
 	default:
 		break;

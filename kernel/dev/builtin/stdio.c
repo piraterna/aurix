@@ -22,11 +22,13 @@
 #include <dev/builtin/stdio.h>
 #include <dev/device.h>
 #include <dev/driver.h>
+#include <fs/devfs.h>
 #include <flanterm/flanterm.h>
 #include <lib/string.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/sched.h>
 #include <time/time.h>
 
 struct stdio_termios;
@@ -42,6 +44,7 @@ static size_t stdio_collect_serial_devs(struct device **out, size_t max,
 										bool need_read, bool need_write);
 static struct device *stdio_find_dev(const char *path);
 static int stdio_dev_has_data(struct device *dev);
+static bool stdin_fd_nonblocking(void);
 static char stdio_scancode_to_ascii(uint8_t sc, bool shift, bool caps_lock);
 
 static void stdin_rb_push(uint8_t ch);
@@ -324,6 +327,31 @@ static int stdio_dev_has_data(struct device *dev)
 	if (!dev->ops->poll)
 		return 1;
 	return dev->ops->poll(dev) != 0;
+}
+
+static bool stdin_fd_nonblocking(void)
+{
+	tcb *thr = thread_current();
+	pcb *proc = thr ? thr->process : NULL;
+	if (!proc)
+		return false;
+
+	bool nonblocking = false;
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *f = proc->fds[0];
+	if (f && (f->flags & O_NONBLOCK) && (f->flags & SPECIAL_FILE_TYPE_DEVICE)) {
+		struct vnode *vn = (struct vnode *)f->private;
+		struct devfs_node *node =
+			vn ? (struct devfs_node *)vn->node_data : NULL;
+		if (node && node->device && node->device->dev_node_path &&
+			strcmp(node->device->dev_node_path, "stdin") == 0) {
+			nonblocking = true;
+		}
+	}
+	spinlock_release(&proc->fd_lock);
+
+	return nonblocking;
 }
 
 static char stdio_scancode_to_ascii(uint8_t sc, bool shift, bool caps_lock)
@@ -684,6 +712,7 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 
 	char *out = buf;
 	size_t n = 0;
+	bool nonblocking = stdin_fd_nonblocking();
 
 	if (!(stdio_term.c_lflag & STDIO_ICANON)) {
 		uint8_t vmin = stdio_term.c_cc[STDIN_VMIN];
@@ -737,6 +766,9 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 			if (stdin_rb_count() > 0)
 				continue;
 
+			if (nonblocking)
+				return (int)n;
+
 			if (!did_work) {
 				sleep_ms(1);
 				idle_ms++;
@@ -780,6 +812,12 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 					}
 				}
 			}
+
+			if (stdin_rb_count() > 0 || stdin_line_eof_pending)
+				break;
+
+			if (nonblocking)
+				return 0;
 
 			if (!did_work)
 				sleep_ms(1);
