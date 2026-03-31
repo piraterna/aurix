@@ -352,6 +352,16 @@ menuconfig:
 	@$(MAKE) genconfig
 endif
 
+.PHONY: defconfig
+ifeq ($(DOCKER_BUILD),y)
+defconfig:
+	@$(call docker_make,defconfig)
+else
+defconfig:
+	@cp utils/arch/$(ARCH)/defconfig .config
+	@$(MAKE) genconfig
+endif
+
 .PHONY: format
 ifeq ($(DOCKER_BUILD),y)
 format:
