@@ -123,7 +123,6 @@ NVRAM_JSON := $(BUILD_DIR)/uefi_nvram.json
 LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
-
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
 HOST_OS := $(shell uname -s 2>/dev/null || printf "Unknown")
@@ -150,7 +149,8 @@ QEMU_DEBUG ?= 1
 QEMU_FLAGS := -m 2G -smp $(QEMU_SMP) -rtc base=localtime $(QEMU_ACCEL)
 
 ifeq ($(QEMU_ACCELL),none)
-else ifeq($(QEMU_ACCEL),)
+QEMU_ACCEL :=
+else ifeq ($(QEMU_ACCEL),)
 QEMU_ACCEL :=
 else
 QEMU_FLAGS += -cpu $(QEMU_CPU)
@@ -200,7 +200,7 @@ ifeq ($(DOCKER_BUILD),y)
 all:
 	@$(call docker_make,all)
 else
-all: genconfig boot kernel kmodules apps initrd
+all: genconfig boot kernel kmodules
 	@:
 endif
 
@@ -233,18 +233,8 @@ kmodules:
 	@$(MAKE) -C $(MODULE_DIR)
 endif
 
-.PHONY: apps
-ifeq ($(DOCKER_BUILD),y)
-apps:
-	@$(call docker_make,apps)
-else
-apps:
-	@printf ">>> Building apps...\n"
-	@$(MAKE) -C $(APPS_DIR)
-endif
-
 .PHONY: initrd
-initrd: apps __FORCE_initrd
+initrd: __FORCE_initrd
 	@printf ">>> Building initrd...\n"
 	@rm -rf $(BUILD_DIR)/initrd
 	@mkdir -p $(BUILD_DIR)/initrd
@@ -272,7 +262,7 @@ ifeq ($(DOCKER_BUILD),y)
 install:
 	@$(call docker_make,install)
 else
-install: boot kernel kmodules apps initrd
+install: boot kernel kmodules
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
 ifneq (,$(filter $(ARCH),i686 x86_64))
@@ -287,7 +277,6 @@ endif
 endif
 	@$(MAKE) -C kernel install
 	@$(MAKE) -C $(MODULE_DIR) install
-	@$(MAKE) -C $(APPS_DIR) install
 endif
 
 .PHONY: livecd
