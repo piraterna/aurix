@@ -69,11 +69,6 @@ export ROOT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 ROOT_DIR_NOSLASH := $(patsubst %/,%,$(ROOT_DIR))
 
-export TOOLCHAIN_DIR ?= $(ROOT_DIR)/libc/toolchain/usr/bin
-ifneq (,$(wildcard $(TOOLCHAIN_DIR)/$(ARCH)-aurix-gcc))
-export PATH := $(TOOLCHAIN_DIR):$(PATH)
-endif
-
 define _docker_ensure_image
 	@command -v $(DOCKER) >/dev/null 2>&1 || (printf "Docker not found. Install docker or set DOCKER=podman.\n" && exit 127)
 	@$(DOCKER) image inspect $(DOCKER_IMAGE) >/dev/null 2>&1 || $(DOCKER) build -t $(DOCKER_IMAGE) .
@@ -106,9 +101,7 @@ endef
 export BUILD_DIR ?= $(ROOT_DIR)/build
 export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
 export RELEASE_DIR ?= $(ROOT_DIR)/release
-export INITRD_DIR ?= $(ROOT_DIR)/initrd
 export MODULE_DIR ?= $(ROOT_DIR)/modules
-export APPS_DIR ?= $(ROOT_DIR)/src
 
 export NOUEFI ?= n
 
@@ -233,30 +226,6 @@ kmodules:
 	@$(MAKE) -C $(MODULE_DIR)
 endif
 
-.PHONY: initrd
-initrd: __FORCE_initrd
-	@printf ">>> Building initrd...\n"
-	@rm -rf $(BUILD_DIR)/initrd
-	@mkdir -p $(BUILD_DIR)/initrd
-	@cp -r $(INITRD_DIR)/* $(BUILD_DIR)/initrd/
-
-	@$(MAKE) -C $(APPS_DIR) install APP_INSTALL_DIR=$(BUILD_DIR)/initrd/bin
-	@mkdir -p $(BUILD_DIR)/initrd/usr/lib
-	@cp -a $(SYSROOT_DIR)/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
-	@cp -a $(ROOT_DIR)/libc/mlibc-sysroot/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
-	@mkdir -p $(BUILD_DIR)/initrd/lib $(BUILD_DIR)/initrd/lib64
-	@for f in $(BUILD_DIR)/initrd/usr/lib/*.so*; do \
-		name=$$(basename $$f); \
-		ln -sf "../usr/lib/$$name" $(BUILD_DIR)/initrd/lib/$$name; \
-		ln -sf "../usr/lib/$$name" $(BUILD_DIR)/initrd/lib64/$$name; \
-	 done
-
-	@mkdir -p $(SYSROOT_DIR)/System
-	@cd $(BUILD_DIR)/initrd && find . \( -type f -o -type l \) | cpio -R root:root -H newc -o > $(INITRD_CPIO)
-
-.PHONY: __FORCE_initrd
-__FORCE_initrd:
-
 .PHONY: install
 ifeq ($(DOCKER_BUILD),y)
 install:
@@ -375,12 +344,10 @@ endif
 clean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
-	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean
 distclean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
-	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR) $(RELEASE_DIR)

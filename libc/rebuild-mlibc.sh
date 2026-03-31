@@ -1,1 +1,0 @@
-pushd libc/mlibc && git pull && popd && rm -rf libc/mlibc-sysroot/ libc/mlibc/build/ && ./libc/build.sh
