@@ -287,7 +287,7 @@ else
 livecd: install
 	@printf ">>> Generating Live CD..."
 	@mkdir -p $(RELEASE_DIR)
-	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD)
+	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD) $(SYSROOT_DIR)
 endif
 
 .PHONY: livehdd
