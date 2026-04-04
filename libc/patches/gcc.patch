@@ -1,0 +1,144 @@
+diff --git gcc-clean/config.sub gcc-workdir/config.sub
+index 38f3d03..ee981b0 100755
+--- gcc-clean/config.sub
++++ gcc-workdir/config.sub
+@@ -1749,7 +1749,7 @@ case $os in
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+ 	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
+-	     | fiwix* )
++	     | fiwix* | aurix* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+ 	sco3.2v2 | sco3.2v[4-9]* | sco5v6*)
+diff --git gcc-clean/fixincludes/mkfixinc.sh gcc-workdir/fixincludes/mkfixinc.sh
+index 7112f4d..0acd4a7 100755
+--- gcc-clean/fixincludes/mkfixinc.sh
++++ gcc-workdir/fixincludes/mkfixinc.sh
+@@ -11,6 +11,8 @@ target=fixinc.sh
+ 
+ # Check for special fix rules for particular targets
+ case $machine in
++    *-aurix* | \
++    *-*-aurix* | \
+     i?86-*-cygwin* | \
+     *-mingw32* | \
+     powerpc-*-eabisim* | \
+diff --git gcc-workdir/gcc/config/aurix.h gcc-workdir/gcc/config/aurix.h
+new file mode 100644
+index 0000000..1768e2c
+--- /dev/null
++++ gcc-workdir/gcc/config/aurix.h
+@@ -0,0 +1,24 @@
++#undef TARGET_aurix
++#define TARGET_aurix 1
++ 
++#undef LIB_SPEC
++#define LIB_SPEC "-lc"
++
++#undef LINK_SPEC
++#define LINK_SPEC "%{shared:-shared} %{static:-static} %{!shared: %{!static: %{rdynamic:-export-dynamic}}} %{!dynamic-linker:-dynamic-linker /usr/lib/ld.so}"
++
++#undef STARTFILE_SPEC
++#define STARTFILE_SPEC "%{!shared:crt1.o%s} crti.o%s %{shared:crtbeginS.o%s;:crtbegin.o%s}"
++
++#undef ENDFILE_SPEC
++#define ENDFILE_SPEC "%{shared:crtendS.o%s;:crtend.o%s} crtn.o%s"
++ 
++#undef TARGET_OS_CPP_BUILTINS
++#define TARGET_OS_CPP_BUILTINS()      \
++  do {                                \
++    builtin_define ("__aurix__");      \
++    builtin_define ("__unix__");      \
++    builtin_assert ("system=aurix");   \
++    builtin_assert ("system=unix");   \
++    builtin_assert ("system=posix");   \
++  } while(0);
+diff --git gcc-clean/gcc/config.gcc gcc-workdir/gcc/config.gcc
+index 087aaa7..f6f72a0 100644
+--- gcc-clean/gcc/config.gcc
++++ gcc-workdir/gcc/config.gcc
+@@ -826,6 +826,14 @@ case ${target} in
+   rust_target_objs="${rust_target_objs} dragonfly-rust.o"
+   target_has_targetrustm=yes
+   ;;
++*-*-aurix*)
++  extra_options="$extra_options gnu-user.opt"
++  gas=yes
++  gnu_ld=yes
++  default_use_cxa_atexit=yes
++  use_gcc_stdint=provide
++  thread_file='posix'
++  ;;
+ *-*-freebsd*)
+   # This is the generic ELF configuration of FreeBSD.  Later
+   # machine-specific sections may refine and add to this
+@@ -1186,6 +1194,9 @@ case ${target} in
+ esac
+ 
+ case ${target} in
++x86_64-*-aurix*)
++    tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h i386/x86-64.h aurix.h gnu-user.h"
++    ;;
+ aarch64*-*-elf | aarch64*-*-fuchsia* | aarch64*-*-rtems*)
+ 	tm_file="${tm_file} elfos.h newlib-stdint.h"
+ 	tm_file="${tm_file} aarch64/aarch64-elf.h aarch64/aarch64-errata.h aarch64/aarch64-elf-raw.h"
+diff --git gcc-clean/libgcc/config.host gcc-workdir/libgcc/config.host
+index 6a88ee5..c54151b 100644
+--- gcc-clean/libgcc/config.host
++++ gcc-workdir/libgcc/config.host
+@@ -793,6 +793,10 @@ i[34567]86-*-openbsd*)
+ 	;;
+ x86_64-*-openbsd*)
+ 	;;
++x86_64-*-aurix*)
++	extra_parts="$extra_parts crti.o crtbegin.o crtend.o crtn.o crtbeginS.o crtendS.o crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
++	tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"
++	;;
+ i[34567]86-*-linux*)
+ 	extra_parts="$extra_parts crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
+ 	tmake_file="${tmake_file} i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"
+diff --git gcc-clean/libgcc/libgcov.h gcc-workdir/libgcc/libgcov.h
+index 3d7d52a..cd9d819 100644
+--- gcc-clean/libgcc/libgcov.h
++++ gcc-workdir/libgcc/libgcov.h
+@@ -25,6 +25,8 @@
+ #ifndef GCC_LIBGCOV_H
+ #define GCC_LIBGCOV_H
+ 
++#include <stdint.h>
++
+ /* work around the poisoned malloc/calloc in system.h.  */
+ #ifndef xmalloc
+ #define xmalloc malloc
+diff --git gcc-clean/libstdc++-v3/configure.ac gcc-workdir/libstdc++-v3/configure.ac
+index a6c01b2..9e2faad 100644
+--- gcc-clean/libstdc++-v3/configure.ac
++++ gcc-workdir/libstdc++-v3/configure.ac
+@@ -134,7 +134,7 @@ fi
+ # Use glibcxx_compiler_pic_flag to designate a compile-time flags for
+ # creating position-independent objects. This varies with the target
+ # hardware and operating system, but is often: -DPIC -fPIC.
+-if test "$enable_shared" = yes; then
++if test "$enable_shared" = yes || test "${with_pic+set}" = set; then
+   glibcxx_lt_pic_flag="-prefer-pic"
+   glibcxx_compiler_pic_flag="$lt_prog_compiler_pic_CXX"
+   glibcxx_compiler_shared_flag="-D_GLIBCXX_SHARED"
+diff --git gcc-clean/libstdc++-v3/crossconfig.m4 gcc-workdir/libstdc++-v3/crossconfig.m4
+index b3269cb..a5d4014 100644
+--- gcc-clean/libstdc++-v3/crossconfig.m4
++++ gcc-workdir/libstdc++-v3/crossconfig.m4
+@@ -8,7 +8,12 @@ case "${host}" in
+   arm*-*-symbianelf*)
+     # This is a freestanding configuration; there is nothing to do here.
+     ;;
+-
++  *-aurix*)
++    GLIBCXX_CHECK_COMPILER_FEATURES
++    GLIBCXX_CHECK_LINKER_FEATURES
++    GLIBCXX_CHECK_MATH_SUPPORT
++    GLIBCXX_CHECK_STDLIB_SUPPORT
++    ;;
+   avr*-*-*)
+     AC_DEFINE(HAVE_ACOSF)
+     AC_DEFINE(HAVE_ASINF)

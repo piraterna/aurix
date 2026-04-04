@@ -1,0 +1,138 @@
+diff --git binutils-clean/bfd/config.bfd binutils-workdir/bfd/config.bfd
+index 4e5a838..d59805f 100644
+--- binutils-clean/bfd/config.bfd
++++ binutils-workdir/bfd/config.bfd
+@@ -705,6 +705,11 @@ case "${targ}" in
+     targ_selvecs="i386_elf32_vec"
+     want64=true
+     ;;
++  x86_64-*-aurix*)
++    targ_defvec=x86_64_elf64_vec
++    targ_selvecs="i386_elf32_vec"
++    want64=true
++    ;;
+   x86_64-*-netbsd* | x86_64-*-openbsd*)
+     targ_defvec=x86_64_elf64_vec
+     targ_selvecs="i386_elf32_vec iamcu_elf32_vec i386_coff_vec i386_pei_vec x86_64_pe_vec x86_64_pei_vec"
+diff --git binutils-clean/config.sub binutils-workdir/config.sub
+index 4aaae46..7ddc8a7 100755
+--- binutils-clean/config.sub
++++ binutils-workdir/config.sub
+@@ -2108,6 +2108,7 @@ case $os in
+ 	| skyos* \
+ 	| solaris* \
+ 	| solidbsd* \
++        | aurix* \
+ 	| sortix* \
+ 	| storm-chaos* \
+ 	| sunos \
+diff --git binutils-clean/gas/configure.tgt binutils-workdir/gas/configure.tgt
+index 7c81bff..81855f0 100644
+--- binutils-clean/gas/configure.tgt
++++ binutils-workdir/gas/configure.tgt
+@@ -225,6 +225,7 @@ case ${generic_target} in
+   h8300-*-elf)				fmt=elf ;;
+   h8300-*-linux*)			fmt=elf em=linux ;;
+ 
++  i386-*-aurix*)			fmt=elf ;;
+   i386-*-beospe*)			fmt=coff em=pe ;;
+   i386-*-beos*)				fmt=elf ;;
+   i386-*-elfiamcu)			fmt=elf arch=iamcu ;;
+diff --git binutils-clean/ld/Makefile.am binutils-workdir/ld/Makefile.am
+index ccff928..148be5b 100644
+--- binutils-clean/ld/Makefile.am
++++ binutils-workdir/ld/Makefile.am
+@@ -277,6 +277,7 @@ ALL_EMULATION_SOURCES = \
+ 	eelf32xtensa.c \
+ 	eelf32z80.c \
+ 	eelf_i386.c \
++	eelf_i386_aurix.c \
+ 	eelf_i386_be.c \
+ 	eelf_i386_fbsd.c \
+ 	eelf_i386_haiku.c \
+@@ -459,6 +460,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eelf64tilegx_be.c \
+ 	eelf_mipsel_haiku.c \
+ 	eelf_x86_64.c \
++	eelf_x86_64_aurix.c \
+ 	eelf_x86_64_fbsd.c \
+ 	eelf_x86_64_haiku.c \
+	eelf_x86_64_sol2.c \
+diff --git binutils-clean/ld/Makefile.in binutils-workdir/ld/Makefile.in
+index 3e24bd4..869875f 100644
+--- binutils-clean/ld/Makefile.in
++++ binutils-workdir/ld/Makefile.in
+@@ -543,6 +543,7 @@ pdfdir = @pdfdir@
+ prefix = @prefix@
+ program_transform_name = @program_transform_name@
+ psdir = @psdir@
++runstatedir = @runstatedir@
+ sbindir = @sbindir@
+ sharedstatedir = @sharedstatedir@
+ srcdir = @srcdir@
+@@ -788,6 +789,7 @@ ALL_EMULATION_SOURCES = \
+ 	eelf32xtensa.c \
+ 	eelf32z80.c \
+ 	eelf_i386.c \
++	eelf_i386_aurix.c \
+ 	eelf_i386_be.c \
+ 	eelf_i386_fbsd.c \
+ 	eelf_i386_haiku.c \
+@@ -969,6 +971,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eelf64tilegx_be.c \
+ 	eelf_mipsel_haiku.c \
+ 	eelf_x86_64.c \
++	eelf_x86_64_aurix.c \
+ 	eelf_x86_64_fbsd.c \
+ 	eelf_x86_64_haiku.c \
+	eelf_x86_64_sol2.c \
+@@ -1476,6 +1479,7 @@ distclean-compile:
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64tilegx.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64tilegx_be.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386.Po@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_aurix.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_be.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_fbsd.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_haiku.Po@am__quote@
+@@ -1486,6 +1490,7 @@ distclean-compile:
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_mipsel_haiku.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_s390.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64.Po@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_aurix.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_fbsd.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_haiku.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_sol2.Po@am__quote@
+diff --git binutils-clean/ld/configure.tgt binutils-workdir/ld/configure.tgt
+index ea01ccf..3bcd521 100644
+--- binutils-clean/ld/configure.tgt
++++ binutils-workdir/ld/configure.tgt
+@@ -998,6 +998,9 @@ vax-*-linux-*)		targ_emul=elf32vax
+ 			;;
+ visium-*-elf)		targ_emul=elf32visium
+ 			;;
++x86_64-*-aurix*)	targ_emul=elf_x86_64_aurix
++			targ_extra_emuls="elf_i386_aurix elf_x86_64 elf_i386"
++			;;
+ x86_64-*-rdos*)		targ_emul=elf64rdos
+ 			;;
+ x86_64-*-cloudabi*)	targ_emul=elf_x86_64_cloudabi
+diff --git binutils-workdir/ld/emulparams/elf_i386_aurix.sh binutils-workdir/ld/emulparams/elf_i386_aurix.sh
+new file mode 100644
+index 0000000..926c55b
+--- /dev/null
++++ binutils-workdir/ld/emulparams/elf_i386_aurix.sh
+@@ -0,0 +1,4 @@
++source ${srcdir}/emulparams/elf_i386.sh
++TEXT_START_ADDR=0x10000000
++GENERATE_SHLIB_SCRIPT=yes
++GENERATE_PIE_SCRIPT=yes
+diff --git binutils-workdir/ld/emulparams/elf_x86_64_aurix.sh binutils-workdir/ld/emulparams/elf_x86_64_aurix.sh
+new file mode 100644
+index 0000000..0d72b44
+--- /dev/null
++++ binutils-workdir/ld/emulparams/elf_x86_64_aurix.sh
+@@ -0,0 +1,4 @@
++source ${srcdir}/emulparams/elf_x86_64.sh
++TEXT_START_ADDR=0x10000000
++GENERATE_SHLIB_SCRIPT=yes
++GENERATE_PIE_SCRIPT=yes

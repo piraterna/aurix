@@ -2971,20 +2971,6 @@ int64_t sys_getppid(const syscall_args_t *args)
 	return (int64_t)proc->parent_pid;
 }
 
-
-int64_t sys_getpgid(const syscall_args_t *args)
-{
-	pid_t pid = (pid_t)args->rdi;
-	pid_t* pgid_out = (pid_t *)args->rsi;
-
-	if (!pgid_out)
-		return -EFAULT;
-
-	*pgid_out = proc_get_by_pid(proc_get_by_pid(pid)->parent_pid)->pid;
-
-	return 0;
-}
-
 int64_t sys_getuid(const syscall_args_t *args)
 {
 	(void)args;
@@ -3127,5 +3113,4 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_SIGACTION, sys_sigaction, "sigaction");
 	register_syscall(SYS_FACCESSAT, sys_faccessat, "faccessat");
 	register_syscall(SYS_UTIMENSAT, sys_utimensat, "utimensat");
-	register_syscall(SYS_GETPGID, sys_getpgid, "getpgid");
 }

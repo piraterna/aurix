@@ -1,0 +1,31 @@
+From 23888cce9cbafbb72d66d3b11c0a5653fe684212 Mon Sep 17 00:00:00 2001
+From: Kevin Alavik <kevin@alavik.se>
+Date: Mon, 23 Mar 2026 00:00:00 +0000
+Subject: [PATCH] portability: fallback when pty.h is missing
+
+Aurix does not provide pty.h yet. Fall back to termios declarations so toybox
+can compile on POSIX-like targets without Linux/BSD pty headers.
+---
+ lib/portability.h | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/lib/portability.h b/lib/portability.h
+index 23f7a6b..9d67883 100644
+--- a/lib/portability.h
++++ b/lib/portability.h
+@@ -178,7 +178,12 @@
+ #ifdef __APPLE__
+ #include <util.h>
+ #elif !defined(__FreeBSD__) && !defined(__OpenBSD__)
+-#include <pty.h>
++#if defined(__has_include) && __has_include(<pty.h>)
++#include <pty.h>
++#else
++#include <termios.h>
++int openpty(int *amaster, int *aslave, char *name, struct termios *termp, struct winsize *winp);
++#endif
+ #else
+ #include <termios.h>
+ #ifndef IUTF8
+-- 
+2.49.0

@@ -40,10 +40,10 @@ DEFINES += __$(ARCH)__
 
 KERNEL_NASM := nasm
 
-KERNEL_AS      ?= $(ARCH)-aurix-gcc
-KERNEL_CC      ?= $(ARCH)-aurix-gcc
-KERNEL_LD      ?= $(ARCH)-aurix-ld
-KERNEL_OBJCOPY ?= $(ARCH)-aurix-objcopy
+KERNEL_AS      := $(ARCH)-aurix-gcc
+KERNEL_CC      := $(ARCH)-aurix-gcc
+KERNEL_LD      := $(ARCH)-aurix-ld
+KERNEL_OBJCOPY := $(ARCH)-aurix-objcopy
 
 KERNEL_ASFLAGS := $(foreach d, $(INCLUDE_DIRS), -I$d) \
 				$(foreach d, $(DEFINES), -D$d)

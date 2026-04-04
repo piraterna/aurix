@@ -1,0 +1,11 @@
+[host_machine]
+system = 'aurix'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'
+[binaries]
+c = 'x86_64-aurix-gcc'
+cpp = 'x86_64-aurix-g++'
+ar = 'x86_64-aurix-ar'
+strip = 'x86_64-aurix-strip'
+ld = 'x86_64-aurix-ld'

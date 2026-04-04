@@ -1,0 +1,38 @@
+From: Kevin Alavik <kevin@alavik.se>
+
+diff --git a/lib/portability.h b/lib/portability.h
+--- a/lib/portability.h
++++ b/lib/portability.h
+@@ -133,6 +133,8 @@
+ // Some libc implementations hide these behind feature macros.
+ #include <time.h>
+ char *strptime(const char *buf, const char *format, struct tm *tm);
++#include <wchar.h>
++int wcwidth(wchar_t wc);
+ long syscall(long number, ...);
+ #endif
+ 
+@@ -212,10 +214,12 @@
+ int personality(int);
+ #endif
+ 
+-#if defined(__APPLE__) || defined(__linux__)
+-// Linux and macOS has both have getxattr and friends in <sys/xattr.h>, but
+-// they aren't compatible.
++// Linux and macOS both have getxattr and friends in <sys/xattr.h>, but they
++// are not compatible. Aurix may not ship <sys/xattr.h> yet, so include it
++// when available and keep function declarations unconditional.
++#if defined(__has_include) && __has_include(<sys/xattr.h>)
+ #include <sys/xattr.h>
++#endif
+ ssize_t xattr_get(const char *, const char *, void *, size_t);
+ ssize_t xattr_lget(const char *, const char *, void *, size_t);
+ ssize_t xattr_fget(int fd, const char *, void *, size_t);
+@@ -225,7 +229,6 @@
+ ssize_t xattr_set(const char*, const char*, const void*, size_t, int);
+ ssize_t xattr_lset(const char*, const char*, const void*, size_t, int);
+ ssize_t xattr_fset(int, const char*, const void*, size_t, int);
+-#endif
+ 
+ #if defined(__APPLE__)
+ // macOS doesn't have these functions, but we can fake them.

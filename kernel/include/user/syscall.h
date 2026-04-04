@@ -80,7 +80,6 @@ enum {
 	SYS_SIGACTION = 51,
 	SYS_FACCESSAT = 52,
 	SYS_UTIMENSAT = 53,
-	SYS_GETPGID = 54,
 };
 
 typedef struct {

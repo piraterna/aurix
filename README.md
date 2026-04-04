@@ -69,10 +69,6 @@ Alternatively, read the [Brewfile](Brewfile) in the root of this repository and 
 To build AurixOS, simply run `make` in the root directory of this repository.
 To change the build target, run `make ARCH=arch PLATFORM=platform`, where `arch` is the target architecture, and `platform` is the target platform (Default is set to `x86_64`/`generic-pc`).
 
-#### Building the Userspace
-
-To build an AurixOS distro check the https://github.com/piraterna/axstrap repo 
-
 #### Building with Docker
 
 You can also invoke any build target through Docker by adding `DOCKER_BUILD=y`:

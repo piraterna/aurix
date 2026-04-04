@@ -1,0 +1,139 @@
+From: Kevin Alavik <kevin@alavik.se>
+
+--- a/lib/portability.h
++++ b/lib/portability.h
+@@ -129,6 +129,10 @@
+ #if !defined(__GLIBC__)
+ // POSIX basename.
+ #include <libgen.h>
++// Some libc implementations hide these behind feature macros.
++#include <time.h>
++char *strptime(const char *buf, const char *format, struct tm *tm);
++long syscall(long number, ...);
+ #endif
+ 
+ // Work out how to do endianness
+@@ -175,6 +179,7 @@
+ #include <sys/statfs.h>
+ #else
+ struct statfs {
++  unsigned long f_type;
+   unsigned long f_bsize;
+   unsigned long f_frsize;
+ };
+--- a/lib/portability.c
++++ b/lib/portability.c
+@@ -360,7 +360,8 @@
+   return fsetxattr(fd, name, value, size, 0, flags);
+ }
+ 
+-#elif !defined(__FreeBSD__) && !defined(__OpenBSD__)
++#elif !defined(__FreeBSD__) && !defined(__OpenBSD__) && \
++  (!defined(__has_include) || __has_include(<sys/xattr.h>))
+ 
+ ssize_t xattr_get(const char *path, const char *name, void *value, size_t size)
+ {
+@@ -410,6 +411,64 @@
+   return fsetxattr(fd, name, value, size, flags);
+ }
+ 
++#else
++
++ssize_t xattr_get(const char *path, const char *name, void *value, size_t size)
++{
++  (void)path; (void)name; (void)value; (void)size; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_lget(const char *path, const char *name, void *value, size_t size)
++{
++  (void)path; (void)name; (void)value; (void)size; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_fget(int fd, const char *name, void *value, size_t size)
++{
++  (void)fd; (void)name; (void)value; (void)size; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_list(const char *path, char *list, size_t size)
++{
++  (void)path; (void)list; (void)size; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_llist(const char *path, char *list, size_t size)
++{
++  (void)path; (void)list; (void)size; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_flist(int fd, char *list, size_t size)
++{
++  (void)fd; (void)list; (void)size; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_set(const char* path, const char* name,
++                  const void* value, size_t size, int flags)
++{
++  (void)path; (void)name; (void)value; (void)size; (void)flags; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_lset(const char* path, const char* name,
++                   const void* value, size_t size, int flags)
++{
++  (void)path; (void)name; (void)value; (void)size; (void)flags; errno = ENOTSUP;
++  return -1;
++}
++
++ssize_t xattr_fset(int fd, const char* name,
++                   const void* value, size_t size, int flags)
++{
++  (void)fd; (void)name; (void)value; (void)size; (void)flags; errno = ENOTSUP;
++  return -1;
++}
+ 
+ #endif
+ 
+@@ -565,7 +624,7 @@
+ #elif defined(__FreeBSD__) || defined(__OpenBSD__)
+   return minor(dev);
+ #else
+-#error
++  return ((dev&0xfff00000)>>12)|(dev&0xff);
+ #endif
+ }
+ 
+@@ -578,7 +637,7 @@
+ #elif defined(__FreeBSD__) || defined(__OpenBSD__)
+   return major(dev);
+ #else
+-#error
++  return (dev&0xfff00)>>8;
+ #endif
+ }
+ 
+@@ -591,7 +650,7 @@
+ #elif defined(__FreeBSD__) || defined(__OpenBSD__)
+   return makedev(major, minor);
+ #else
+-#error
++  return (minor&0xff)|((major&0xfff)<<8)|((minor&0xfff00)<<12);
+ #endif
+ }
+ 
+--- a/lib/xwrap.c
++++ b/lib/xwrap.c
+@@ -204,7 +204,9 @@
+   xopen_stdio("/dev/null", O_RDWR);
+   dup2(0, 1);
+   if (-1 != (fd = open("/dev/tty", O_RDONLY))) {
++#ifdef TIOCNOTTY
+     ioctl(fd, TIOCNOTTY);
++#endif
+     close(fd);
+   }
+   dup2(0, 2);
