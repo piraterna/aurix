@@ -69,11 +69,6 @@ export ROOT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 ROOT_DIR_NOSLASH := $(patsubst %/,%,$(ROOT_DIR))
 
-export TOOLCHAIN_DIR ?= $(ROOT_DIR)/libc/toolchain/usr/bin
-ifneq (,$(wildcard $(TOOLCHAIN_DIR)/$(ARCH)-aurix-gcc))
-export PATH := $(TOOLCHAIN_DIR):$(PATH)
-endif
-
 define _docker_ensure_image
 	@command -v $(DOCKER) >/dev/null 2>&1 || (printf "Docker not found. Install docker or set DOCKER=podman.\n" && exit 127)
 	@$(DOCKER) image inspect $(DOCKER_IMAGE) >/dev/null 2>&1 || $(DOCKER) build -t $(DOCKER_IMAGE) .
@@ -106,9 +101,7 @@ endef
 export BUILD_DIR ?= $(ROOT_DIR)/build
 export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
 export RELEASE_DIR ?= $(ROOT_DIR)/release
-export INITRD_DIR ?= $(ROOT_DIR)/initrd
 export MODULE_DIR ?= $(ROOT_DIR)/modules
-export APPS_DIR ?= $(ROOT_DIR)/src
 
 export NOUEFI ?= n
 
@@ -123,7 +116,6 @@ NVRAM_JSON := $(BUILD_DIR)/uefi_nvram.json
 LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
-
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
 HOST_OS := $(shell uname -s 2>/dev/null || printf "Unknown")
@@ -149,14 +141,12 @@ QEMU_DEBUG ?= 1
 
 QEMU_FLAGS := -m 2G -smp $(QEMU_SMP) -rtc base=localtime $(QEMU_ACCEL)
 
-ifeq ($(QEMU_ACCEL),none)
+ifeq ($(QEMU_ACCELL),none)
 QEMU_ACCEL :=
-else
-ifeq ($(QEMU_ACCEL),)
+else ifeq ($(QEMU_ACCEL),)
 QEMU_ACCEL :=
 else
 QEMU_FLAGS += -cpu $(QEMU_CPU)
-endif
 endif
 
 ifeq ($(QEMU_DEBUG),1)
@@ -203,7 +193,7 @@ ifeq ($(DOCKER_BUILD),y)
 all:
 	@$(call docker_make,all)
 else
-all: genconfig boot kernel kmodules apps initrd
+all: genconfig boot kernel kmodules
 	@:
 endif
 
@@ -236,46 +226,12 @@ kmodules:
 	@$(MAKE) -C $(MODULE_DIR)
 endif
 
-.PHONY: apps
-ifeq ($(DOCKER_BUILD),y)
-apps:
-	@$(call docker_make,apps)
-else
-apps:
-	@printf ">>> Building apps...\n"
-	@$(MAKE) -C $(APPS_DIR)
-endif
-
-.PHONY: initrd
-initrd: apps __FORCE_initrd
-	@printf ">>> Building initrd...\n"
-	@rm -rf $(BUILD_DIR)/initrd
-	@mkdir -p $(BUILD_DIR)/initrd
-	@cp -r $(INITRD_DIR)/* $(BUILD_DIR)/initrd/
-
-	@$(MAKE) -C $(APPS_DIR) install APP_INSTALL_DIR=$(BUILD_DIR)/initrd/bin
-	@mkdir -p $(BUILD_DIR)/initrd/usr/lib
-	@cp -a $(SYSROOT_DIR)/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
-	@cp -a $(ROOT_DIR)/libc/mlibc-sysroot/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
-	@mkdir -p $(BUILD_DIR)/initrd/lib $(BUILD_DIR)/initrd/lib64
-	@for f in $(BUILD_DIR)/initrd/usr/lib/*.so*; do \
-		name=$$(basename $$f); \
-		ln -sf "../usr/lib/$$name" $(BUILD_DIR)/initrd/lib/$$name; \
-		ln -sf "../usr/lib/$$name" $(BUILD_DIR)/initrd/lib64/$$name; \
-	 done
-
-	@mkdir -p $(SYSROOT_DIR)/System
-	@cd $(BUILD_DIR)/initrd && find . \( -type f -o -type l \) | cpio -R root:root -H newc -o > $(INITRD_CPIO)
-
-.PHONY: __FORCE_initrd
-__FORCE_initrd:
-
 .PHONY: install
 ifeq ($(DOCKER_BUILD),y)
 install:
 	@$(call docker_make,install)
 else
-install: boot kernel kmodules apps initrd
+install: boot kernel kmodules
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
 ifneq (,$(filter $(ARCH),i686 x86_64))
@@ -290,7 +246,6 @@ endif
 endif
 	@$(MAKE) -C kernel install
 	@$(MAKE) -C $(MODULE_DIR) install
-	@$(MAKE) -C $(APPS_DIR) install
 endif
 
 .PHONY: livecd
@@ -301,7 +256,7 @@ else
 livecd: install
 	@printf ">>> Generating Live CD..."
 	@mkdir -p $(RELEASE_DIR)
-	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD)
+	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD) $(SYSROOT_DIR)
 endif
 
 .PHONY: livehdd
@@ -389,12 +344,10 @@ endif
 clean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
-	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean
 distclean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
-	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR) $(RELEASE_DIR)
