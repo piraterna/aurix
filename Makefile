@@ -149,12 +149,14 @@ QEMU_DEBUG ?= 1
 
 QEMU_FLAGS := -m 2G -smp $(QEMU_SMP) -rtc base=localtime $(QEMU_ACCEL)
 
-ifeq ($(QEMU_ACCELL),none)
+ifeq ($(QEMU_ACCEL),none)
 QEMU_ACCEL :=
-else ifeq($(QEMU_ACCEL),)
+else
+ifeq ($(QEMU_ACCEL),)
 QEMU_ACCEL :=
 else
 QEMU_FLAGS += -cpu $(QEMU_CPU)
+endif
 endif
 
 ifeq ($(QEMU_DEBUG),1)
