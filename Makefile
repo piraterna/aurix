@@ -372,11 +372,9 @@ defconfig:
 	@$(call docker_make,defconfig)
 else
 defconfig:
-	@printf "  DEFCONFIG\t$(KCONFIG_CONFIG)\n"
-	@cp $(DEFAULT_CONFIG) $(ROOT_DIR)/$(KCONFIG_CONFIG)
+	@cp utils/arch/$(ARCH)/defconfig .config
 	@$(MAKE) genconfig
 endif
-
 
 .PHONY: format
 ifeq ($(DOCKER_BUILD),y)
