@@ -8,9 +8,9 @@
 /* See License.txt in the root of this repository.                                */
 /*                                                                               */
 /* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR     */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE  */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,       */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE    */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER         */
 /* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  */
 /* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE  */
 /* SOFTWARE.                                                                     */
@@ -41,8 +41,21 @@
 #define SCHED_DEFAULT_SLICE 10
 #define USER_STACK_SIZE (1024 * 1024)
 
-static uint32_t next_pid = 1;
-static atomic_uint next_tid = ATOMIC_VAR_INIT(0);
+#define PID_MAX 65536u
+#define TID_MAX 65536u
+
+static atomic_uint live_proc_count = ATOMIC_VAR_INIT(0);
+static atomic_uint live_thread_count = ATOMIC_VAR_INIT(0);
+
+static spinlock_t pid_alloc_lock = { 0 };
+static spinlock_t tid_alloc_lock = { 0 };
+
+static uint8_t pid_used[PID_MAX];
+static uint8_t tid_used[TID_MAX];
+
+static uint32_t pid_next_hint = 1; /* 0 reserved for kernel */
+static uint32_t tid_next_hint = 1; /* 0 reserved */
+static bool id_alloc_inited = false;
 
 static atomic_bool sched_enabled = ATOMIC_VAR_INIT(false);
 
@@ -74,12 +87,120 @@ static inline void sched_prepare_cpu_stack(const tcb *next)
 }
 #endif
 
+static void sched_id_allocator_init(void)
+{
+	if (id_alloc_inited)
+		return;
+
+	spinlock_init(&pid_alloc_lock);
+	spinlock_init(&tid_alloc_lock);
+
+	memset(pid_used, 0, sizeof(pid_used));
+	memset(tid_used, 0, sizeof(tid_used));
+
+	pid_used[0] = 1;
+	tid_used[0] = 1;
+
+	pid_next_hint = 1;
+	tid_next_hint = 1;
+	id_alloc_inited = true;
+}
+
+static uint32_t sched_alloc_pid(void)
+{
+	uint32_t pid = UINT32_MAX;
+
+	spinlock_acquire(&pid_alloc_lock);
+
+	for (uint32_t scanned = 0; scanned < (PID_MAX - 1); scanned++) {
+		uint32_t cand = pid_next_hint;
+		if (cand == 0 || cand >= PID_MAX)
+			cand = 1;
+
+		if (!pid_used[cand]) {
+			pid_used[cand] = 1;
+			pid = cand;
+			pid_next_hint = cand + 1;
+			if (pid_next_hint >= PID_MAX)
+				pid_next_hint = 1;
+			break;
+		}
+
+		pid_next_hint++;
+		if (pid_next_hint >= PID_MAX)
+			pid_next_hint = 1;
+	}
+
+	spinlock_release(&pid_alloc_lock);
+	return pid;
+}
+
+static void sched_free_pid(uint32_t pid)
+{
+	if (pid == 0 || pid >= PID_MAX)
+		return;
+
+	spinlock_acquire(&pid_alloc_lock);
+	pid_used[pid] = 0;
+	if (pid < pid_next_hint)
+		pid_next_hint = pid;
+	spinlock_release(&pid_alloc_lock);
+}
+
+static uint32_t sched_alloc_tid(void)
+{
+	uint32_t tid = UINT32_MAX;
+
+	spinlock_acquire(&tid_alloc_lock);
+
+	for (uint32_t scanned = 0; scanned < (TID_MAX - 1); scanned++) {
+		uint32_t cand = tid_next_hint;
+		if (cand == 0 || cand >= TID_MAX)
+			cand = 1;
+
+		if (!tid_used[cand]) {
+			tid_used[cand] = 1;
+			tid = cand;
+			tid_next_hint = cand + 1;
+			if (tid_next_hint >= TID_MAX)
+				tid_next_hint = 1;
+			break;
+		}
+
+		tid_next_hint++;
+		if (tid_next_hint >= TID_MAX)
+			tid_next_hint = 1;
+	}
+
+	spinlock_release(&tid_alloc_lock);
+	return tid;
+}
+
+static void sched_free_tid(uint32_t tid)
+{
+	if (tid == 0 || tid >= TID_MAX)
+		return;
+
+	spinlock_acquire(&tid_alloc_lock);
+	tid_used[tid] = 0;
+	if (tid < tid_next_hint)
+		tid_next_hint = tid;
+	spinlock_release(&tid_alloc_lock);
+}
+
+static inline bool sched_tid_is_managed(uint32_t tid)
+{
+	return tid > 0 && tid < TID_MAX;
+}
+
 static void sched_ipi_cpu(struct cpu *target)
 {
 	if (!target || target->id == cpu_get_current()->id)
 		return;
+
 	lapic_write(0x310, (uint32_t)target->id << 24);
 	lapic_write(0x300, (uint32_t)0xfe | (1u << 14));
+
 	while (lapic_read(0x300) & (1u << 12))
 		;
 }
@@ -136,7 +257,7 @@ static void cpu_add_thread(struct cpu *cpu, tcb *thread)
 	thread->cpu = cpu;
 
 	trace("Added TID=%u (owner pid: %u) to -> CPU%u\n", thread->tid,
-		  thread->process->pid, cpu->id);
+		  thread->process ? thread->process->pid : UINT32_MAX, cpu->id);
 
 	irqlock_release(&cpu->sched_lock);
 
@@ -161,6 +282,7 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 		link = &(*link)->cpu_next;
 	}
 
+	thread->cpu_next = NULL;
 	irqlock_release(&cpu->sched_lock);
 }
 
@@ -170,11 +292,47 @@ static tcb *cpu_pick_next_thread(struct cpu *cpu, tcb *current)
 		return NULL;
 
 	tcb *next = current ? current->cpu_next : cpu->thread_list;
-
 	if (!next)
 		next = cpu->thread_list;
 
 	return next;
+}
+
+static void proc_unlink_thread(pcb *proc, tcb *thread)
+{
+	if (!proc || !thread)
+		return;
+
+	tcb **link = &proc->threads;
+	while (*link) {
+		if (*link == thread) {
+			*link = thread->proc_next;
+			thread->proc_next = NULL;
+			return;
+		}
+		link = &(*link)->proc_next;
+	}
+}
+
+static void thread_release_final(tcb *thread)
+{
+	if (!thread)
+		return;
+
+	uint32_t tid = thread->tid;
+
+	thread->magic = TCB_MAGIC_DEAD;
+	thread->proc_next = (tcb *)0xDEADDEAD;
+	thread->cpu_next = (tcb *)0xDEADDEAD;
+	thread->process = NULL;
+	thread->cpu = NULL;
+
+	kfree(thread);
+
+	if (sched_tid_is_managed(tid))
+		sched_free_tid(tid);
+
+	atomic_fetch_sub(&live_thread_count, 1);
 }
 
 void sched_tick(void)
@@ -238,6 +396,7 @@ void sched_yield(void)
 	current->cpu_next = NULL;
 
 	irqlock_release(&cpu->sched_lock);
+
 	sched_prepare_cpu_stack(next);
 	switch_task(&current->kthread, &next->kthread);
 }
@@ -245,6 +404,7 @@ void sched_yield(void)
 void sched_enable(void)
 {
 	atomic_store(&sched_enabled, true);
+
 	for (size_t i = 0; i < cpu_count; i++) {
 		struct cpu *c = &cpuinfo[i];
 		if (c->id != cpu_get_current()->id)
@@ -279,6 +439,8 @@ void sched_init(void)
 {
 	struct cpu *cpu = cpu_get_current();
 
+	sched_id_allocator_init();
+
 	if (get_actual_cpus() == 4 && cpu->id == 3) {
 		warn("Known issue running scheduler on a 4-core system: "
 			 "CPU%u will not participate in scheduling.\n",
@@ -297,7 +459,6 @@ void sched_init(void)
 		kernel_proc.pm = kernel_pm;
 		kernel_proc.vctx = kvctx;
 		kernel_proc.threads = NULL;
-		kernel_proc.next_tid = 0;
 		spinlock_init(&kernel_proc.fd_lock);
 		memset(kernel_proc.fds, 0, sizeof(kernel_proc.fds));
 		kernel_proc.umask = 0022;
@@ -356,11 +517,35 @@ pcb *proc_create(void)
 
 	memset(proc, 0, sizeof(pcb));
 
-	proc->pid = next_pid++;
+	proc->pid = sched_alloc_pid();
+	if (proc->pid == UINT32_MAX) {
+		kfree(proc);
+		error("proc_create: out of PIDs\n");
+		return NULL;
+	}
+
+	atomic_fetch_add(&live_proc_count, 1);
+
 	proc->pm = create_pagemap();
+	if (!proc->pm) {
+		sched_free_pid(proc->pid);
+		atomic_fetch_sub(&live_proc_count, 1);
+		kfree(proc);
+		error("proc_create: create_pagemap failed\n");
+		return NULL;
+	}
+
 	proc->vctx = vinit(proc->pm, 0x1000);
+	if (!proc->vctx) {
+		destroy_pagemap(proc->pm);
+		sched_free_pid(proc->pid);
+		atomic_fetch_sub(&live_proc_count, 1);
+		kfree(proc);
+		error("proc_create: vinit failed\n");
+		return NULL;
+	}
+
 	proc->threads = NULL;
-	proc->next_tid = 0;
 	proc->proc_next = NULL;
 	spinlock_init(&proc->fd_lock);
 	memset(proc->fds, 0, sizeof(proc->fds));
@@ -375,18 +560,16 @@ pcb *proc_create(void)
 	proc->exited = false;
 
 	proc->fds[0] = open("/dev/stdin", O_RDONLY, 0);
-	if (!proc->fds[0]) {
+	if (!proc->fds[0])
 		warn("proc_create: PID=%u failed to open /dev/stdin\n", proc->pid);
-	}
 
 	proc->fds[1] = open("/dev/stdout", O_WRONLY, 0);
-	if (!proc->fds[1]) {
+	if (!proc->fds[1])
 		warn("proc_create: PID=%u failed to open /dev/stdout\n", proc->pid);
-	}
+
 	proc->fds[2] = open("/dev/stderr", O_WRONLY, 0);
-	if (!proc->fds[2]) {
+	if (!proc->fds[2])
 		warn("proc_create: PID=%u failed to open /dev/stderr\n", proc->pid);
-	}
 
 	uintptr_t kvirt = 0xffffffff80000000ULL;
 	uintptr_t kphys = boot_params->kernel_addr;
@@ -421,15 +604,13 @@ void proc_destroy(pcb *proc)
 	if (!proc)
 		return;
 
-	tcb *t = proc->threads;
-	while (t) {
-		tcb *next = t->proc_next;
-		thread_destroy(t);
-		t = next;
-	}
+	uint32_t pid = proc->pid;
+
+	while (proc->threads)
+		thread_destroy(proc->threads);
 
 	spinlock_acquire(&proc->fd_lock);
-	for (size_t fd = 1; fd < PROC_MAX_FDS; fd++) {
+	for (size_t fd = 0; fd < PROC_MAX_FDS; fd++) {
 		struct fileio *f = proc->fds[fd];
 		proc->fds[fd] = NULL;
 		if (f) {
@@ -442,6 +623,7 @@ void proc_destroy(pcb *proc)
 
 	vdestroy(proc->vctx);
 	destroy_pagemap(proc->pm);
+
 	if (proc->name)
 		kfree((void *)proc->name);
 	if (proc->cwd)
@@ -459,8 +641,10 @@ void proc_destroy(pcb *proc)
 	spinlock_release(&proc_list_lock);
 
 	kfree(proc);
+	sched_free_pid(pid);
+	atomic_fetch_sub(&live_proc_count, 1);
 
-	trace("Destroyed process, PID=%u\n", proc->pid);
+	trace("Destroyed process, PID=%u\n", pid);
 }
 
 static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
@@ -480,15 +664,25 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 	memset(thread, 0, sizeof(tcb));
 
 	thread->magic = TCB_MAGIC_ALIVE;
-	thread->tid = atomic_fetch_add(&next_tid, 1);
+	thread->tid = sched_alloc_tid();
+	if (thread->tid == UINT32_MAX) {
+		kfree(thread);
+		error("Failed to allocate TID for new thread\n");
+		return NULL;
+	}
+
+	atomic_fetch_add(&live_thread_count, 1);
 	thread->user = user_mode;
 	thread->process = proc;
 	thread->time_slice = SCHED_DEFAULT_SLICE;
-	thread->user = user_mode;
+	thread->joinable = false;
+	atomic_store(&thread->finished, false);
 
 	uint64_t *stack_base =
 		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
 	if (!stack_base) {
+		sched_free_tid(thread->tid);
+		atomic_fetch_sub(&live_thread_count, 1);
 		kfree(thread);
 		return NULL;
 	}
@@ -512,6 +706,8 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 			proc->user_stack_size == 0) {
 			error("user stack not initialized for PID=%u\n", proc->pid);
 			vfree(kvctx, stack_base);
+			sched_free_tid(thread->tid);
+			atomic_fetch_sub(&live_thread_count, 1);
 			kfree(thread);
 			return NULL;
 		}
@@ -519,10 +715,13 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 		uint64_t user_rsp = proc->user_rsp;
 		uintptr_t user_stack_end =
 			proc->user_stack_base + proc->user_stack_size;
+
 		if (user_rsp < proc->user_stack_base || user_rsp > user_stack_end) {
 			error("user rsp out of range for PID=%u (rsp=%p)\n", proc->pid,
 				  (void *)user_rsp);
 			vfree(kvctx, stack_base);
+			sched_free_tid(thread->tid);
+			atomic_fetch_sub(&live_thread_count, 1);
 			kfree(thread);
 			return NULL;
 		}
@@ -575,6 +774,7 @@ void thread_enqueue(tcb *thread)
 {
 	if (!thread)
 		return;
+
 	struct cpu *cpu = sched_pick_best_cpu();
 	cpu_add_thread(cpu, thread);
 }
@@ -593,23 +793,34 @@ tcb *thread_clone_user(pcb *proc, tcb *parent)
 	}
 
 	memset(thread, 0, sizeof(tcb));
+
 	thread->magic = TCB_MAGIC_ALIVE;
-	thread->tid = atomic_fetch_add(&next_tid, 1);
+	thread->tid = sched_alloc_tid();
+	if (thread->tid == UINT32_MAX) {
+		kfree(thread);
+		error("Failed to allocate TID for cloned thread\n");
+		return NULL;
+	}
+
+	atomic_fetch_add(&live_thread_count, 1);
 	thread->user = true;
 	thread->process = proc;
 	thread->time_slice = SCHED_DEFAULT_SLICE;
 	thread->joinable = parent->joinable;
+	thread->kthread.fs_base = parent->kthread.fs_base;
+	atomic_store(&thread->finished, false);
 
 	uint64_t *stack_base =
 		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
 	if (!stack_base) {
+		sched_free_tid(thread->tid);
+		atomic_fetch_sub(&live_thread_count, 1);
 		kfree(thread);
 		return NULL;
 	}
 
 	thread->kthread.rsp0 = (uint64_t)stack_base + STACK_SIZE;
 	thread->kthread.cr3 = (uint64_t)proc->pm;
-	thread->kthread.fs_base = parent->kthread.fs_base;
 
 	if (!proc->threads) {
 		proc->threads = thread;
@@ -628,7 +839,7 @@ void thread_destroy(tcb *thread)
 	if (!thread)
 		return;
 
-	if (thread->magic != TCB_MAGIC_ALIVE) {
+	if (thread->magic != TCB_MAGIC_ALIVE && !atomic_load(&thread->finished)) {
 		warn("Invalid TCB %p\n", thread);
 		return;
 	}
@@ -639,22 +850,12 @@ void thread_destroy(tcb *thread)
 	}
 
 	if (thread->process) {
-		tcb **link = &thread->process->threads;
-		while (*link) {
-			if (*link == thread) {
-				*link = thread->proc_next;
-				break;
-			}
-			link = &(*link)->proc_next;
-		}
+		proc_unlink_thread(thread->process, thread);
+		thread->process = NULL;
 	}
 
-	thread->magic = TCB_MAGIC_DEAD;
-	thread->proc_next = (tcb *)0xDEADDEAD;
-	thread->cpu_next = (tcb *)0xDEADDEAD;
-	thread->process = NULL;
-
-	kfree(thread);
+	atomic_store(&thread->finished, true);
+	thread_release_final(thread);
 }
 
 void thread_exit(tcb *thread, int code)
@@ -671,17 +872,16 @@ void thread_exit(tcb *thread, int code)
 
 	struct cpu *cpu = thread->cpu;
 	pcb *proc = thread->process;
+	tcb *next = NULL;
 
 	debug("Thread TID=%u exiting\n", thread->tid);
-
-	tcb *next = NULL;
 
 	if (cpu) {
 		irqlock_acquire(&cpu->sched_lock);
 
 		next = thread->cpu_next;
 		if (!next || next == thread)
-			next = cpu->thread_list != thread ? cpu->thread_list : NULL;
+			next = (cpu->thread_list != thread) ? cpu->thread_list : NULL;
 
 		tcb **link = &cpu->thread_list;
 		while (*link) {
@@ -693,23 +893,20 @@ void thread_exit(tcb *thread, int code)
 			link = &(*link)->cpu_next;
 		}
 
-		irqlock_release(&cpu->sched_lock);
 		thread->cpu = NULL;
+		thread->cpu_next = NULL;
+
+		irqlock_release(&cpu->sched_lock);
 	}
 
 	if (proc) {
-		tcb **link = &proc->threads;
-		while (*link) {
-			if (*link == thread) {
-				*link = thread->proc_next;
-				break;
-			}
-			link = &(*link)->proc_next;
-		}
+		proc_unlink_thread(proc, thread);
+
 		if (!proc->threads) {
 			proc->exit_code = code;
 			proc->exited = true;
 		}
+
 		thread->process = NULL;
 	}
 
@@ -717,26 +914,23 @@ void thread_exit(tcb *thread, int code)
 	thread->magic = TCB_MAGIC_DEAD;
 	atomic_store(&thread->finished, true);
 
+	if (!next) {
+		while (1)
+			cpu_halt();
+	}
+
+	sched_prepare_cpu_stack(next);
+
 	if (!thread->joinable) {
-		kfree(thread);
-		if (!next) {
-			while (1)
-				cpu_halt();
-		}
-		sched_prepare_cpu_stack(next);
 		struct kthread dead_ctx = thread->kthread;
-		switch_task(&dead_ctx, &next->kthread);
-		__builtin_unreachable();
-	} else {
-		if (!next) {
-			while (1)
-				cpu_halt();
-		}
-		sched_prepare_cpu_stack(next);
-		struct kthread dead_ctx = thread->kthread;
+		thread_release_final(thread);
 		switch_task(&dead_ctx, &next->kthread);
 		__builtin_unreachable();
 	}
+
+	struct kthread dead_ctx = thread->kthread;
+	switch_task(&dead_ctx, &next->kthread);
+	__builtin_unreachable();
 }
 
 tcb *thread_current(void)
@@ -805,6 +999,7 @@ bool proc_has_threads(uint32_t pid)
 pcb *proc_get_by_pid(uint32_t pid)
 {
 	spinlock_acquire(&proc_list_lock);
+
 	pcb *p = proc_list;
 	while (p) {
 		if (p->pid == pid) {
@@ -813,6 +1008,7 @@ pcb *proc_get_by_pid(uint32_t pid)
 		}
 		p = p->proc_next;
 	}
+
 	spinlock_release(&proc_list_lock);
 	return NULL;
 }
@@ -830,6 +1026,6 @@ int thread_wait(tcb *thread)
 		sched_yield();
 
 	int code = thread->exit_code;
-	kfree(thread);
+	thread_release_final(thread);
 	return code;
 }

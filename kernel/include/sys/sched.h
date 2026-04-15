@@ -68,7 +68,6 @@ typedef struct pcb {
 	pagetable *pm;
 	vctx_t *vctx;
 	struct tcb *threads;
-	uint32_t next_tid;
 	struct pcb *proc_next;
 	spinlock_t fd_lock;
 	struct fileio *fds[PROC_MAX_FDS];

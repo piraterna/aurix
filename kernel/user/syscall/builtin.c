@@ -1,20 +1,20 @@
 /*********************************************************************************/
-/* Module Name:  builtin.c */
-/* Project:      AurixOS */
+/* Module Name:  builtin.c                                                       */
+/* Project:      AurixOS                                                         */
 /*                                                                               */
-/* Copyright (c) 2024-2026 Jozef Nagy */
+/* Copyright (c) 2024-2026 Jozef Nagy                                            */
 /*                                                                               */
-/* This source is subject to the MIT License. */
-/* See License.txt in the root of this repository. */
-/* All other rights reserved. */
+/* This source is subject to the MIT License.                                    */
+/* See License.txt in the root of this repository.                               */
+/* All other rights reserved.                                                    */
 /*                                                                               */
-/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR */
-/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, */
-/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE */
-/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    */
+/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      */
+/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   */
+/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        */
 /* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, */
 /* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE */
-/* SOFTWARE. */
+/* SOFTWARE.                                                                     */
 /*********************************************************************************/
 
 #include <user/syscall.h>
@@ -35,10 +35,15 @@
 #include <ipc/pipe.h>
 #include <aurix.h>
 #include <user/access.h>
+#include <arch/cpu/switch.h>
+#include <loader/elf.h>
+
+extern void switch_enter_user(void);
 
 #if defined(__x86_64__)
 #include <arch/cpu/cpu.h>
 #include <arch/cpu/syscall.h>
+#include <arch/cpu/gdt.h>
 #endif
 
 #ifndef AT_FDCWD
@@ -63,8 +68,6 @@
 #ifndef UTIME_OMIT
 #define UTIME_OMIT 0x3ffffffe
 #endif
-
-#include <loader/elf.h>
 
 #define FD_RESERVED_STDIN 0
 #define FD_STDOUT 1
@@ -100,8 +103,6 @@
 #define FSFD_TARGET_FD 2
 #define FSFD_TARGET_FD_PATH 3
 
-#define AT_FDCWD -100
-
 #define FCNTL_F_DUPFD 0
 #define FCNTL_F_GETFD 1
 #define FCNTL_F_SETFD 2
@@ -117,6 +118,57 @@
 #define POLLHUP 0x0010
 #define POLLNVAL 0x0020
 
+#define DIR_HANDLE_MAX_ENTRIES 256
+
+#define EXEC_MAX_ARGS 128
+#define EXEC_MAX_ENVP 128
+#define EXEC_MAX_STRLEN 4096
+
+#define SYSCALL_MAX_PATH 4096
+#define SYSCALL_MAX_POLLFDS 1024
+
+#if defined(__x86_64__)
+#define MSR_IA32_FS_BASE 0xC0000100
+#endif
+
+#define SYSCALL_REQUIRE(cond, err) \
+	do {                           \
+		if (!(cond))               \
+			return (err);          \
+	} while (0)
+
+#define SYSCALL_REQUIRE_PROC(proc) \
+	do {                           \
+		if (!(proc))               \
+			return -EINVAL;        \
+	} while (0)
+
+#define SYSCALL_REQUIRE_FD(fd)                \
+	do {                                      \
+		if ((fd) < 0 || (fd) >= PROC_MAX_FDS) \
+			return -EBADF;                    \
+	} while (0)
+
+#define SYSCALL_KFREE_IF(ptr) \
+	do {                      \
+		if ((ptr))            \
+			kfree((ptr));     \
+	} while (0)
+
+#define SYSCALL_CLOSE_IF(f) \
+	do {                    \
+		if ((f))            \
+			close((f));     \
+	} while (0)
+
+#define SYSCALL_UNLOCK_FD_IF(proc, held)        \
+	do {                                        \
+		if (held) {                             \
+			spinlock_release(&(proc)->fd_lock); \
+			held = false;                       \
+		}                                       \
+	} while (0)
+
 struct pollfd {
 	int fd;
 	short events;
@@ -128,22 +180,90 @@ struct aurix_timespec {
 	long tv_nsec;
 };
 
-#define DIR_HANDLE_MAX_ENTRIES 256
-
-#define EXEC_MAX_ARGS 128
-#define EXEC_MAX_ENVP 128
-#define EXEC_MAX_STRLEN 4096
-
-#if defined(__x86_64__)
-#define MSR_IA32_FS_BASE 0xC0000100
-#endif
-
 static struct pcb *syscall_current_process(void)
 {
 	struct tcb *current = thread_current();
 	if (!current)
 		return NULL;
 	return current->process;
+}
+
+/*
+ * Replace these shims with your real checked user-access helpers if available.
+ * The current versions only do minimal pointer/length validation.
+ */
+static int syscall_user_readable(const void *ptr, size_t len)
+{
+	if (!ptr && len)
+		return -EFAULT;
+	return 0;
+}
+
+static int syscall_user_writable(void *ptr, size_t len)
+{
+	if (!ptr && len)
+		return -EFAULT;
+	return 0;
+}
+
+static int syscall_copy_from_user(void *dst, const void *src, size_t len)
+{
+	int r = syscall_user_readable(src, len);
+	if (r != 0)
+		return r;
+	if (len)
+		memcpy(dst, src, len);
+	return 0;
+}
+
+static int syscall_copy_to_user(void *dst, const void *src, size_t len)
+{
+	int r = syscall_user_writable(dst, len);
+	if (r != 0)
+		return r;
+	if (len)
+		memcpy(dst, src, len);
+	return 0;
+}
+
+static size_t bounded_strlen(const char *s, size_t max)
+{
+	if (!s)
+		return 0;
+
+	for (size_t i = 0; i < max; i++) {
+		if (s[i] == '\0')
+			return i;
+	}
+	return max;
+}
+
+static int syscall_copy_string_from_user(const char *user, char **out,
+										 size_t max_len)
+{
+	SYSCALL_REQUIRE(out != NULL, -EINVAL);
+	*out = NULL;
+
+	SYSCALL_REQUIRE(user != NULL, -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_readable(user, 1) == 0, -EFAULT);
+
+	size_t len = bounded_strlen(user, max_len);
+	if (len == max_len)
+		return -ENAMETOOLONG;
+
+	char *k = kmalloc(len + 1);
+	if (!k)
+		return -ENOMEM;
+
+	memcpy(k, user, len);
+	k[len] = '\0';
+	*out = k;
+	return 0;
+}
+
+static bool syscall_is_privileged(const struct pcb *proc)
+{
+	return proc && proc->euid == 0;
 }
 
 static bool vregion_overlaps(vctx_t *ctx, uint64_t vaddr, size_t pages)
@@ -196,7 +316,7 @@ static char *syscall_normalize_path(const char *path)
 	char *token = strtok_r(temp, "/", &save);
 	while (token) {
 		if (strcmp(token, ".") == 0 || *token == '\0') {
-			// skip
+			/* skip */
 		} else if (strcmp(token, "..") == 0) {
 			if (count > 0 && strcmp(parts[count - 1], "..") != 0) {
 				count--;
@@ -234,9 +354,8 @@ static char *syscall_normalize_path(const char *path)
 			*cursor++ = '/';
 	}
 
-	if (cursor == out) {
+	if (cursor == out)
 		*cursor++ = '/';
-	}
 	*cursor = '\0';
 
 	kfree(parts);
@@ -260,6 +379,7 @@ static char *syscall_resolve_path(struct pcb *proc, const char *path)
 	char *combined = kmalloc(total);
 	if (!combined)
 		return NULL;
+
 	memcpy(combined, cwd, cwd_len);
 	size_t pos = cwd_len;
 	if (need_slash)
@@ -270,6 +390,24 @@ static char *syscall_resolve_path(struct pcb *proc, const char *path)
 	char *normalized = syscall_normalize_path(combined);
 	kfree(combined);
 	return normalized;
+}
+
+static int syscall_resolve_user_path(struct pcb *proc, const char *user_path,
+									 char **resolved)
+{
+	char *kpath = NULL;
+	int r = syscall_copy_string_from_user(user_path, &kpath, SYSCALL_MAX_PATH);
+	if (r != 0)
+		return r;
+
+	char *full = syscall_resolve_path(proc, kpath);
+	kfree(kpath);
+
+	if (!full)
+		return -ENOMEM;
+
+	*resolved = full;
+	return 0;
 }
 
 static uint64_t pflags_to_vflags(uint64_t pflags)
@@ -309,6 +447,7 @@ static int syscall_clone_memory(struct pcb *parent, struct pcb *child)
 			uintptr_t src_phys = vget_phys(parent->pm, virt);
 			if (!src_phys)
 				continue;
+
 			uintptr_t phys_page = ALIGN_DOWN(src_phys, PAGE_SIZE);
 			uint64_t new_flags = pflags;
 			if (pflags & VMM_WRITABLE)
@@ -318,8 +457,12 @@ static int syscall_clone_memory(struct pcb *parent, struct pcb *child)
 
 			pmm_ref_inc(phys_page, 1);
 			map_page(child->pm, virt, phys_page, new_flags);
-			if (new_flags != pflags)
+			if (new_flags != pflags) {
 				map_page(parent->pm, virt, phys_page, new_flags);
+#if defined(__x86_64__)
+				__asm__ volatile("invlpg (%0)" ::"r"((void *)virt) : "memory");
+#endif
+			}
 		}
 	}
 
@@ -357,6 +500,27 @@ static int proc_fd_alloc_locked(struct pcb *proc, struct fileio *file)
 	return proc_fd_alloc_from_locked(proc, file, FD_FIRST_DYNAMIC);
 }
 
+static int syscall_fd_get(struct pcb *proc, int fd, struct fileio **out)
+{
+	SYSCALL_REQUIRE(out != NULL, -EINVAL);
+	*out = NULL;
+
+	SYSCALL_REQUIRE_PROC(proc);
+	SYSCALL_REQUIRE_FD(fd);
+
+	spinlock_acquire(&proc->fd_lock);
+	struct fileio *f = proc_fd_lookup_locked(proc, fd);
+	if (!f) {
+		spinlock_release(&proc->fd_lock);
+		return -EBADF;
+	}
+	fio_retain(f);
+	spinlock_release(&proc->fd_lock);
+
+	*out = f;
+	return 0;
+}
+
 static int syscall_resolve_path_at(struct pcb *proc, int dirfd,
 								   const char *path, char **resolved)
 {
@@ -383,7 +547,7 @@ static int syscall_resolve_path_at(struct pcb *proc, int dirfd,
 	spinlock_release(&proc->fd_lock);
 
 	struct vnode *base_vnode = (struct vnode *)base_file->private;
-	if (base_vnode->vtype != VNODE_DIR || !base_vnode->path) {
+	if (!base_vnode || base_vnode->vtype != VNODE_DIR || !base_vnode->path) {
 		close(base_file);
 		return -ENOTDIR;
 	}
@@ -418,15 +582,17 @@ static int syscall_resolve_path_at(struct pcb *proc, int dirfd,
 	return 0;
 }
 
-static size_t bounded_strlen(const char *s, size_t max)
+static int syscall_resolve_user_path_at(struct pcb *proc, int dirfd,
+										const char *user_path, char **resolved)
 {
-	if (!s)
-		return 0;
-	for (size_t i = 0; i < max; i++) {
-		if (s[i] == '\0')
-			return i;
-	}
-	return max;
+	char *kpath = NULL;
+	int r = syscall_copy_string_from_user(user_path, &kpath, SYSCALL_MAX_PATH);
+	if (r != 0)
+		return r;
+
+	r = syscall_resolve_path_at(proc, dirfd, kpath, resolved);
+	kfree(kpath);
+	return r;
 }
 
 static void free_string_vector(char **vec, size_t count)
@@ -487,6 +653,7 @@ static int parse_shebang(const char *buf, size_t size, char **interp_out,
 
 	while (i < size && (buf[i] == ' ' || buf[i] == '\t'))
 		i++;
+
 	char *arg = NULL;
 	if (i < size && buf[i] != '\n' && buf[i] != '\r') {
 		size_t arg_start = i;
@@ -506,6 +673,7 @@ static int parse_shebang(const char *buf, size_t size, char **interp_out,
 		*interp_out = interp;
 	else
 		kfree(interp);
+
 	if (arg_out)
 		*arg_out = arg;
 	else if (arg)
@@ -544,6 +712,7 @@ static int build_shebang_argv(const char *interp, const char *interp_arg,
 	vec[idx++] = dup_cstring(script);
 	if (!vec[idx - 1])
 		goto fail;
+
 	for (size_t i = 1; i < orig_count; i++) {
 		vec[idx++] = dup_cstring(orig[i]);
 		if (!vec[idx - 1])
@@ -564,11 +733,14 @@ static int copy_user_string_vector(const char *const *user, size_t max,
 {
 	if (!out_vec || !out_count)
 		return -EINVAL;
+
 	*out_vec = NULL;
 	*out_count = 0;
 
 	if (!user)
 		return 0;
+
+	SYSCALL_REQUIRE(syscall_user_readable(user, sizeof(void *)) == 0, -EFAULT);
 
 	char **vec = kmalloc(sizeof(char *) * max);
 	if (!vec)
@@ -619,6 +791,7 @@ static int copy_file_data(const char *src, const char *dst, mode_t mode)
 	struct fileio *in = open(src, O_RDONLY, 0);
 	if (!in)
 		return -ENOENT;
+
 	struct fileio *out = open(dst, O_WRONLY | O_CREAT | O_TRUNC, mode);
 	if (!out) {
 		close(in);
@@ -688,18 +861,61 @@ static void apply_utimens(struct stat *st, const struct aurix_timespec times[2])
 						  clamp_ts_sec(times[1].tv_sec);
 }
 
+static void exec_enter_current_user(tcb *current, pcb *proc, uintptr_t entry)
+{
+	if (!current || !proc)
+		for (;;)
+			cpu_halt();
+
+	uint64_t *rsp = (uint64_t *)(uintptr_t)current->kthread.rsp0;
+	rsp = (uint64_t *)((uintptr_t)rsp - 8);
+
+	*--rsp = 0x1b;
+	*--rsp = proc->user_rsp;
+	*--rsp = 0x202;
+	*--rsp = 0x23;
+	*--rsp = (uint64_t)entry;
+
+	*--rsp = (uint64_t)switch_enter_user;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0;
+	*--rsp = 0x202;
+
+	current->kthread.rsp = (uint64_t)rsp;
+	current->kthread.cr3 = (uint64_t)proc->pm;
+	current->user = true;
+
+#if defined(__x86_64__)
+	gdt_set_kernel_stack(current->kthread.rsp0);
+	write_cr3((uint64_t)proc->pm);
+#endif
+
+	struct kthread old_ctx;
+	memset(&old_ctx, 0, sizeof(old_ctx));
+	switch_task(&old_ctx, &current->kthread);
+	__builtin_unreachable();
+}
+
 /*********************************************************************************/
-/* Builtin system calls for aurix												 */
+/* Builtin system calls                                                           */
 /*********************************************************************************/
+
 int64_t sys_exit(const syscall_args_t *args)
 {
 	int64_t code = (int64_t)args->rdi;
-	info("TID=%u (%s, userspace=%s) exited with code %lld\n",
-		 thread_current()->tid,
-		 thread_current()->process->name ? thread_current()->process->name :
-										   "unknown",
-		 thread_current()->user ? "yes" : "no", code);
-	thread_exit(thread_current(), (int)code);
+
+	tcb *thr = thread_current();
+	SYSCALL_REQUIRE(thr != NULL, -EINVAL);
+
+	info("TID=%u (%s, userspace=%s) exited with code %lld\n", thr->tid,
+		 (thr->process && thr->process->name) ? thr->process->name : "unknown",
+		 thr->user ? "yes" : "no", code);
+
+	thread_exit(thr, (int)code);
 	return 0;
 }
 
@@ -709,34 +925,31 @@ int64_t sys_open(const syscall_args_t *args)
 	int flags = (int)args->rsi;
 	mode_t mode = (mode_t)args->rdx;
 
-	if (!path) {
-		error("open(): invalid path (%s)\n", ERRNO_NAME(EFAULT));
-		return -EFAULT;
-	}
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	char *resolved = NULL;
+	int r = syscall_resolve_user_path(proc, path, &resolved);
+	if (r != 0)
+		return r;
+
 	struct fileio *f = open(resolved, flags, mode);
-	if (!f) {
-		kfree(resolved);
-		return -ENOENT;
-	}
 	kfree(resolved);
+	if (!f)
+		return -ENOENT;
 
 	spinlock_acquire(&proc->fd_lock);
 	int fd = proc_fd_alloc_locked(proc, f);
 	spinlock_release(&proc->fd_lock);
+
 	if (fd < 0) {
 		close(f);
 		return fd;
 	}
 
-	trace("open(): opened %s with flags %d and mode %o\n", path, flags, mode);
+	trace("open(): opened fd=%d flags=%d mode=%o\n", fd, flags, mode);
 	return fd;
 }
 
@@ -745,16 +958,18 @@ int64_t sys_opendir(const syscall_args_t *args)
 	const char *path = (const char *)args->rdi;
 	int *handle = (int *)args->rsi;
 
-	if (!path || !handle)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
+	SYSCALL_REQUIRE(handle != NULL, -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(handle, sizeof(*handle)) == 0,
+					-EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	char *resolved = NULL;
+	int r = syscall_resolve_user_path(proc, path, &resolved);
+	if (r != 0)
+		return r;
 
 	struct fileio *f = open(resolved, O_RDONLY | O_DIRECTORY, 0);
 	kfree(resolved);
@@ -767,6 +982,7 @@ int64_t sys_opendir(const syscall_args_t *args)
 		return -ENOMEM;
 	}
 	memset(dir, 0, sizeof(dir_handle_t));
+
 	dir->entries = kmalloc(sizeof(struct dirent) * DIR_HANDLE_MAX_ENTRIES);
 	if (!dir->entries) {
 		kfree(dir);
@@ -774,6 +990,7 @@ int64_t sys_opendir(const syscall_args_t *args)
 		return -ENOMEM;
 	}
 	memset(dir->entries, 0, sizeof(struct dirent) * DIR_HANDLE_MAX_ENTRIES);
+
 	dir->vnode = (struct vnode *)f->private;
 	dir->count = 0;
 	dir->index = 0;
@@ -784,14 +1001,14 @@ int64_t sys_opendir(const syscall_args_t *args)
 	spinlock_acquire(&proc->fd_lock);
 	int fd = proc_fd_alloc_locked(proc, f);
 	spinlock_release(&proc->fd_lock);
+
 	if (fd < 0) {
 		dir_handle_free(f);
 		close(f);
 		return fd;
 	}
 
-	*handle = fd;
-	return 0;
+	return syscall_copy_to_user(handle, &fd, sizeof(fd));
 }
 
 int64_t sys_read_entries(const syscall_args_t *args)
@@ -801,32 +1018,25 @@ int64_t sys_read_entries(const syscall_args_t *args)
 	size_t max_size = (size_t)args->rdx;
 	size_t *bytes_read = (size_t *)args->r10;
 
-	if (!bytes_read)
-		return -EFAULT;
-	if (!buffer && max_size)
-		return -EFAULT;
+	SYSCALL_REQUIRE(bytes_read != NULL, -EFAULT);
+	SYSCALL_REQUIRE(!(buffer == NULL && max_size != 0), -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(bytes_read, sizeof(*bytes_read)) == 0,
+					-EFAULT);
+	if (max_size)
+		SYSCALL_REQUIRE(syscall_user_writable(buffer, max_size) == 0, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	spinlock_acquire(&proc->fd_lock);
-	struct fileio *f = proc_fd_lookup_locked(proc, fd);
-	if (!f) {
-		spinlock_release(&proc->fd_lock);
-		error("read_entries(): invalid file descriptor (%s)\n",
-			  ERRNO_NAME(EBADF));
-		return -EBADF;
-	}
-	fio_retain(f);
-	spinlock_release(&proc->fd_lock);
+	struct fileio *f = NULL;
+	int r = syscall_fd_get(proc, fd, &f);
+	if (r != 0)
+		return r;
 
 	if (!f->dir) {
 		struct vnode *vnode = (struct vnode *)f->private;
 		if (!vnode || vnode->vtype != VNODE_DIR) {
 			close(f);
-			error("read_entries(): file descriptor %d is not a directory.\n",
-				  fd);
 			return -ENOTDIR;
 		}
 
@@ -836,6 +1046,7 @@ int64_t sys_read_entries(const syscall_args_t *args)
 			return -ENOMEM;
 		}
 		memset(dir, 0, sizeof(dir_handle_t));
+
 		dir->entries = kmalloc(sizeof(struct dirent) * DIR_HANDLE_MAX_ENTRIES);
 		if (!dir->entries) {
 			kfree(dir);
@@ -850,16 +1061,12 @@ int64_t sys_read_entries(const syscall_args_t *args)
 
 	if (!(f->flags & O_DIRECTORY) || !f->dir) {
 		close(f);
-		error("read_entries(): file descriptor %d is not a directory.\n", fd);
 		return -ENOTDIR;
 	}
 
 	dir_handle_t *dir = f->dir;
 	if (!dir->entries) {
 		close(f);
-		error(
-			"read_entries(): directory handle has no entries buffer for fd %d\n",
-			fd);
 		return -ENOMEM;
 	}
 
@@ -868,55 +1075,51 @@ int64_t sys_read_entries(const syscall_args_t *args)
 		int ret = vfs_readdir(dir->vnode, dir->entries, &count);
 		if (ret != 0) {
 			close(f);
-			error("read_entries() failed for fd %d (%s)\n", fd,
-				  ERRNO_NAME(ret));
-			return -EINVAL;
+			return ret;
 		}
 		dir->count = count;
 	}
 
 	size_t max_entries = max_size / sizeof(struct dirent);
 	if (max_entries == 0 || dir->index >= dir->count) {
-		*bytes_read = 0;
+		size_t zero = 0;
 		close(f);
-		return 0;
+		return syscall_copy_to_user(bytes_read, &zero, sizeof(zero));
 	}
 
 	size_t remaining = dir->count - dir->index;
 	size_t to_copy = remaining < max_entries ? remaining : max_entries;
-	memcpy(buffer, &dir->entries[dir->index], to_copy * sizeof(struct dirent));
-	dir->index += to_copy;
-	*bytes_read = to_copy * sizeof(struct dirent);
+	size_t copied_bytes = to_copy * sizeof(struct dirent);
 
+	int ret =
+		syscall_copy_to_user(buffer, &dir->entries[dir->index], copied_bytes);
+	if (ret != 0) {
+		close(f);
+		return ret;
+	}
+
+	dir->index += to_copy;
 	close(f);
-	return 0;
+
+	return syscall_copy_to_user(bytes_read, &copied_bytes,
+								sizeof(copied_bytes));
 }
 
 int64_t sys_read(const syscall_args_t *args)
 {
 	int fd = (int)args->rdi;
-	struct pcb *proc = syscall_current_process();
-	if (!proc) {
-		return -EINVAL;
-	}
-
-	spinlock_acquire(&proc->fd_lock);
-	struct fileio *f = proc_fd_lookup_locked(proc, fd);
-	if (!f) {
-		spinlock_release(&proc->fd_lock);
-		error("read(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
-		return -EBADF;
-	}
-	fio_retain(f);
-	spinlock_release(&proc->fd_lock);
-
 	void *buf = (void *)args->rsi;
 	size_t count = (size_t)args->rdx;
-	if (!buf && count) {
-		close(f);
-		error("read(): invalid buffer (%s)\n", ERRNO_NAME(EFAULT));
-		return -EFAULT;
-	}
+
+	struct pcb *proc = syscall_current_process();
+	SYSCALL_REQUIRE_PROC(proc);
+	SYSCALL_REQUIRE(!(buf == NULL && count != 0), -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(buf, count) == 0, -EFAULT);
+
+	struct fileio *f = NULL;
+	int r = syscall_fd_get(proc, fd, &f);
+	if (r != 0)
+		return r;
 
 	int64_t bytes = (int64_t)read(f, count, buf);
 	close(f);
@@ -926,71 +1129,42 @@ int64_t sys_read(const syscall_args_t *args)
 int64_t sys_write(const syscall_args_t *args)
 {
 	int fd = (int)args->rdi;
-	struct pcb *proc = syscall_current_process();
-	if (!proc) {
-		return -EINVAL;
-	}
-
-	spinlock_acquire(&proc->fd_lock);
-	struct fileio *f = proc_fd_lookup_locked(proc, fd);
-	if (!f) {
-		spinlock_release(&proc->fd_lock);
-		error("write(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
-		return -EBADF;
-	}
-	fio_retain(f);
-	spinlock_release(&proc->fd_lock);
-
 	const void *buf = (const void *)args->rsi;
 	size_t count = (size_t)args->rdx;
-	if (!buf && count) {
-		close(f);
-		error("write(): invalid buffer (%s)\n", ERRNO_NAME(EFAULT));
-		return -EFAULT;
-	}
 
-	int r = write(f, (void *)buf, count);
-	close(f);
+	struct pcb *proc = syscall_current_process();
+	SYSCALL_REQUIRE_PROC(proc);
+	SYSCALL_REQUIRE(!(buf == NULL && count != 0), -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_readable(buf, count) == 0, -EFAULT);
 
-	if (r < 0) {
-		error("write(): failed to write to file descriptor %d (%s)\n", fd,
-			  ERRNO_NAME(-r));
+	struct fileio *f = NULL;
+	int r = syscall_fd_get(proc, fd, &f);
+	if (r != 0)
 		return r;
-	}
-	return r;
+
+	int wr = write(f, (void *)buf, count);
+	close(f);
+	return wr;
 }
 
 int64_t sys_close(const syscall_args_t *args)
 {
 	int fd = (int)args->rdi;
-	if (fd < 0 || fd >= PROC_MAX_FDS) {
-		error("close(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
-		return -EBADF;
-	}
+	SYSCALL_REQUIRE_FD(fd);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	spinlock_acquire(&proc->fd_lock);
 	struct fileio *f = proc->fds[fd];
 	if (!f) {
 		spinlock_release(&proc->fd_lock);
-		error("close(): invalid file descriptor (%s)\n", ERRNO_NAME(EBADF));
 		return -EBADF;
 	}
 	proc->fds[fd] = NULL;
 	spinlock_release(&proc->fd_lock);
 
-	dir_handle_free(f);
-	int r = close(f);
-	if (r < 0) {
-		error("close(): failed to close file descriptor %d (%s)\n", fd,
-			  ERRNO_NAME(-r));
-		return r;
-	}
-
-	return 0;
+	return close(f);
 }
 
 int64_t sys_fcntl(const syscall_args_t *args)
@@ -1000,11 +1174,8 @@ int64_t sys_fcntl(const syscall_args_t *args)
 	uintptr_t arg = (uintptr_t)args->rdx;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
-
-	if (fd < 0 || fd >= PROC_MAX_FDS)
-		return -EBADF;
+	SYSCALL_REQUIRE_PROC(proc);
+	SYSCALL_REQUIRE_FD(fd);
 
 	if (cmd == FCNTL_F_DUPFD || cmd == FCNTL_F_DUPFD_CLOEXEC) {
 		int minfd = (int)arg;
@@ -1036,6 +1207,7 @@ int64_t sys_fcntl(const syscall_args_t *args)
 		spinlock_release(&proc->fd_lock);
 		return -EBADF;
 	}
+
 	if (cmd == FCNTL_F_GETFL) {
 		size_t flags = fcntl(f, F_GETFL, NULL);
 		spinlock_release(&proc->fd_lock);
@@ -1060,8 +1232,8 @@ int64_t sys_fcntl(const syscall_args_t *args)
 		spinlock_release(&proc->fd_lock);
 		return 0;
 	}
-	spinlock_release(&proc->fd_lock);
 
+	spinlock_release(&proc->fd_lock);
 	return -EINVAL;
 }
 
@@ -1072,16 +1244,14 @@ int64_t sys_openat(const syscall_args_t *args)
 	int flags = (int)args->rdx;
 	mode_t mode = (mode_t)args->r10;
 
-	if (!path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	char *resolved = NULL;
-	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
-	if (r)
+	int r = syscall_resolve_user_path_at(proc, dirfd, path, &resolved);
+	if (r != 0)
 		return r;
 
 	struct fileio *f = open(resolved, flags, mode);
@@ -1092,6 +1262,7 @@ int64_t sys_openat(const syscall_args_t *args)
 	spinlock_acquire(&proc->fd_lock);
 	int fd = proc_fd_alloc_locked(proc, f);
 	spinlock_release(&proc->fd_lock);
+
 	if (fd < 0) {
 		close(f);
 		return fd;
@@ -1107,20 +1278,18 @@ int64_t sys_faccessat(const syscall_args_t *args)
 	int mode = (int)args->rdx;
 	int flags = (int)args->r10;
 
-	if (!path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 	if (mode & ~(R_OK | W_OK | X_OK))
 		return -EINVAL;
 	if (flags & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW))
 		return -EINVAL;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	char *resolved = NULL;
-	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
-	if (r)
+	int r = syscall_resolve_user_path_at(proc, dirfd, path, &resolved);
+	if (r != 0)
 		return r;
 
 	struct stat st;
@@ -1146,22 +1315,26 @@ int64_t sys_readlink(const syscall_args_t *args)
 	size_t max_size = (size_t)args->rdx;
 	size_t *length = (size_t *)args->r10;
 
-	if (!path || !length)
-		return -EFAULT;
-	if (!buffer && max_size)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
+	SYSCALL_REQUIRE(length != NULL, -EFAULT);
+	SYSCALL_REQUIRE(!(buffer == NULL && max_size != 0), -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(length, sizeof(*length)) == 0,
+					-EFAULT);
+	if (max_size)
+		SYSCALL_REQUIRE(syscall_user_writable(buffer, max_size) == 0, -EFAULT);
+
 	if (!max_size) {
-		*length = 0;
-		return 0;
+		size_t zero = 0;
+		return syscall_copy_to_user(length, &zero, sizeof(zero));
 	}
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	char *resolved = NULL;
+	int r = syscall_resolve_user_path(proc, path, &resolved);
+	if (r != 0)
+		return r;
 
 	char *tmp = kmalloc(max_size + 1);
 	if (!tmp) {
@@ -1179,11 +1352,13 @@ int64_t sys_readlink(const syscall_args_t *args)
 	size_t out = strlen(tmp);
 	if (out > max_size)
 		out = max_size;
-	memcpy(buffer, tmp, out);
-	kfree(tmp);
 
-	*length = (size_t)out;
-	return 0;
+	ret = syscall_copy_to_user(buffer, tmp, out);
+	kfree(tmp);
+	if (ret != 0)
+		return ret;
+
+	return syscall_copy_to_user(length, &out, sizeof(out));
 }
 
 int64_t sys_mkdir(const syscall_args_t *args)
@@ -1192,15 +1367,13 @@ int64_t sys_mkdir(const syscall_args_t *args)
 	mode_t mode = (mode_t)args->rsi;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
-	if (!path)
-		return -EFAULT;
-
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	char *resolved = NULL;
+	int r = syscall_resolve_user_path(proc, path, &resolved);
+	if (r != 0)
+		return r;
 
 	mode &= ~proc->umask;
 	int ret = vfs_mkdir(resolved, mode);
@@ -1215,19 +1388,14 @@ int64_t sys_mkdirat(const syscall_args_t *args)
 	const char *path = (const char *)args->rsi;
 	mode_t mode = (mode_t)args->rdx;
 
-	if (!path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
-
-	if (dirfd != AT_FDCWD)
-		return -ENOSYS;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	char *resolved = NULL;
-	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
-	if (r)
+	int r = syscall_resolve_user_path_at(proc, dirfd, path, &resolved);
+	if (r != 0)
 		return r;
 
 	mode &= ~proc->umask;
@@ -1243,19 +1411,14 @@ int64_t sys_unlinkat(const syscall_args_t *args)
 	const char *path = (const char *)args->rsi;
 	int flags = (int)args->rdx;
 
-	if (!path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
-
-	if (dirfd != AT_FDCWD)
-		return -ENOSYS;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	char *resolved = NULL;
-	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
-	if (r)
+	int r = syscall_resolve_user_path_at(proc, dirfd, path, &resolved);
+	if (r != 0)
 		return r;
 
 	int ret = 0;
@@ -1273,20 +1436,23 @@ int64_t sys_rename(const syscall_args_t *args)
 	const char *old_path = (const char *)args->rdi;
 	const char *new_path = (const char *)args->rsi;
 
-	if (!old_path || !new_path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(old_path != NULL, -EFAULT);
+	SYSCALL_REQUIRE(new_path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved_old = syscall_resolve_path(proc, old_path);
-	if (!resolved_old)
-		return -ENOMEM;
-	char *resolved_new = syscall_resolve_path(proc, new_path);
-	if (!resolved_new) {
+	char *resolved_old = NULL;
+	char *resolved_new = NULL;
+
+	int r = syscall_resolve_user_path(proc, old_path, &resolved_old);
+	if (r != 0)
+		return r;
+
+	r = syscall_resolve_user_path(proc, new_path, &resolved_new);
+	if (r != 0) {
 		kfree(resolved_old);
-		return -ENOMEM;
+		return r;
 	}
 
 	struct stat st;
@@ -1318,10 +1484,8 @@ int64_t sys_rename(const syscall_args_t *args)
 		ret = copy_file_data(resolved_old, resolved_new, mode);
 	}
 
-	if (ret == 0) {
-		if (vfs_remove(resolved_old) != 0)
-			ret = -ENOENT;
-	}
+	if (ret == 0 && vfs_remove(resolved_old) != 0)
+		ret = -ENOENT;
 
 	kfree(resolved_old);
 	kfree(resolved_new);
@@ -1333,18 +1497,26 @@ int64_t sys_symlink(const syscall_args_t *args)
 	const char *target = (const char *)args->rdi;
 	const char *linkpath = (const char *)args->rsi;
 
-	if (!target || !linkpath)
-		return -EFAULT;
+	SYSCALL_REQUIRE(target != NULL, -EFAULT);
+	SYSCALL_REQUIRE(linkpath != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved = syscall_resolve_path(proc, linkpath);
-	if (!resolved)
-		return -ENOMEM;
+	char *ktarget = NULL;
+	char *resolved = NULL;
+	int r = syscall_copy_string_from_user(target, &ktarget, SYSCALL_MAX_PATH);
+	if (r != 0)
+		return r;
 
-	int ret = vfs_symlink(target, resolved);
+	r = syscall_resolve_user_path(proc, linkpath, &resolved);
+	if (r != 0) {
+		kfree(ktarget);
+		return r;
+	}
+
+	int ret = vfs_symlink(ktarget, resolved);
+	kfree(ktarget);
 	kfree(resolved);
 	return ret == 0 ? 0 : -ENOENT;
 }
@@ -1355,22 +1527,26 @@ int64_t sys_symlinkat(const syscall_args_t *args)
 	int dirfd = (int)args->rsi;
 	const char *linkpath = (const char *)args->rdx;
 
-	if (!target || !linkpath)
-		return -EFAULT;
+	SYSCALL_REQUIRE(target != NULL, -EFAULT);
+	SYSCALL_REQUIRE(linkpath != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	if (dirfd != AT_FDCWD)
-		return -ENOSYS;
-
+	char *ktarget = NULL;
 	char *resolved = NULL;
-	int r = syscall_resolve_path_at(proc, dirfd, linkpath, &resolved);
-	if (r)
+	int r = syscall_copy_string_from_user(target, &ktarget, SYSCALL_MAX_PATH);
+	if (r != 0)
 		return r;
 
-	int ret = vfs_symlink(target, resolved);
+	r = syscall_resolve_user_path_at(proc, dirfd, linkpath, &resolved);
+	if (r != 0) {
+		kfree(ktarget);
+		return r;
+	}
+
+	int ret = vfs_symlink(ktarget, resolved);
+	kfree(ktarget);
 	kfree(resolved);
 	return ret == 0 ? 0 : -ENOENT;
 }
@@ -1380,20 +1556,22 @@ int64_t sys_link(const syscall_args_t *args)
 	const char *old_path = (const char *)args->rdi;
 	const char *new_path = (const char *)args->rsi;
 
-	if (!old_path || !new_path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(old_path != NULL, -EFAULT);
+	SYSCALL_REQUIRE(new_path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved_old = syscall_resolve_path(proc, old_path);
-	if (!resolved_old)
-		return -ENOMEM;
-	char *resolved_new = syscall_resolve_path(proc, new_path);
-	if (!resolved_new) {
+	char *resolved_old = NULL;
+	char *resolved_new = NULL;
+	int r = syscall_resolve_user_path(proc, old_path, &resolved_old);
+	if (r != 0)
+		return r;
+
+	r = syscall_resolve_user_path(proc, new_path, &resolved_new);
+	if (r != 0) {
 		kfree(resolved_old);
-		return -ENOMEM;
+		return r;
 	}
 
 	struct stat st;
@@ -1425,25 +1603,23 @@ int64_t sys_linkat(const syscall_args_t *args)
 	const char *new_path = (const char *)args->r10;
 	int flags = (int)args->r8;
 
-	if (!old_path || !new_path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(old_path != NULL, -EFAULT);
+	SYSCALL_REQUIRE(new_path != NULL, -EFAULT);
 	if (flags)
 		return -ENOSYS;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
-
-	if (olddirfd != AT_FDCWD || newdirfd != AT_FDCWD)
-		return -ENOSYS;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	char *resolved_old = NULL;
 	char *resolved_new = NULL;
-	int r = syscall_resolve_path_at(proc, olddirfd, old_path, &resolved_old);
-	if (r)
+
+	int r =
+		syscall_resolve_user_path_at(proc, olddirfd, old_path, &resolved_old);
+	if (r != 0)
 		return r;
-	r = syscall_resolve_path_at(proc, newdirfd, new_path, &resolved_new);
-	if (r) {
+	r = syscall_resolve_user_path_at(proc, newdirfd, new_path, &resolved_new);
+	if (r != 0) {
 		kfree(resolved_old);
 		return r;
 	}
@@ -1474,16 +1650,15 @@ int64_t sys_chmod(const syscall_args_t *args)
 	const char *path = (const char *)args->rdi;
 	mode_t mode = (mode_t)args->rsi;
 
-	if (!path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	char *resolved = NULL;
+	int r = syscall_resolve_user_path(proc, path, &resolved);
+	if (r != 0)
+		return r;
 
 	struct stat st;
 	if (vfs_stat(resolved, &st) != 0) {
@@ -1502,8 +1677,7 @@ int64_t sys_umask(const syscall_args_t *args)
 	mode_t mask = (mode_t)args->rdi;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	mode_t old = proc->umask;
 	proc->umask = mask & 0777;
@@ -1518,19 +1692,33 @@ int64_t sys_kill(const syscall_args_t *args)
 	if (pid <= 0)
 		return -ESRCH;
 
-	pcb *proc = proc_get_by_pid((uint32_t)pid);
-	if (!proc)
+	struct pcb *caller = syscall_current_process();
+	SYSCALL_REQUIRE_PROC(caller);
+
+	pcb *target = proc_get_by_pid((uint32_t)pid);
+	if (!target)
 		return -ESRCH;
 
 	if (sig == 0)
 		return 0;
 
-	if (thread_current() && thread_current()->process == proc) {
+	if (caller->euid != 0 && caller->pid != target->pid &&
+		caller->uid != target->uid && caller->euid != target->uid) {
+		return -EPERM;
+	}
+
+	if (sig != 9 && sig != 15)
+		return -ENOSYS;
+
+	if (thread_current() && thread_current()->process == target) {
 		thread_exit(thread_current(), 128 + sig);
 		return 0;
 	}
 
-	proc_destroy(proc);
+	if (target->parent_pid != caller->pid && caller->euid != 0)
+		return -EPERM;
+
+	proc_destroy(target);
 	return 0;
 }
 
@@ -1544,6 +1732,7 @@ int64_t sys_sleep(const syscall_args_t *args)
 {
 	uint64_t secs = (uint64_t)args->rdi;
 	uint64_t nanos = (uint64_t)args->rsi;
+
 	if (nanos >= 1000000000ULL)
 		return -EINVAL;
 
@@ -1554,41 +1743,61 @@ int64_t sys_sleep(const syscall_args_t *args)
 
 int64_t sys_poll(const syscall_args_t *args)
 {
-	struct pollfd *fds = (struct pollfd *)args->rdi;
+	struct pollfd *user_fds = (struct pollfd *)args->rdi;
 	size_t count = (size_t)args->rsi;
 	int timeout = (int)args->rdx;
 	int *num_events = (int *)args->r10;
 
-	if (!num_events)
-		return -EFAULT;
-	if (!fds && count)
-		return -EFAULT;
+	SYSCALL_REQUIRE(num_events != NULL, -EFAULT);
+	SYSCALL_REQUIRE(count <= SYSCALL_MAX_POLLFDS, -EINVAL);
+	SYSCALL_REQUIRE(!(user_fds == NULL && count != 0), -EFAULT);
+
+	SYSCALL_REQUIRE(syscall_user_writable(num_events, sizeof(*num_events)) == 0,
+					-EFAULT);
+	if (count) {
+		SYSCALL_REQUIRE(
+			syscall_user_readable(user_fds, count * sizeof(struct pollfd)) == 0,
+			-EFAULT);
+		SYSCALL_REQUIRE(
+			syscall_user_writable(user_fds, count * sizeof(struct pollfd)) == 0,
+			-EFAULT);
+	}
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
+
+	struct pollfd *kfds = NULL;
+	if (count) {
+		kfds = kmalloc(count * sizeof(*kfds));
+		if (!kfds)
+			return -ENOMEM;
+
+		int r = syscall_copy_from_user(kfds, user_fds, count * sizeof(*kfds));
+		if (r != 0) {
+			kfree(kfds);
+			return r;
+		}
+	}
 
 	int ready_total = 0;
+
 	for (int pass = 0; pass < 2; pass++) {
 		ready_total = 0;
 
 		for (size_t i = 0; i < count; i++) {
-			struct pollfd *pfd = &fds[i];
+			struct pollfd *pfd = &kfds[i];
 			pfd->revents = 0;
 
 			if (pfd->fd < 0)
 				continue;
 
-			spinlock_acquire(&proc->fd_lock);
-			struct fileio *f = proc_fd_lookup_locked(proc, pfd->fd);
-			if (!f) {
-				spinlock_release(&proc->fd_lock);
+			struct fileio *f = NULL;
+			int r = syscall_fd_get(proc, pfd->fd, &f);
+			if (r != 0) {
 				pfd->revents |= POLLNVAL;
 				ready_total++;
 				continue;
 			}
-			fio_retain(f);
-			spinlock_release(&proc->fd_lock);
 
 			if (f->flags & PIPE_READ_END) {
 				struct pipe *p = (struct pipe *)f->private;
@@ -1632,8 +1841,14 @@ int64_t sys_poll(const syscall_args_t *args)
 			break;
 	}
 
-	*num_events = ready_total;
-	return 0;
+	if (count) {
+		int r = syscall_copy_to_user(user_fds, kfds, count * sizeof(*kfds));
+		kfree(kfds);
+		if (r != 0)
+			return r;
+	}
+
+	return syscall_copy_to_user(num_events, &ready_total, sizeof(ready_total));
 }
 
 int64_t sys_dup(const syscall_args_t *args)
@@ -1645,8 +1860,7 @@ int64_t sys_dup(const syscall_args_t *args)
 		return -EINVAL;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	spinlock_acquire(&proc->fd_lock);
 	struct fileio *f = proc_fd_lookup_locked(proc, oldfd);
@@ -1679,8 +1893,7 @@ int64_t sys_dup2(const syscall_args_t *args)
 		return -EBADF;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	spinlock_acquire(&proc->fd_lock);
 	struct fileio *oldf = proc_fd_lookup_locked(proc, oldfd);
@@ -1718,8 +1931,7 @@ int64_t sys_dup3(const syscall_args_t *args)
 		return -EBADF;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	spinlock_acquire(&proc->fd_lock);
 	struct fileio *oldf = proc_fd_lookup_locked(proc, oldfd);
@@ -1748,12 +1960,11 @@ int64_t sys_pipe(const syscall_args_t *args)
 	int *fds = (int *)args->rdi;
 	int flags = (int)args->rsi & O_CLOEXEC;
 
-	if (!fds)
-		return -EFAULT;
+	SYSCALL_REQUIRE(fds != NULL, -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(fds, sizeof(int) * 2) == 0, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
 	struct fileio *ends[2] = { NULL, NULL };
 	if (pipe(ends) != 0)
@@ -1783,9 +1994,8 @@ int64_t sys_pipe(const syscall_args_t *args)
 	}
 	spinlock_release(&proc->fd_lock);
 
-	fds[0] = read_fd;
-	fds[1] = write_fd;
-	return 0;
+	int out[2] = { read_fd, write_fd };
+	return syscall_copy_to_user(fds, out, sizeof(out));
 }
 
 int64_t sys_stat(const syscall_args_t *args)
@@ -1798,55 +2008,56 @@ int64_t sys_stat(const syscall_args_t *args)
 
 	(void)flags;
 
-	if (!st)
-		return -EFAULT;
+	SYSCALL_REQUIRE(st != NULL, -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(st, sizeof(*st)) == 0, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
+
+	struct stat kst;
 
 	if (target == FSFD_TARGET_FD) {
-		spinlock_acquire(&proc->fd_lock);
-		struct fileio *f = proc_fd_lookup_locked(proc, fd);
-		if (!f) {
-			spinlock_release(&proc->fd_lock);
-			return -EBADF;
-		}
-		fio_retain(f);
-		spinlock_release(&proc->fd_lock);
+		struct fileio *f = NULL;
+		int r = syscall_fd_get(proc, fd, &f);
+		if (r != 0)
+			return r;
 
 		struct vnode *vnode = (struct vnode *)f->private;
 		int ret = -EINVAL;
 		if (vnode && vnode->ops && vnode->ops->getattr)
-			ret = vnode->ops->getattr(vnode, st);
+			ret = vnode->ops->getattr(vnode, &kst);
 
 		close(f);
-		return ret == 0 ? 0 : -EINVAL;
+		if (ret != 0)
+			return -EINVAL;
+		return syscall_copy_to_user(st, &kst, sizeof(kst));
 	}
 
 	if (target != FSFD_TARGET_PATH && target != FSFD_TARGET_FD_PATH)
 		return -EINVAL;
-
 	if (!path)
 		return -EFAULT;
 
 	char *resolved = NULL;
-	int r = syscall_resolve_path_at(
+	int r = syscall_resolve_user_path_at(
 		proc, target == FSFD_TARGET_FD_PATH ? fd : AT_FDCWD, path, &resolved);
-	if (r)
+	if (r != 0)
 		return r;
 
-	int ret = vfs_stat(resolved, st);
+	int ret = vfs_stat(resolved, &kst);
 	kfree(resolved);
 
-	return ret == 0 ? 0 : -ENOENT;
+	if (ret != 0)
+		return -ENOENT;
+
+	return syscall_copy_to_user(st, &kst, sizeof(kst));
 }
 
 int64_t sys_utimensat(const syscall_args_t *args)
 {
 	int dirfd = (int)args->rdi;
 	const char *path = (const char *)args->rsi;
-	const struct aurix_timespec *times =
+	const struct aurix_timespec *times_user =
 		(const struct aurix_timespec *)args->rdx;
 	int flags = (int)args->r10;
 
@@ -1854,22 +2065,26 @@ int64_t sys_utimensat(const syscall_args_t *args)
 		return -EINVAL;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
+
+	struct aurix_timespec times_copy[2];
+	const struct aurix_timespec *times = NULL;
+	if (times_user) {
+		int r =
+			syscall_copy_from_user(times_copy, times_user, sizeof(times_copy));
+		if (r != 0)
+			return r;
+		times = times_copy;
+	}
 
 	struct stat st;
-	int stat_ret;
-	int set_ret;
+	int stat_ret, set_ret;
 
-	if (!path || ((flags & AT_EMPTY_PATH) && path[0] == '\0')) {
-		spinlock_acquire(&proc->fd_lock);
-		struct fileio *f = proc_fd_lookup_locked(proc, dirfd);
-		if (!f) {
-			spinlock_release(&proc->fd_lock);
-			return -EBADF;
-		}
-		fio_retain(f);
-		spinlock_release(&proc->fd_lock);
+	if (!path || ((flags & AT_EMPTY_PATH) && path && path[0] == '\0')) {
+		struct fileio *f = NULL;
+		int r = syscall_fd_get(proc, dirfd, &f);
+		if (r != 0)
+			return r;
 
 		struct vnode *vnode = (struct vnode *)f->private;
 		if (!vnode || !vnode->ops || !vnode->ops->getattr ||
@@ -1887,13 +2102,12 @@ int64_t sys_utimensat(const syscall_args_t *args)
 		apply_utimens(&st, times);
 		set_ret = vnode->ops->setattr(vnode, &st);
 		close(f);
-
 		return set_ret == 0 ? 0 : -EINVAL;
 	}
 
 	char *resolved = NULL;
-	int r = syscall_resolve_path_at(proc, dirfd, path, &resolved);
-	if (r)
+	int r = syscall_resolve_user_path_at(proc, dirfd, path, &resolved);
+	if (r != 0)
 		return r;
 
 	stat_ret = vfs_stat(resolved, &st);
@@ -1911,28 +2125,42 @@ int64_t sys_utimensat(const syscall_args_t *args)
 
 int64_t sys_mount(const syscall_args_t *args)
 {
-	const char *source = (const char *)args->rdi;
-	const char *target = (const char *)args->rsi;
-	const char *fstype = (const char *)args->rdx;
+	const char *source_user = (const char *)args->rdi;
+	const char *target_user = (const char *)args->rsi;
+	const char *fstype_user = (const char *)args->rdx;
 	uint64_t flags = args->r10;
 	void *data = (void *)args->r8;
 
-	if (!target || !fstype) {
-		return -EFAULT;
+	(void)source_user;
+
+	SYSCALL_REQUIRE(target_user != NULL, -EFAULT);
+	SYSCALL_REQUIRE(fstype_user != NULL, -EFAULT);
+	SYSCALL_REQUIRE(flags == 0, -EINVAL);
+
+	struct pcb *proc = syscall_current_process();
+	SYSCALL_REQUIRE_PROC(proc);
+	if (!syscall_is_privileged(proc))
+		return -EPERM;
+
+	char *target = NULL;
+	char *fstype = NULL;
+
+	int r =
+		syscall_copy_string_from_user(target_user, &target, SYSCALL_MAX_PATH);
+	if (r != 0)
+		return r;
+
+	r = syscall_copy_string_from_user(fstype_user, &fstype, 64);
+	if (r != 0) {
+		kfree(target);
+		return r;
 	}
 
-	if (flags != 0) {
-		return -EINVAL;
-	}
+	struct vfs *mounted = vfs_mount(NULL, fstype, target, data);
+	kfree(target);
+	kfree(fstype);
 
-	(void)source;
-
-	struct vfs *mounted = vfs_mount(NULL, fstype, (char *)target, data);
-	if (!mounted) {
-		return -EINVAL;
-	}
-
-	return 0;
+	return mounted ? 0 : -EINVAL;
 }
 
 int64_t sys_ioctl(const syscall_args_t *args)
@@ -1940,46 +2168,46 @@ int64_t sys_ioctl(const syscall_args_t *args)
 	int fd = (int)args->rdi;
 	int request = (int)args->rsi;
 	void *arg = (void *)args->rdx;
-	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
 
-	spinlock_acquire(&proc->fd_lock);
-	struct fileio *f = proc_fd_lookup_locked(proc, fd);
-	if (!f || !f->private) {
-		spinlock_release(&proc->fd_lock);
+	struct pcb *proc = syscall_current_process();
+	SYSCALL_REQUIRE_PROC(proc);
+
+	struct fileio *f = NULL;
+	int r = syscall_fd_get(proc, fd, &f);
+	if (r != 0)
+		return r;
+	if (!f->private) {
+		close(f);
 		return -EBADF;
 	}
-	fio_retain(f);
-	spinlock_release(&proc->fd_lock);
 
 	int ret = vfs_ioctl((struct vnode *)f->private, request, arg);
 	close(f);
-	if (ret == -1) {
-		return -ENOTTY;
-	}
 
+	if (ret == -1)
+		return -ENOTTY;
 	return ret;
 }
 
 int64_t sys_load_module(const syscall_args_t *args)
 {
 	const char *path = (const char *)args->rdi;
-
-	if (!path) {
-		return -EFAULT;
-	}
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	SYSCALL_REQUIRE_PROC(proc);
+	if (!syscall_is_privileged(proc))
+		return -EPERM;
+
+	char *resolved = NULL;
+	int r = syscall_resolve_user_path(proc, path, &resolved);
+	if (r != 0)
+		return r;
 
 	struct fileio *f = open(resolved, O_RDONLY, 0);
 	kfree(resolved);
-	if (!f) {
+	if (!f)
 		return -ENOENT;
-	}
 
 	if (f->size == 0) {
 		close(f);
@@ -1987,7 +2215,6 @@ int64_t sys_load_module(const syscall_args_t *args)
 	}
 
 	size_t image_size = f->size;
-
 	void *image = kmalloc(image_size);
 	if (!image) {
 		close(f);
@@ -2007,205 +2234,8 @@ int64_t sys_load_module(const syscall_args_t *args)
 		return -EINVAL;
 	}
 
+	kfree(image);
 	return 0;
-}
-
-int64_t sys_exec(const syscall_args_t *args)
-{
-	const char *path = (const char *)args->rdi;
-	if (!path)
-		return -EFAULT;
-
-	struct pcb *cur = syscall_current_process();
-	char *resolved = syscall_resolve_path(cur, path);
-	if (!resolved)
-		return -ENOMEM;
-
-	struct fileio *f = open(resolved, O_RDONLY, 0);
-	if (!f) {
-		kfree(resolved);
-		return -ENOENT;
-	}
-
-	if (f->size == 0) {
-		close(f);
-		kfree(resolved);
-		return -EINVAL;
-	}
-
-	size_t image_size = f->size;
-	char *buf = (char *)kmalloc(image_size);
-	if (!buf) {
-		close(f);
-		kfree(resolved);
-		return -ENOMEM;
-	}
-
-	if (read(f, image_size, buf) != image_size) {
-		close(f);
-		kfree(buf);
-		kfree(resolved);
-		return -EIO;
-	}
-
-	close(f);
-
-	char *script_path = resolved;
-	char *exec_path = resolved;
-	char *interp = NULL;
-	char *interp_arg = NULL;
-	char *interp_resolved = NULL;
-	char **shebang_argv = NULL;
-	size_t shebang_argc = 0;
-
-	int sb = parse_shebang(buf, image_size, &interp, &interp_arg);
-	if (sb < 0) {
-		kfree(buf);
-		kfree(resolved);
-		return sb;
-	}
-
-	if (sb > 0) {
-		interp_resolved = syscall_resolve_path(cur, interp);
-		if (!interp_resolved) {
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
-			kfree(buf);
-			kfree(resolved);
-			return -ENOMEM;
-		}
-
-		struct fileio *interp_file = open(interp_resolved, O_RDONLY, 0);
-		if (!interp_file) {
-			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
-			kfree(buf);
-			kfree(resolved);
-			return -ENOENT;
-		}
-
-		if (interp_file->size == 0) {
-			close(interp_file);
-			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
-			kfree(buf);
-			kfree(resolved);
-			return -EINVAL;
-		}
-
-		size_t interp_size = interp_file->size;
-		char *interp_buf = (char *)kmalloc(interp_size);
-		if (!interp_buf) {
-			close(interp_file);
-			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
-			kfree(buf);
-			kfree(resolved);
-			return -ENOMEM;
-		}
-
-		if (read(interp_file, interp_size, interp_buf) != interp_size) {
-			close(interp_file);
-			kfree(interp_buf);
-			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
-			kfree(buf);
-			kfree(resolved);
-			return -EIO;
-		}
-
-		close(interp_file);
-		kfree(buf);
-		buf = interp_buf;
-		image_size = interp_size;
-
-		int argv_ret =
-			build_shebang_argv(interp_resolved, interp_arg, script_path, NULL,
-							   0, &shebang_argv, &shebang_argc);
-		if (argv_ret != 0) {
-			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
-			kfree(buf);
-			kfree(resolved);
-			return argv_ret;
-		}
-
-		exec_path = interp_resolved;
-	}
-
-	struct pcb *proc = proc_create();
-	if (!proc) {
-		if (shebang_argv)
-			free_string_vector(shebang_argv, shebang_argc);
-		if (interp)
-			kfree(interp);
-		if (interp_arg)
-			kfree(interp_arg);
-		if (exec_path != script_path)
-			kfree(exec_path);
-		kfree(script_path);
-		kfree(buf);
-		return -ENOMEM;
-	}
-
-	char *name_copy = kmalloc(strlen(exec_path) + 1);
-	if (name_copy)
-		strcpy(name_copy, exec_path);
-	proc->name = (const char *)name_copy;
-
-	uintptr_t entry = 0;
-	if (!elf_load_user_process(buf, exec_path, proc,
-							   (const char *const *)shebang_argv, shebang_argc,
-							   NULL, 0, &entry)) {
-		if (shebang_argv)
-			free_string_vector(shebang_argv, shebang_argc);
-		if (interp)
-			kfree(interp);
-		if (interp_arg)
-			kfree(interp_arg);
-		if (exec_path != script_path)
-			kfree(exec_path);
-		kfree(script_path);
-		kfree(buf);
-		proc_destroy(proc);
-		return -EINVAL;
-	}
-
-	if (shebang_argv)
-		free_string_vector(shebang_argv, shebang_argc);
-	if (interp)
-		kfree(interp);
-	if (interp_arg)
-		kfree(interp_arg);
-	if (exec_path != script_path)
-		kfree(exec_path);
-	kfree(script_path);
-
-	kfree(buf);
-
-	struct tcb *thread = thread_create_user(proc, (void (*)(void))entry);
-	if (!thread) {
-		proc_destroy(proc);
-		return -ENOMEM;
-	}
-
-	thread->joinable = true;
-	int code = thread_wait(thread);
-	proc_destroy(proc);
-
-	thread_exit(thread_current(), code);
-	__builtin_unreachable();
 }
 
 int64_t sys_execve(const syscall_args_t *args)
@@ -2214,73 +2244,83 @@ int64_t sys_execve(const syscall_args_t *args)
 	const char *const *argv = (const char *const *)args->rsi;
 	const char *const *envp = (const char *const *)args->rdx;
 
-	if (!path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	tcb *current = thread_current();
 	struct pcb *cur = current ? current->process : NULL;
-	if (!cur)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(cur);
 
 	if (cur->threads && cur->threads->proc_next)
 		return -EBUSY;
 
-	char *resolved = syscall_resolve_path(cur, path);
-	if (!resolved)
-		return -ENOMEM;
-
+	char *resolved = NULL;
 	char **argv_copy = NULL;
-	size_t argv_count = 0;
-	int arg_ret =
-		copy_user_string_vector(argv, EXEC_MAX_ARGS, &argv_copy, &argv_count);
-	if (arg_ret != 0) {
+	char **envp_copy = NULL;
+	char **shebang_argv = NULL;
+	char *buf = NULL;
+	char *script_path = NULL;
+	char *exec_path = NULL;
+	char *interp = NULL;
+	char *interp_arg = NULL;
+	char *interp_resolved = NULL;
+	size_t argv_count = 0, envp_count = 0, shebang_argc = 0;
+	size_t image_size = 0;
+
+	int r = syscall_resolve_user_path(cur, path, &resolved);
+	if (r != 0)
+		return r;
+
+	r = copy_user_string_vector(argv, EXEC_MAX_ARGS, &argv_copy, &argv_count);
+	if (r != 0) {
 		kfree(resolved);
-		return arg_ret;
+		return r;
 	}
 
-	char **envp_copy = NULL;
-	size_t envp_count = 0;
-	int env_ret =
-		copy_user_string_vector(envp, EXEC_MAX_ENVP, &envp_copy, &envp_count);
-	if (env_ret != 0) {
+	r = copy_user_string_vector(envp, EXEC_MAX_ENVP, &envp_copy, &envp_count);
+	if (r != 0) {
 		free_string_vector(argv_copy, argv_count);
 		kfree(resolved);
-		return env_ret;
+		return r;
 	}
 
 	struct fileio *f = open(resolved, O_RDONLY, 0);
 	if (!f) {
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
 		kfree(resolved);
 		return -ENOENT;
 	}
 
 	if (f->size == 0) {
 		close(f);
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
+		kfree(resolved);
 		return -EINVAL;
 	}
 
-	size_t image_size = f->size;
-	char *buf = (char *)kmalloc(image_size);
+	image_size = f->size;
+	buf = (char *)kmalloc(image_size);
 	if (!buf) {
 		close(f);
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
+		kfree(resolved);
 		return -ENOMEM;
 	}
 
 	if (read(f, image_size, buf) != image_size) {
 		close(f);
 		kfree(buf);
+		free_string_vector(argv_copy, argv_count);
+		free_string_vector(envp_copy, envp_count);
+		kfree(resolved);
 		return -EIO;
 	}
-
 	close(f);
 
-	char *script_path = resolved;
-	char *exec_path = resolved;
-	char *interp = NULL;
-	char *interp_arg = NULL;
-	char *interp_resolved = NULL;
-	char **shebang_argv = NULL;
-	size_t shebang_argc = 0;
+	script_path = resolved;
+	exec_path = resolved;
 
 	int sb = parse_shebang(buf, image_size, &interp, &interp_arg);
 	if (sb < 0) {
@@ -2296,9 +2336,8 @@ int64_t sys_execve(const syscall_args_t *args)
 		if (!interp_resolved) {
 			free_string_vector(argv_copy, argv_count);
 			free_string_vector(envp_copy, envp_count);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
+			SYSCALL_KFREE_IF(interp);
+			SYSCALL_KFREE_IF(interp_arg);
 			kfree(buf);
 			kfree(resolved);
 			return -ENOMEM;
@@ -2309,9 +2348,8 @@ int64_t sys_execve(const syscall_args_t *args)
 			free_string_vector(argv_copy, argv_count);
 			free_string_vector(envp_copy, envp_count);
 			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
+			SYSCALL_KFREE_IF(interp);
+			SYSCALL_KFREE_IF(interp_arg);
 			kfree(buf);
 			kfree(resolved);
 			return -ENOENT;
@@ -2322,9 +2360,8 @@ int64_t sys_execve(const syscall_args_t *args)
 			free_string_vector(argv_copy, argv_count);
 			free_string_vector(envp_copy, envp_count);
 			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
+			SYSCALL_KFREE_IF(interp);
+			SYSCALL_KFREE_IF(interp_arg);
 			kfree(buf);
 			kfree(resolved);
 			return -EINVAL;
@@ -2337,9 +2374,8 @@ int64_t sys_execve(const syscall_args_t *args)
 			free_string_vector(argv_copy, argv_count);
 			free_string_vector(envp_copy, envp_count);
 			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
+			SYSCALL_KFREE_IF(interp);
+			SYSCALL_KFREE_IF(interp_arg);
 			kfree(buf);
 			kfree(resolved);
 			return -ENOMEM;
@@ -2351,9 +2387,8 @@ int64_t sys_execve(const syscall_args_t *args)
 			free_string_vector(argv_copy, argv_count);
 			free_string_vector(envp_copy, envp_count);
 			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
+			SYSCALL_KFREE_IF(interp);
+			SYSCALL_KFREE_IF(interp_arg);
 			kfree(buf);
 			kfree(resolved);
 			return -EIO;
@@ -2364,19 +2399,18 @@ int64_t sys_execve(const syscall_args_t *args)
 		buf = interp_buf;
 		image_size = interp_size;
 
-		int argv_ret = build_shebang_argv(interp_resolved, interp_arg,
-										  script_path, argv_copy, argv_count,
-										  &shebang_argv, &shebang_argc);
-		if (argv_ret != 0) {
+		r = build_shebang_argv(interp_resolved, interp_arg, script_path,
+							   argv_copy, argv_count, &shebang_argv,
+							   &shebang_argc);
+		if (r != 0) {
 			free_string_vector(argv_copy, argv_count);
 			free_string_vector(envp_copy, envp_count);
 			kfree(interp_resolved);
-			kfree(interp);
-			if (interp_arg)
-				kfree(interp_arg);
+			SYSCALL_KFREE_IF(interp);
+			SYSCALL_KFREE_IF(interp_arg);
 			kfree(buf);
 			kfree(resolved);
-			return argv_ret;
+			return r;
 		}
 
 		free_string_vector(argv_copy, argv_count);
@@ -2389,10 +2423,8 @@ int64_t sys_execve(const syscall_args_t *args)
 	if (!new_pm) {
 		free_string_vector(argv_copy, argv_count);
 		free_string_vector(envp_copy, envp_count);
-		if (interp)
-			kfree(interp);
-		if (interp_arg)
-			kfree(interp_arg);
+		SYSCALL_KFREE_IF(interp);
+		SYSCALL_KFREE_IF(interp_arg);
 		if (exec_path != script_path)
 			kfree(exec_path);
 		kfree(script_path);
@@ -2405,10 +2437,8 @@ int64_t sys_execve(const syscall_args_t *args)
 		destroy_pagemap(new_pm);
 		free_string_vector(argv_copy, argv_count);
 		free_string_vector(envp_copy, envp_count);
-		if (interp)
-			kfree(interp);
-		if (interp_arg)
-			kfree(interp_arg);
+		SYSCALL_KFREE_IF(interp);
+		SYSCALL_KFREE_IF(interp_arg);
 		if (exec_path != script_path)
 			kfree(exec_path);
 		kfree(script_path);
@@ -2455,47 +2485,19 @@ int64_t sys_execve(const syscall_args_t *args)
 		cur->user_stack_base = old_user_stack_base;
 		cur->user_stack_size = old_user_stack_size;
 		cur->user_rsp = old_user_rsp;
+
 		vdestroy(new_vctx);
 		destroy_pagemap(new_pm);
+
 		free_string_vector(argv_copy, argv_count);
 		free_string_vector(envp_copy, envp_count);
-		if (interp)
-			kfree(interp);
-		if (interp_arg)
-			kfree(interp_arg);
+		SYSCALL_KFREE_IF(interp);
+		SYSCALL_KFREE_IF(interp_arg);
 		if (exec_path != script_path)
 			kfree(exec_path);
 		kfree(script_path);
 		kfree(buf);
 		return -EINVAL;
-	}
-
-	struct tcb *thread = thread_create_user(cur, (void (*)(void))entry);
-	if (!thread) {
-		cur->pm = old_pm;
-		cur->vctx = old_vctx;
-		cur->image_elf = old_image_elf;
-		cur->image_size = old_image_size;
-		cur->image_phys_base = old_image_phys_base;
-		cur->image_load_base = old_image_load_base;
-		cur->image_link_base = old_image_link_base;
-		cur->image_exec_size = old_image_exec_size;
-		cur->user_stack_base = old_user_stack_base;
-		cur->user_stack_size = old_user_stack_size;
-		cur->user_rsp = old_user_rsp;
-		vdestroy(new_vctx);
-		destroy_pagemap(new_pm);
-		free_string_vector(argv_copy, argv_count);
-		free_string_vector(envp_copy, envp_count);
-		if (interp)
-			kfree(interp);
-		if (interp_arg)
-			kfree(interp_arg);
-		if (exec_path != script_path)
-			kfree(exec_path);
-		kfree(script_path);
-		kfree(buf);
-		return -ENOMEM;
 	}
 
 	char *name_copy = kmalloc(strlen(exec_path) + 1);
@@ -2506,20 +2508,15 @@ int64_t sys_execve(const syscall_args_t *args)
 		cur->name = (const char *)name_copy;
 	}
 
-#if defined(__x86_64__)
-	write_cr3((uint64_t)cur->pm);
-	current->kthread.cr3 = (uint64_t)cur->pm;
-#endif
-
 	if (old_vctx)
 		vdestroy(old_vctx);
 	if (old_pm)
 		destroy_pagemap(old_pm);
+	if (old_image_elf)
+		kfree(old_image_elf);
 
-	if (interp)
-		kfree(interp);
-	if (interp_arg)
-		kfree(interp_arg);
+	SYSCALL_KFREE_IF(interp);
+	SYSCALL_KFREE_IF(interp_arg);
 	if (exec_path != script_path)
 		kfree(exec_path);
 	kfree(script_path);
@@ -2527,8 +2524,21 @@ int64_t sys_execve(const syscall_args_t *args)
 	free_string_vector(argv_copy, argv_count);
 	free_string_vector(envp_copy, envp_count);
 
-	thread_exit(current, 0);
+	exec_enter_current_user(current, cur, entry);
 	__builtin_unreachable();
+}
+
+int64_t sys_exec(const syscall_args_t *args)
+{
+	const char *path = (const char *)args->rdi;
+
+	syscall_args_t execve_args;
+	memset(&execve_args, 0, sizeof(execve_args));
+	execve_args.rdi = (uint64_t)(uintptr_t)path;
+	execve_args.rsi = (uint64_t)(uintptr_t)NULL;
+	execve_args.rdx = (uint64_t)(uintptr_t)NULL;
+
+	return sys_execve(&execve_args);
 }
 
 int64_t sys_mmap(const syscall_args_t *args)
@@ -2542,7 +2552,6 @@ int64_t sys_mmap(const syscall_args_t *args)
 
 	if (length == 0)
 		return -EINVAL;
-
 	if (offset & (PAGE_SIZE - 1))
 		return -EINVAL;
 
@@ -2569,7 +2578,8 @@ int64_t sys_mmap(const syscall_args_t *args)
 	}
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc || !proc->vctx)
+	SYSCALL_REQUIRE_PROC(proc);
+	if (!proc->vctx)
 		return -EINVAL;
 
 	size_t pages = DIV_ROUND_UP(length, PAGE_SIZE);
@@ -2600,6 +2610,7 @@ int64_t sys_mmap(const syscall_args_t *args)
 			return -EINVAL;
 		if (hint < min_addr)
 			return -EINVAL;
+
 		if (flags & MAP_FIXED_NOREPLACE) {
 			if (vregion_overlaps(proc->vctx, hint, pages))
 				return -EEXIST;
@@ -2633,17 +2644,12 @@ int64_t sys_lseek(const syscall_args_t *args)
 		return -EINVAL;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	spinlock_acquire(&proc->fd_lock);
-	struct fileio *f = proc_fd_lookup_locked(proc, fd);
-	if (!f) {
-		spinlock_release(&proc->fd_lock);
-		return -EBADF;
-	}
-	fio_retain(f);
-	spinlock_release(&proc->fd_lock);
+	struct fileio *f = NULL;
+	int r = syscall_fd_get(proc, fd, &f);
+	if (r != 0)
+		return r;
 
 	int64_t base = 0;
 	if (whence == SEEK_CUR)
@@ -2669,12 +2675,12 @@ int64_t sys_munmap(const syscall_args_t *args)
 
 	if (!addr || length == 0)
 		return -EINVAL;
-
 	if (((uintptr_t)addr & (PAGE_SIZE - 1)) != 0)
 		return -EINVAL;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc || !proc->vctx)
+	SYSCALL_REQUIRE_PROC(proc);
+	if (!proc->vctx)
 		return -EINVAL;
 
 	size_t pages = DIV_ROUND_UP(length, PAGE_SIZE);
@@ -2693,15 +2699,14 @@ int64_t sys_mprotect(const syscall_args_t *args)
 
 	if (!addr || length == 0)
 		return -EINVAL;
-
 	if (!IS_PAGE_ALIGNED(addr))
 		return -EINVAL;
-
 	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
 		return -EINVAL;
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc || !proc->vctx || !proc->pm)
+	SYSCALL_REQUIRE_PROC(proc);
+	if (!proc->vctx || !proc->pm)
 		return -EINVAL;
 
 	size_t pages = DIV_ROUND_UP(length, PAGE_SIZE);
@@ -2748,22 +2753,22 @@ int64_t sys_getcwd(const syscall_args_t *args)
 	char *buf = (char *)args->rdi;
 	size_t size = (size_t)args->rsi;
 
-	if (!buf || size == 0)
-		return -EINVAL;
+	SYSCALL_REQUIRE(buf != NULL, -EINVAL);
+	SYSCALL_REQUIRE(size != 0, -EINVAL);
+	SYSCALL_REQUIRE(syscall_user_writable(buf, size) == 0, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
 	const char *cwd = (proc && proc->cwd) ? proc->cwd : "/";
 	size_t len = strlen(cwd);
 	if (len + 1 > size)
 		return -ERANGE;
-	memcpy(buf, cwd, len + 1);
-	return 0;
+
+	return syscall_copy_to_user(buf, cwd, len + 1);
 }
 
 int64_t sys_fork(const syscall_args_t *args)
 {
-	if (!args)
-		return -EINVAL;
+	SYSCALL_REQUIRE(args != NULL, -EINVAL);
 
 	tcb *parent_thread = thread_current();
 	if (!parent_thread || !parent_thread->process)
@@ -2778,12 +2783,12 @@ int64_t sys_fork(const syscall_args_t *args)
 	child->user_stack_base = parent->user_stack_base;
 	child->user_stack_size = parent->user_stack_size;
 	child->user_rsp = args->rsp;
-	child->image_elf = parent->image_elf;
-	child->image_size = parent->image_size;
-	child->image_phys_base = parent->image_phys_base;
-	child->image_load_base = parent->image_load_base;
-	child->image_link_base = parent->image_link_base;
-	child->image_exec_size = parent->image_exec_size;
+	child->image_elf = NULL;
+	child->image_size = 0;
+	child->image_phys_base = 0;
+	child->image_load_base = 0;
+	child->image_link_base = 0;
+	child->image_exec_size = 0;
 
 	if (child->cwd) {
 		kfree(child->cwd);
@@ -2798,6 +2803,7 @@ int64_t sys_fork(const syscall_args_t *args)
 	}
 	if (parent->name)
 		child->name = strdup(parent->name);
+
 	child->umask = parent->umask;
 	child->uid = parent->uid;
 	child->gid = parent->gid;
@@ -2887,16 +2893,15 @@ int64_t sys_fork(const syscall_args_t *args)
 int64_t sys_chdir(const syscall_args_t *args)
 {
 	const char *path = (const char *)args->rdi;
-	if (!path)
-		return -EFAULT;
+	SYSCALL_REQUIRE(path != NULL, -EFAULT);
 
 	struct pcb *proc = syscall_current_process();
-	if (!proc)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(proc);
 
-	char *resolved = syscall_resolve_path(proc, path);
-	if (!resolved)
-		return -ENOMEM;
+	char *resolved = NULL;
+	int r = syscall_resolve_user_path(proc, path, &resolved);
+	if (r != 0)
+		return r;
 
 	struct vnode *vnode = NULL;
 	int ret = vfs_lookup(resolved, &vnode);
@@ -2906,12 +2911,14 @@ int64_t sys_chdir(const syscall_args_t *args)
 	}
 
 	if (!vnode || vnode->vtype != VNODE_DIR) {
-		vnode_unref(vnode);
+		if (vnode)
+			vnode_unref(vnode);
 		kfree(resolved);
 		return -ENOTDIR;
 	}
 
 	vnode_unref(vnode);
+
 	if (proc->cwd)
 		kfree(proc->cwd);
 	proc->cwd = resolved;
@@ -2930,8 +2937,11 @@ int64_t sys_waitpid(const syscall_args_t *args)
 		return -EINVAL;
 
 	struct pcb *parent = syscall_current_process();
-	if (!parent)
-		return -EINVAL;
+	SYSCALL_REQUIRE_PROC(parent);
+
+	if (status)
+		SYSCALL_REQUIRE(syscall_user_writable(status, sizeof(*status)) == 0,
+						-EFAULT);
 
 	struct pcb *child = proc_get_by_pid((uint32_t)pid);
 	if (!child)
@@ -2942,8 +2952,12 @@ int64_t sys_waitpid(const syscall_args_t *args)
 	while (!child->exited)
 		sched_yield();
 
-	if (status)
-		*status = (child->exit_code & 0xff) << 8;
+	if (status) {
+		int st = (child->exit_code & 0xff) << 8;
+		int r = syscall_copy_to_user(status, &st, sizeof(st));
+		if (r != 0)
+			return r;
+	}
 
 	proc_destroy(child);
 	return pid;
@@ -2971,18 +2985,29 @@ int64_t sys_getppid(const syscall_args_t *args)
 	return (int64_t)proc->parent_pid;
 }
 
-
 int64_t sys_getpgid(const syscall_args_t *args)
 {
 	pid_t pid = (pid_t)args->rdi;
-	pid_t* pgid_out = (pid_t *)args->rsi;
+	pid_t *pgid_out = (pid_t *)args->rsi;
 
-	if (!pgid_out)
-		return -EFAULT;
+	SYSCALL_REQUIRE(pgid_out != NULL, -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(pgid_out, sizeof(*pgid_out)) == 0,
+					-EFAULT);
 
-	*pgid_out = proc_get_by_pid(proc_get_by_pid(pid)->parent_pid)->pid;
+	struct pcb *caller = syscall_current_process();
+	SYSCALL_REQUIRE_PROC(caller);
 
-	return 0;
+	if (pid == 0)
+		pid = caller->pid;
+	if (pid < 0)
+		return -EINVAL;
+
+	struct pcb *target = proc_get_by_pid((uint32_t)pid);
+	if (!target)
+		return -ESRCH;
+
+	pid_t pgid = (pid_t)target->pid;
+	return syscall_copy_to_user(pgid_out, &pgid, sizeof(pgid));
 }
 
 int64_t sys_getuid(const syscall_args_t *args)
@@ -3038,16 +3063,22 @@ int64_t sys_clock_get(const syscall_args_t *args)
 	int64_t *secs = (int64_t *)args->rsi;
 	int64_t *nanos = (int64_t *)args->rdx;
 
-	if (!secs || !nanos)
-		return -EFAULT;
+	SYSCALL_REQUIRE(secs != NULL, -EFAULT);
+	SYSCALL_REQUIRE(nanos != NULL, -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(secs, sizeof(*secs)) == 0, -EFAULT);
+	SYSCALL_REQUIRE(syscall_user_writable(nanos, sizeof(*nanos)) == 0, -EFAULT);
 
 	if (clock != CLOCK_REALTIME && clock != CLOCK_MONOTONIC)
 		return -EINVAL;
 
 	uint64_t ms = get_ms();
-	*secs = (int64_t)(ms / 1000ull);
-	*nanos = (int64_t)((ms % 1000ull) * 1000000ull);
-	return 0;
+	int64_t s = (int64_t)(ms / 1000ull);
+	int64_t ns = (int64_t)((ms % 1000ull) * 1000000ull);
+
+	int r = syscall_copy_to_user(secs, &s, sizeof(s));
+	if (r != 0)
+		return r;
+	return syscall_copy_to_user(nanos, &ns, sizeof(ns));
 }
 
 int64_t sys_set_fs_base(const syscall_args_t *args)
@@ -3055,7 +3086,6 @@ int64_t sys_set_fs_base(const syscall_args_t *args)
 	uintptr_t base = (uintptr_t)args->rdi;
 	if (!base)
 		return -EINVAL;
-	trace("setfs_base(%.16llx)\n", base);
 
 #if defined(__x86_64__)
 	tcb *current = thread_current();

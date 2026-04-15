@@ -171,6 +171,17 @@ int write(struct fileio *file, void *buf, size_t size)
 	return ret;
 }
 
+static void _fio_dir_handle_free(struct fileio *file)
+{
+	if (!file || !file->dir)
+		return;
+
+	if (file->dir->entries)
+		kfree(file->dir->entries);
+	kfree(file->dir);
+	file->dir = NULL;
+}
+
 int close(struct fileio *file)
 {
 	if (!file) {
@@ -180,6 +191,8 @@ int close(struct fileio *file)
 	if (atomic_fetch_sub_explicit(&file->refs, 1, memory_order_acq_rel) != 1) {
 		return 0;
 	}
+
+	_fio_dir_handle_free(file);
 
 	struct vnode *vn = file->private;
 
@@ -191,6 +204,7 @@ int close(struct fileio *file)
 	if (vfs_close(vn, file->flags, false) != 0) {
 		return -EIO;
 	}
+
 	kfree(file);
 	return 0;
 }

@@ -133,9 +133,44 @@ static uintptr_t elf64_lookup_symbol_any(char *elf, const char *name)
 	return 0;
 }
 
-static struct axmod_info *module_find_modinfo_section(char *elf,
-													  uintptr_t load_base,
-													  uintptr_t link_base)
+/*
+ * Read module metadata directly from the raw ELF file image.
+ * This is used before the module is mapped so duplicate loads can be rejected
+ * early without allocating memory or creating a process/thread.
+ */
+static struct axmod_info *module_find_modinfo_raw(char *elf)
+{
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
+	Elf64_Shdr *sec = elf64_find_section(ehdr, ".aurix.mod");
+	if (!sec)
+		return NULL;
+
+	if (sec->sh_size < sizeof(struct axmod_info)) {
+		warn("'.aurix.mod' section too small (%lu bytes)\n",
+			 (unsigned long)sec->sh_size);
+		return NULL;
+	}
+
+	return (struct axmod_info *)(elf + sec->sh_offset);
+}
+
+static bool module_is_loaded(const char *name)
+{
+	if (!name || !*name)
+		return false;
+
+	for (struct module_info_node *node = module_list; node; node = node->next) {
+		if (!node->name)
+			continue;
+		if (strcmp(node->name, name) == 0)
+			return true;
+	}
+
+	return false;
+}
+
+static struct axmod_info *
+module_find_modinfo_section(char *elf, uintptr_t load_base, uintptr_t link_base)
 {
 	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
 	Elf64_Shdr *sec = elf64_find_section(ehdr, ".aurix.mod");
@@ -156,8 +191,7 @@ static struct axmod_info *module_find_modinfo_section(char *elf,
 	return (struct axmod_info *)(load_base + (sec->sh_addr - link_base));
 }
 
-static struct axmod_info *module_find_modinfo(char *elf,
-											  uintptr_t load_base,
+static struct axmod_info *module_find_modinfo(char *elf, uintptr_t load_base,
 											  uintptr_t link_base)
 {
 	struct axmod_info *mi;
@@ -223,14 +257,21 @@ bool module_load_image(void *image, uint32_t size)
 {
 	uint32_t file_size = size;
 	uintptr_t entry_point = 0;
-	pcb *mod = proc_create();
+	char *virt_data = (char *)image;
 
+	/* Reject duplicate module loads before allocating/mapping anything. */
+	struct axmod_info *raw_mi = module_find_modinfo_raw(virt_data);
+	if (raw_mi && raw_mi->name && module_is_loaded(raw_mi->name)) {
+		warn("Module '%s' is already loaded\n", raw_mi->name);
+		return false;
+	}
+
+	pcb *mod = proc_create();
 	if (!mod) {
 		error("Failed to create process for module\n");
 		return false;
 	}
 
-	char *virt_data = (char *)image;
 	mod->image_elf = virt_data;
 	mod->image_size = file_size;
 
@@ -280,9 +321,8 @@ bool module_load_image(void *image, uint32_t size)
 	mod->image_link_base = img.link_base;
 	mod->image_exec_size = img.size;
 
-	struct axmod_info *mi = module_find_modinfo(virt_data,
-												img.load_base,
-												img.link_base);
+	struct axmod_info *mi =
+		module_find_modinfo(virt_data, img.load_base, img.link_base);
 	uintptr_t init_vaddr = 0;
 
 	if (mi) {
