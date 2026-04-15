@@ -25,10 +25,6 @@
 #include <stdint.h>
 #include <time/time.h>
 
-#ifndef LOG_COLOR
-#define LOG_COLOR 1
-#endif
-
 #define LOG_LEVEL_NONE 0
 #define LOG_LEVEL_CRITICAL 1
 #define LOG_LEVEL_ERROR 2
@@ -44,10 +40,26 @@
 #endif
 
 #ifndef LOG_VERBOSITY_DISPLAY
-#define LOG_VERBOSITY_DISPLAY LOG_LEVEL_ERROR
+#define LOG_VERBOSITY_DISPLAY LOG_LEVEL_WARN
 #endif
 
-#if LOG_COLOR
+/*
+ * Per-sink style mode:
+ * - COLOR: existing colored/tagged output
+ * - PLAIN: simple non-colored output
+ */
+#define LOG_STYLE_MODE_COLOR 1
+#define LOG_STYLE_MODE_PLAIN 2
+
+#ifndef LOG_STYLE_SERIAL
+#define LOG_STYLE_SERIAL LOG_STYLE_MODE_PLAIN
+#endif
+
+#ifndef LOG_STYLE_DISPLAY
+#define LOG_STYLE_DISPLAY LOG_STYLE_MODE_PLAIN
+#endif
+
+/* Color palette used by COLOR sinks only */
 #define LOG_STYLE_RESET "\033[0m"
 #define LOG_STYLE_PREFIX "\033[38;2;90;95;105m"
 #define LOG_TAG_INFO "\033[1;38;2;13;15;18;48;2;100;150;200m"
@@ -66,32 +78,13 @@
 #define LOG_LINE_TRACE "\033[38;2;130;150;180m"
 #define LOG_LINE_CRITICAL "\033[1;38;2;255;120;120m"
 #define LOG_LINE_SUCCESS "\033[38;2;140;210;140m"
-#else
-#define LOG_STYLE_RESET ""
-#define LOG_STYLE_PREFIX ""
-#define LOG_TAG_INFO ""
-#define LOG_TAG_WARN ""
-#define LOG_TAG_ERROR ""
-#define LOG_TAG_DEBUG ""
-#define LOG_TAG_TEST ""
-#define LOG_TAG_TRACE ""
-#define LOG_TAG_CRITICAL ""
-#define LOG_TAG_SUCCESS ""
-#define LOG_LINE_INFO ""
-#define LOG_LINE_WARN ""
-#define LOG_LINE_ERROR ""
-#define LOG_LINE_DEBUG ""
-#define LOG_LINE_TEST ""
-#define LOG_LINE_TRACE ""
-#define LOG_LINE_CRITICAL ""
-#define LOG_LINE_SUCCESS ""
-#endif
 
 typedef int (*log_sink_fn_t)(const char *fmt, ...);
 
 typedef struct {
 	log_sink_fn_t fn;
 	uint8_t verbosity;
+	uint8_t style;
 } log_sink_t;
 
 #define LOG_SINK_SERIAL 0
@@ -99,8 +92,8 @@ typedef struct {
 #define LOG_SINK_MAX 2
 
 static log_sink_t g_log_sinks[LOG_SINK_MAX] = {
-	{ serial_kprintf, LOG_VERBOSITY_SERIAL },
-	{ flanterm_kprintf, LOG_VERBOSITY_DISPLAY }
+	{ serial_kprintf, LOG_VERBOSITY_SERIAL, LOG_STYLE_SERIAL },
+	{ flanterm_kprintf, LOG_VERBOSITY_DISPLAY, LOG_STYLE_DISPLAY }
 };
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -109,52 +102,73 @@ static log_sink_t g_log_sinks[LOG_SINK_MAX] = {
 #define LOG_FUNC __func__
 #endif
 
-#define _log_dispatch(tag_style, line_style, level_str, level_val, fmt, ...)  \
-	do {                                                                      \
-		uint64_t __ms = get_ms();                                             \
-		uint32_t __s = (uint32_t)(__ms / 1000ull);                            \
-		uint32_t __msr = (uint32_t)(__ms % 1000ull);                          \
-		klog_sink("[%u.%03u] %s: " fmt, __s, __msr, LOG_FUNC, ##__VA_ARGS__); \
-		for (int __i = 0; __i < LOG_SINK_MAX; __i++) {                        \
-			if (level_val <= g_log_sinks[__i].verbosity) {                    \
-				g_log_sinks[__i].fn(LOG_STYLE_PREFIX                          \
-									"[%u.%03u] " LOG_STYLE_RESET tag_style    \
-									" %s " LOG_STYLE_RESET                    \
-									" " line_style fmt LOG_STYLE_RESET,       \
-									__s, __msr, level_str, ##__VA_ARGS__);    \
-			}                                                                 \
-		}                                                                     \
+#define _log_dispatch(tag_style, line_style, level_str, level_val, fmt, ...)   \
+	do {                                                                       \
+		uint64_t __ms = get_ms();                                              \
+		uint32_t __s = (uint32_t)(__ms / 1000ull);                             \
+		uint32_t __msr = (uint32_t)(__ms % 1000ull);                           \
+                                                                               \
+		klog_sink("[%u.%03u] %s: " fmt, __s, __msr, LOG_FUNC, ##__VA_ARGS__);  \
+                                                                               \
+		for (int __i = 0; __i < LOG_SINK_MAX; __i++) {                         \
+			if (level_val <= g_log_sinks[__i].verbosity) {                     \
+				if (g_log_sinks[__i].style == LOG_STYLE_MODE_COLOR) {          \
+					g_log_sinks[__i].fn(LOG_STYLE_PREFIX                       \
+										"[%u.%03u] " LOG_STYLE_RESET tag_style \
+										" %s " LOG_STYLE_RESET                 \
+										" " line_style fmt LOG_STYLE_RESET,    \
+										__s, __msr, level_str, ##__VA_ARGS__); \
+				} else {                                                       \
+					g_log_sinks[__i].fn("[%u.%03u] %s: " fmt, __s, __msr,      \
+										LOG_FUNC, ##__VA_ARGS__);              \
+				}                                                              \
+			}                                                                  \
+		}                                                                      \
 	} while (0)
 
 #define critical(fmt, ...)                                      \
 	_log_dispatch(LOG_TAG_CRITICAL, LOG_LINE_CRITICAL, "crit ", \
 				  LOG_LEVEL_CRITICAL, fmt, ##__VA_ARGS__)
+
 #define error(fmt, ...)                                                    \
 	_log_dispatch(LOG_TAG_ERROR, LOG_LINE_ERROR, "error", LOG_LEVEL_ERROR, \
 				  fmt, ##__VA_ARGS__)
+
 #define warn(fmt, ...)                                                       \
 	_log_dispatch(LOG_TAG_WARN, LOG_LINE_WARN, "warn ", LOG_LEVEL_WARN, fmt, \
 				  ##__VA_ARGS__)
+
 #define info(fmt, ...)                                                       \
 	_log_dispatch(LOG_TAG_INFO, LOG_LINE_INFO, "info ", LOG_LEVEL_INFO, fmt, \
 				  ##__VA_ARGS__)
+
 #define debug(fmt, ...)                                                    \
 	_log_dispatch(LOG_TAG_DEBUG, LOG_LINE_DEBUG, "debug", LOG_LEVEL_DEBUG, \
 				  fmt, ##__VA_ARGS__)
+
 #define trace(fmt, ...)                                                    \
 	_log_dispatch(LOG_TAG_TRACE, LOG_LINE_TRACE, "trace", LOG_LEVEL_TRACE, \
 				  fmt, ##__VA_ARGS__)
+
 #define test(fmt, ...)                                                       \
 	_log_dispatch(LOG_TAG_TEST, LOG_LINE_TEST, "test ", LOG_LEVEL_TEST, fmt, \
 				  ##__VA_ARGS__)
+
 #define success(fmt, ...)                                                     \
 	_log_dispatch(LOG_TAG_SUCCESS, LOG_LINE_SUCCESS, "ok   ", LOG_LEVEL_INFO, \
 				  fmt, ##__VA_ARGS__)
 
 static inline void log_set_sink_verbosity(int sink, uint8_t level)
 {
-	if (sink < LOG_SINK_MAX) {
+	if (sink >= 0 && sink < LOG_SINK_MAX) {
 		g_log_sinks[sink].verbosity = level;
+	}
+}
+
+static inline void log_set_sink_style(int sink, uint8_t style)
+{
+	if (sink >= 0 && sink < LOG_SINK_MAX) {
+		g_log_sinks[sink].style = style;
 	}
 }
 

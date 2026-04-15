@@ -31,7 +31,7 @@ void serial_init(void);
 
 void serial_send(char c);
 void serial_sendbuf(const char *buf, size_t len);
-void serial_sendstr(char *s);
-void port_sendstr(uint16_t port, char *s);
+void serial_sendstr(const char *s);
+void port_sendstr(uint16_t port, const char *s);
 
 #endif /* _DEBUG_SERIAL_H */
