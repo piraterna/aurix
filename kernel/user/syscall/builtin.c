@@ -188,10 +188,6 @@ static struct pcb *syscall_current_process(void)
 	return current->process;
 }
 
-/*
- * Replace these shims with your real checked user-access helpers if available.
- * The current versions only do minimal pointer/length validation.
- */
 static int syscall_user_readable(const void *ptr, size_t len)
 {
 	if (!ptr && len)
