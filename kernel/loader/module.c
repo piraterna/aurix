@@ -90,6 +90,100 @@ static Elf64_Shdr *elf64_find_section(Elf64_Ehdr *ehdr, const char *name)
 	return NULL;
 }
 
+static uintptr_t elf64_lookup_symbol_in_sections(Elf64_Ehdr *ehdr,
+												 const char *symtab_name,
+												 const char *strtab_name,
+												 const char *name)
+{
+	Elf64_Shdr *symtab = elf64_find_section(ehdr, symtab_name);
+	Elf64_Shdr *strtab = elf64_find_section(ehdr, strtab_name);
+
+	if (!symtab || !strtab)
+		return 0;
+
+	if (symtab->sh_entsize == 0 || symtab->sh_size < symtab->sh_entsize)
+		return 0;
+
+	const char *strs = (const char *)ehdr + strtab->sh_offset;
+	Elf64_Sym *syms = (Elf64_Sym *)((uint8_t *)ehdr + symtab->sh_offset);
+	size_t count = symtab->sh_size / sizeof(Elf64_Sym);
+
+	for (size_t i = 0; i < count; i++) {
+		const char *symname = strs + syms[i].st_name;
+		if (strcmp(symname, name) == 0)
+			return syms[i].st_value;
+	}
+
+	return 0;
+}
+
+static uintptr_t elf64_lookup_symbol_any(char *elf, const char *name)
+{
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
+	uintptr_t addr;
+
+	addr = elf64_lookup_symbol_in_sections(ehdr, ".symtab", ".strtab", name);
+	if (addr)
+		return addr;
+
+	addr = elf64_lookup_symbol_in_sections(ehdr, ".dynsym", ".dynstr", name);
+	if (addr)
+		return addr;
+
+	return 0;
+}
+
+static struct axmod_info *module_find_modinfo_section(char *elf,
+													  uintptr_t load_base,
+													  uintptr_t link_base)
+{
+	Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf;
+	Elf64_Shdr *sec = elf64_find_section(ehdr, ".aurix.mod");
+	if (!sec)
+		return NULL;
+
+	if (sec->sh_size < sizeof(struct axmod_info)) {
+		warn("'.aurix.mod' section too small (%lu bytes)\n",
+			 (unsigned long)sec->sh_size);
+		return NULL;
+	}
+
+	if (sec->sh_addr < link_base) {
+		warn("'.aurix.mod' below link base\n");
+		return NULL;
+	}
+
+	return (struct axmod_info *)(load_base + (sec->sh_addr - link_base));
+}
+
+static struct axmod_info *module_find_modinfo(char *elf,
+											  uintptr_t load_base,
+											  uintptr_t link_base)
+{
+	struct axmod_info *mi;
+
+	/* Primary path: metadata section */
+	mi = module_find_modinfo_section(elf, load_base, link_base);
+	if (mi)
+		return mi;
+
+	/* Fallback: symbol lookup in .symtab or .dynsym */
+	uintptr_t modinfo_addr = elf64_lookup_symbol_any(elf, "modinfo");
+	if (!modinfo_addr)
+		return NULL;
+
+	if (modinfo_addr < link_base) {
+		warn("'modinfo' below link base\n");
+		return NULL;
+	}
+
+	return (struct axmod_info *)(load_base + (modinfo_addr - link_base));
+}
+
+/* ======================================== */
+/* axapi patching                           */
+/* ======================================== */
+
 static void axapi_patch_imports(uintptr_t load_base, uintptr_t link_base,
 								char *elf)
 {
@@ -186,48 +280,48 @@ bool module_load_image(void *image, uint32_t size)
 	mod->image_link_base = img.link_base;
 	mod->image_exec_size = img.size;
 
-	uintptr_t modinfo_addr = elf_lookup_symbol(virt_data, "modinfo");
-	uintptr_t init_vaddr = entry_point;
+	struct axmod_info *mi = module_find_modinfo(virt_data,
+												img.load_base,
+												img.link_base);
+	uintptr_t init_vaddr = 0;
 
-	if (modinfo_addr != 0) {
-		if (modinfo_addr < img.link_base) {
-			warn("'modinfo' below link base\n");
-		} else {
-			struct axmod_info *mi =
-				(struct axmod_info *)(img.load_base +
-									  (modinfo_addr - img.link_base));
-			const char *name = mi->name;
-			const char *desc = mi->desc;
-			const char *author = mi->author;
+	if (mi) {
+		const char *name = mi->name;
+		const char *desc = mi->desc;
+		const char *author = mi->author;
 
-			mod->name = name;
-			struct module_info_node *node = kmalloc(sizeof(*node));
-			if (node) {
-				node->proc = mod;
-				node->name = name;
-				node->desc = desc;
-				node->author = author;
-				node->init = mi->mod_init;
-				node->exit = mi->mod_exit;
-				node->load_base = img.load_base;
+		mod->name = name;
+		struct module_info_node *node = kmalloc(sizeof(*node));
+		if (node) {
+			node->proc = mod;
+			node->name = name;
+			node->desc = desc;
+			node->author = author;
+			node->init = mi->mod_init;
+			node->exit = mi->mod_exit;
+			node->load_base = img.load_base;
 
-				node->next = module_list;
-				module_list = node;
-			}
-			info("Loaded module: %s\n", name ? name : "(no name)");
-			if (desc)
-				info("  Description: %s\n", desc);
-			if (author)
-				info("  Author: %s\n", author);
-			if (mi->mod_init) {
-				init_vaddr = (uintptr_t)mi->mod_init;
-				trace("  Init function: %p\n", mi->mod_init);
-			}
-			if (mi->mod_exit)
-				trace("  Exit function: %p\n", mi->mod_exit);
+			node->next = module_list;
+			module_list = node;
 		}
+
+		info("Loaded module: %s\n", name ? name : "(no name)");
+		if (desc)
+			info("  Description: %s\n", desc);
+		if (author)
+			info("  Author: %s\n", author);
+
+		if (mi->mod_init) {
+			init_vaddr = (uintptr_t)mi->mod_init;
+			trace("  Init function: %p\n", mi->mod_init);
+		} else {
+			warn("Module has no mod_init callback\n");
+		}
+
+		if (mi->mod_exit)
+			trace("  Exit function: %p\n", mi->mod_exit);
 	} else {
-		warn("No 'modinfo' symbol found in module\n");
+		warn("No module metadata found (.aurix.mod/.symtab/.dynsym)\n");
 	}
 
 	axapi_patch_imports(img.load_base, img.link_base, virt_data);
