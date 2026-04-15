@@ -53,8 +53,8 @@ static spinlock_t tid_alloc_lock = { 0 };
 static uint8_t pid_used[PID_MAX];
 static uint8_t tid_used[TID_MAX];
 
-static uint32_t pid_next_hint = 1; /* 0 reserved for kernel */
-static uint32_t tid_next_hint = 1; /* 0 reserved */
+static uint32_t pid_next_hint = 1;
+static uint32_t tid_next_hint = 1;
 static bool id_alloc_inited = false;
 
 static atomic_bool sched_enabled = ATOMIC_VAR_INIT(false);
@@ -65,6 +65,9 @@ static tcb idle_threads[CONFIG_CPU_MAX_COUNT];
 static bool cpu_sched_inited[CONFIG_CPU_MAX_COUNT] = { false };
 static pcb *proc_list = NULL;
 static spinlock_t proc_list_lock = { 0 };
+
+static tcb *deferred_thread_reap[CONFIG_CPU_MAX_COUNT] = { 0 };
+static pcb *deferred_proc_reap[CONFIG_CPU_MAX_COUNT] = { 0 };
 
 extern char _start_text[];
 extern char _end_text[];
@@ -193,6 +196,69 @@ static inline bool sched_tid_is_managed(uint32_t tid)
 	return tid > 0 && tid < TID_MAX;
 }
 
+static void proc_release_resources(pcb *proc)
+{
+	if (!proc)
+		return;
+
+	if (atomic_exchange(&proc->reaped, true))
+		return;
+
+	uint32_t pid = proc->pid;
+
+	spinlock_acquire(&proc->fd_lock);
+	for (size_t fd = 0; fd < PROC_MAX_FDS; fd++) {
+		struct fileio *f = proc->fds[fd];
+		proc->fds[fd] = NULL;
+		if (f) {
+			spinlock_release(&proc->fd_lock);
+			close(f);
+			spinlock_acquire(&proc->fd_lock);
+		}
+	}
+	spinlock_release(&proc->fd_lock);
+
+	if (proc->vctx)
+		vdestroy(proc->vctx);
+	if (proc->pm)
+		destroy_pagemap(proc->pm);
+
+	if (proc->name)
+		kfree((void *)proc->name);
+	if (proc->cwd)
+		kfree(proc->cwd);
+
+	spinlock_acquire(&proc_list_lock);
+	pcb **link = &proc_list;
+	while (*link) {
+		if (*link == proc) {
+			*link = proc->proc_next;
+			break;
+		}
+		link = &(*link)->proc_next;
+	}
+	spinlock_release(&proc_list_lock);
+
+	kfree(proc);
+	sched_free_pid(pid);
+	atomic_fetch_sub(&live_proc_count, 1);
+
+	trace("Destroyed process resources, PID=%u\n", pid);
+}
+
+static void proc_try_reap(pcb *proc)
+{
+	if (!proc)
+		return;
+	if (atomic_load(&proc->reaped))
+		return;
+	if (atomic_load(&proc->thread_count) != 0)
+		return;
+	if (proc_has_threads(proc->pid))
+		return;
+	proc_release_resources(proc);
+}
+
 static void sched_ipi_cpu(struct cpu *target)
 {
 	if (!target || target->id == cpu_get_current()->id)
@@ -286,19 +352,7 @@ static void cpu_remove_thread(struct cpu *cpu, tcb *thread)
 	irqlock_release(&cpu->sched_lock);
 }
 
-static tcb *cpu_pick_next_thread(struct cpu *cpu, tcb *current)
-{
-	if (!cpu || !cpu->thread_list)
-		return NULL;
-
-	tcb *next = current ? current->cpu_next : cpu->thread_list;
-	if (!next)
-		next = cpu->thread_list;
-
-	return next;
-}
-
-static void proc_unlink_thread(pcb *proc, tcb *thread)
+static void proc_unlink_thread_locked(pcb *proc, tcb *thread)
 {
 	if (!proc || !thread)
 		return;
@@ -320,6 +374,10 @@ static void thread_release_final(tcb *thread)
 		return;
 
 	uint32_t tid = thread->tid;
+	uintptr_t stack_base = 0;
+
+	if (thread->kthread.rsp0 >= STACK_SIZE)
+		stack_base = thread->kthread.rsp0 - STACK_SIZE;
 
 	thread->magic = TCB_MAGIC_DEAD;
 	thread->proc_next = (tcb *)0xDEADDEAD;
@@ -327,12 +385,35 @@ static void thread_release_final(tcb *thread)
 	thread->process = NULL;
 	thread->cpu = NULL;
 
+	if (stack_base)
+		vfree(kvctx, (void *)stack_base);
+
 	kfree(thread);
 
 	if (sched_tid_is_managed(tid))
 		sched_free_tid(tid);
 
 	atomic_fetch_sub(&live_thread_count, 1);
+}
+
+static void sched_reap_deferred(struct cpu *cpu)
+{
+	if (!cpu)
+		return;
+	if (cpu->id >= CONFIG_CPU_MAX_COUNT)
+		return;
+
+	tcb *dead_thread = deferred_thread_reap[cpu->id];
+	pcb *dead_proc = deferred_proc_reap[cpu->id];
+
+	deferred_thread_reap[cpu->id] = NULL;
+	deferred_proc_reap[cpu->id] = NULL;
+
+	if (dead_thread)
+		thread_release_final(dead_thread);
+
+	if (dead_proc)
+		proc_try_reap(dead_proc);
 }
 
 void sched_tick(void)
@@ -344,12 +425,21 @@ void sched_tick(void)
 	if (!cpu)
 		return;
 
+	sched_reap_deferred(cpu);
+
 	irqlock_acquire(&cpu->sched_lock);
 
 	tcb *current = cpu->thread_list;
 	if (!current) {
 		irqlock_release(&cpu->sched_lock);
 		return;
+	}
+
+	if (atomic_load(&current->kill_pending)) {
+		int code = current->kill_code;
+		irqlock_release(&cpu->sched_lock);
+		thread_exit(current, code);
+		__builtin_unreachable();
 	}
 
 	if (current->time_slice > 0)
@@ -371,12 +461,21 @@ void sched_yield(void)
 	if (!cpu)
 		return;
 
+	sched_reap_deferred(cpu);
+
 	irqlock_acquire(&cpu->sched_lock);
 
 	tcb *current = cpu->thread_list;
 	if (!current) {
 		irqlock_release(&cpu->sched_lock);
 		return;
+	}
+
+	if (atomic_load(&current->kill_pending)) {
+		int code = current->kill_code;
+		irqlock_release(&cpu->sched_lock);
+		thread_exit(current, code);
+		__builtin_unreachable();
 	}
 
 	current->time_slice = SCHED_DEFAULT_SLICE;
@@ -460,12 +559,17 @@ void sched_init(void)
 		kernel_proc.vctx = kvctx;
 		kernel_proc.threads = NULL;
 		spinlock_init(&kernel_proc.fd_lock);
+		spinlock_init(&kernel_proc.thread_lock);
 		memset(kernel_proc.fds, 0, sizeof(kernel_proc.fds));
 		kernel_proc.umask = 0022;
 		kernel_proc.uid = 0;
 		kernel_proc.gid = 0;
 		kernel_proc.euid = 0;
 		kernel_proc.egid = 0;
+		atomic_init(&kernel_proc.kill_pending, false);
+		kernel_proc.kill_code = 0;
+		atomic_init(&kernel_proc.thread_count, 0);
+		atomic_init(&kernel_proc.reaped, false);
 		kernel_proc_inited = 1;
 	}
 
@@ -477,6 +581,9 @@ void sched_init(void)
 		idle_tcb->time_slice = SCHED_DEFAULT_SLICE;
 		idle_tcb->process = &kernel_proc;
 		idle_tcb->cpu = cpu;
+		atomic_store(&idle_tcb->finished, false);
+		atomic_store(&idle_tcb->kill_pending, false);
+		idle_tcb->kill_code = 0;
 
 		uint64_t *stack_base =
 			valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
@@ -548,6 +655,7 @@ pcb *proc_create(void)
 	proc->threads = NULL;
 	proc->proc_next = NULL;
 	spinlock_init(&proc->fd_lock);
+	spinlock_init(&proc->thread_lock);
 	memset(proc->fds, 0, sizeof(proc->fds));
 	proc->cwd = strdup("/");
 	proc->umask = 0022;
@@ -558,6 +666,10 @@ pcb *proc_create(void)
 	proc->parent_pid = 0;
 	proc->exit_code = 0;
 	proc->exited = false;
+	atomic_init(&proc->kill_pending, false);
+	proc->kill_code = 0;
+	atomic_init(&proc->thread_count, 0);
+	atomic_init(&proc->reaped, false);
 
 	proc->fds[0] = open("/dev/stdin", O_RDONLY, 0);
 	if (!proc->fds[0])
@@ -604,47 +716,15 @@ void proc_destroy(pcb *proc)
 	if (!proc)
 		return;
 
-	uint32_t pid = proc->pid;
+	if (proc->pid == 0)
+		return;
 
-	while (proc->threads)
-		thread_destroy(proc->threads);
-
-	spinlock_acquire(&proc->fd_lock);
-	for (size_t fd = 0; fd < PROC_MAX_FDS; fd++) {
-		struct fileio *f = proc->fds[fd];
-		proc->fds[fd] = NULL;
-		if (f) {
-			spinlock_release(&proc->fd_lock);
-			close(f);
-			spinlock_acquire(&proc->fd_lock);
-		}
+	if (atomic_load(&proc->thread_count) != 0 || proc_has_threads(proc->pid)) {
+		(void)proc_kill(proc, -1);
+		return;
 	}
-	spinlock_release(&proc->fd_lock);
 
-	vdestroy(proc->vctx);
-	destroy_pagemap(proc->pm);
-
-	if (proc->name)
-		kfree((void *)proc->name);
-	if (proc->cwd)
-		kfree(proc->cwd);
-
-	spinlock_acquire(&proc_list_lock);
-	pcb **link = &proc_list;
-	while (*link) {
-		if (*link == proc) {
-			*link = proc->proc_next;
-			break;
-		}
-		link = &(*link)->proc_next;
-	}
-	spinlock_release(&proc_list_lock);
-
-	kfree(proc);
-	sched_free_pid(pid);
-	atomic_fetch_sub(&live_proc_count, 1);
-
-	trace("Destroyed process, PID=%u\n", pid);
+	proc_try_reap(proc);
 }
 
 static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
@@ -677,6 +757,8 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 	thread->time_slice = SCHED_DEFAULT_SLICE;
 	thread->joinable = false;
 	atomic_store(&thread->finished, false);
+	atomic_store(&thread->kill_pending, false);
+	thread->kill_code = 0;
 
 	uint64_t *stack_base =
 		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
@@ -745,6 +827,7 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 	thread->kthread.rsp = (uint64_t)rsp;
 	thread->kthread.cr3 = (uint64_t)proc->pm;
 
+	spinlock_acquire(&proc->thread_lock);
 	if (!proc->threads) {
 		proc->threads = thread;
 	} else {
@@ -753,6 +836,8 @@ static tcb *thread_create_internal(pcb *proc, void (*entry)(void),
 			cur = cur->proc_next;
 		cur->proc_next = thread;
 	}
+	atomic_fetch_add(&proc->thread_count, 1);
+	spinlock_release(&proc->thread_lock);
 
 	struct cpu *cpu = sched_pick_best_cpu();
 	cpu_add_thread(cpu, thread);
@@ -809,6 +894,8 @@ tcb *thread_clone_user(pcb *proc, tcb *parent)
 	thread->joinable = parent->joinable;
 	thread->kthread.fs_base = parent->kthread.fs_base;
 	atomic_store(&thread->finished, false);
+	atomic_store(&thread->kill_pending, false);
+	thread->kill_code = 0;
 
 	uint64_t *stack_base =
 		valloc(kvctx, DIV_ROUND_UP(STACK_SIZE, PAGE_SIZE), VALLOC_RW);
@@ -822,6 +909,7 @@ tcb *thread_clone_user(pcb *proc, tcb *parent)
 	thread->kthread.rsp0 = (uint64_t)stack_base + STACK_SIZE;
 	thread->kthread.cr3 = (uint64_t)proc->pm;
 
+	spinlock_acquire(&proc->thread_lock);
 	if (!proc->threads) {
 		proc->threads = thread;
 	} else {
@@ -830,6 +918,8 @@ tcb *thread_clone_user(pcb *proc, tcb *parent)
 			cur = cur->proc_next;
 		cur->proc_next = thread;
 	}
+	atomic_fetch_add(&proc->thread_count, 1);
+	spinlock_release(&proc->thread_lock);
 
 	return thread;
 }
@@ -850,7 +940,16 @@ void thread_destroy(tcb *thread)
 	}
 
 	if (thread->process) {
-		proc_unlink_thread(thread->process, thread);
+		pcb *proc = thread->process;
+		spinlock_acquire(&proc->thread_lock);
+		proc_unlink_thread_locked(proc, thread);
+		if (atomic_load(&proc->thread_count) != 0)
+			atomic_fetch_sub(&proc->thread_count, 1);
+		if (atomic_load(&proc->thread_count) == 0) {
+			proc->exit_code = thread->exit_code;
+			proc->exited = true;
+		}
+		spinlock_release(&proc->thread_lock);
 		thread->process = NULL;
 	}
 
@@ -873,6 +972,7 @@ void thread_exit(tcb *thread, int code)
 	struct cpu *cpu = thread->cpu;
 	pcb *proc = thread->process;
 	tcb *next = NULL;
+	bool last_proc_thread = false;
 
 	debug("Thread TID=%u exiting\n", thread->tid);
 
@@ -896,16 +996,24 @@ void thread_exit(tcb *thread, int code)
 		thread->cpu = NULL;
 		thread->cpu_next = NULL;
 
+		if (!next)
+			next = cpu->thread_list;
+		if (!next && cpu->id < CONFIG_CPU_MAX_COUNT)
+			next = &idle_threads[cpu->id];
+
 		irqlock_release(&cpu->sched_lock);
 	}
 
 	if (proc) {
-		proc_unlink_thread(proc, thread);
-
-		if (!proc->threads) {
+		spinlock_acquire(&proc->thread_lock);
+		proc_unlink_thread_locked(proc, thread);
+		unsigned remaining = atomic_fetch_sub(&proc->thread_count, 1) - 1;
+		if (remaining == 0) {
 			proc->exit_code = code;
 			proc->exited = true;
+			last_proc_thread = true;
 		}
+		spinlock_release(&proc->thread_lock);
 
 		thread->process = NULL;
 	}
@@ -914,19 +1022,22 @@ void thread_exit(tcb *thread, int code)
 	thread->magic = TCB_MAGIC_DEAD;
 	atomic_store(&thread->finished, true);
 
+	if (!next && cpu && cpu->id < CONFIG_CPU_MAX_COUNT)
+		next = &idle_threads[cpu->id];
+
 	if (!next) {
 		while (1)
 			cpu_halt();
 	}
 
-	sched_prepare_cpu_stack(next);
-
-	if (!thread->joinable) {
-		struct kthread dead_ctx = thread->kthread;
-		thread_release_final(thread);
-		switch_task(&dead_ctx, &next->kthread);
-		__builtin_unreachable();
+	if (cpu && cpu->id < CONFIG_CPU_MAX_COUNT) {
+		if (!thread->joinable)
+			deferred_thread_reap[cpu->id] = thread;
+		if (last_proc_thread && proc)
+			deferred_proc_reap[cpu->id] = proc;
 	}
+
+	sched_prepare_cpu_stack(next);
 
 	struct kthread dead_ctx = thread->kthread;
 	switch_task(&dead_ctx, &next->kthread);
@@ -1028,4 +1139,36 @@ int thread_wait(tcb *thread)
 	int code = thread->exit_code;
 	thread_release_final(thread);
 	return code;
+}
+
+int proc_kill(pcb *proc, int code)
+{
+	if (!proc || proc->pid == 0)
+		return -1;
+
+	if (atomic_load(&proc->reaped))
+		return 0;
+
+	atomic_store(&proc->kill_pending, true);
+	proc->kill_code = code;
+
+	spinlock_acquire(&proc->thread_lock);
+	for (tcb *t = proc->threads; t; t = t->proc_next) {
+		t->kill_code = code;
+		atomic_store(&t->kill_pending, true);
+
+		if (t->cpu && t->cpu != cpu_get_current())
+			sched_ipi_cpu(t->cpu);
+	}
+	spinlock_release(&proc->thread_lock);
+
+	if (thread_current() && thread_current()->process == proc) {
+		thread_exit(thread_current(), code);
+		__builtin_unreachable();
+	}
+
+	while (!atomic_load(&proc->reaped))
+		sched_yield();
+
+	return 0;
 }

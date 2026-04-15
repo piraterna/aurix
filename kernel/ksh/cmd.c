@@ -74,6 +74,7 @@ static int cmd_backtrace(int argc, char **argv);
 static int cmd_registers(int argc, char **argv);
 static int cmd_devices(int argc, char **argv);
 static int cmd_kconfig(int argc, char **argv);
+static int cmd_kill(int argc, char **argv);
 
 static const ksh_command ksh_commands[] = {
 	{ "help", "help [cmd]", "list commands / show help for cmd", cmd_help },
@@ -98,7 +99,8 @@ static const ksh_command ksh_commands[] = {
 	{ "dir", "dir [path]", "list directory contents", cmd_dir },
 	{ "clear", "clear", "clears screen", cmd_clear },
 	{ "exec", "exec [-u|-k] <path>", "execute userspace/kernel executable",
-	  cmd_exec }
+	  cmd_exec },
+	{ "kill", "kill <pid>", "kill process by PID", cmd_kill },
 };
 
 static bool ksh_is_idle_thread_on_cpu(tcb *t, struct cpu *cpu)
@@ -865,5 +867,33 @@ static int cmd_dir(int argc, char **argv)
 	}
 
 	vnode_unref(vnode);
+	return 0;
+}
+
+static int cmd_kill(int argc, char **argv)
+{
+	if (argc < 2) {
+		kprintf("usage: kill <pid>\n");
+		return 1;
+	}
+
+	uint64_t pid;
+	if (!ksh_parse_u64(argv[1], &pid) || pid == 0 || pid > UINT32_MAX) {
+		kprintf("ksh: invalid PID\n");
+		return 1;
+	}
+
+	pcb *proc = proc_get_by_pid((uint32_t)pid);
+	if (!proc) {
+		kprintf("ksh: no such process with PID %llu\n",
+				(unsigned long long)pid);
+		return 1;
+	}
+
+	if (proc_kill(proc, -1) != 0) {
+		kprintf("ksh: failed to kill PID %llu\n", (unsigned long long)pid);
+		return 1;
+	}
+
 	return 0;
 }

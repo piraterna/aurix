@@ -30,14 +30,14 @@
 #include <stdatomic.h>
 #include <sys/spinlock.h>
 
-#define STACK_SIZE 4096 * 8 // ~32KB
+#define STACK_SIZE 4096 * 8
 #define USER_STACK_SIZE (1024 * 1024)
 
 struct pcb;
 struct tcb;
 
-#define TCB_MAGIC_ALIVE 0x544352414C495645ULL // "TCRALIVE"
-#define TCB_MAGIC_DEAD 0x544352444541444ULL // "TCRDEAD"
+#define TCB_MAGIC_ALIVE 0x544352414C495645ULL
+#define TCB_MAGIC_DEAD 0x544352444541444ULL
 
 #define PROC_MAX_FDS 256
 
@@ -61,6 +61,9 @@ typedef struct tcb {
 	bool joinable;
 	int exit_code;
 	atomic_bool finished;
+
+	atomic_bool kill_pending;
+	int kill_code;
 } tcb;
 
 typedef struct pcb {
@@ -70,6 +73,7 @@ typedef struct pcb {
 	struct tcb *threads;
 	struct pcb *proc_next;
 	spinlock_t fd_lock;
+	spinlock_t thread_lock;
 	struct fileio *fds[PROC_MAX_FDS];
 	const char *name;
 	char *cwd;
@@ -90,6 +94,10 @@ typedef struct pcb {
 	uintptr_t user_stack_base;
 	size_t user_stack_size;
 	uintptr_t user_rsp;
+	atomic_bool kill_pending;
+	int kill_code;
+	atomic_uint thread_count;
+	atomic_bool reaped;
 } pcb;
 
 void sched_init(void);
@@ -103,6 +111,7 @@ pcb *proc_create(void);
 void proc_destroy(pcb *proc);
 bool proc_has_threads(uint32_t pid);
 pcb *proc_get_by_pid(uint32_t pid);
+int proc_kill(pcb *proc, int code);
 
 tcb *thread_create(pcb *proc, void (*entry)(void));
 tcb *thread_create_user(pcb *proc, void (*entry)(void));
@@ -114,4 +123,4 @@ tcb *thread_current(void);
 tcb *thread_get_by_tid(uint32_t tid);
 int thread_wait(tcb *thread);
 
-#endif // _SYS_SCHED_H
+#endif // SYS_SCHED_H
