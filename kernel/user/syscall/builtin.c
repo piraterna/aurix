@@ -175,6 +175,23 @@ struct pollfd {
 	short revents;
 };
 
+#define SYSCALL_FDSET_BYTES 128
+#define SYSCALL_FD_SETSIZE (SYSCALL_FDSET_BYTES * 8)
+
+struct syscall_fd_set {
+	uint8_t fds_bits[SYSCALL_FDSET_BYTES];
+};
+
+static inline int syscall_fd_isset(const struct syscall_fd_set *set, int fd)
+{
+	return set->fds_bits[fd / 8] & (uint8_t)(1u << (fd % 8));
+}
+
+static inline void syscall_fd_setbit(struct syscall_fd_set *set, int fd)
+{
+	set->fds_bits[fd / 8] |= (uint8_t)(1u << (fd % 8));
+}
+
 struct aurix_timespec {
 	int64_t tv_sec;
 	long tv_nsec;
@@ -797,11 +814,15 @@ static int copy_file_data(const char *src, const char *dst, mode_t mode)
 	char buf[4096];
 	int status = 0;
 	for (;;) {
-		size_t n = read(in, sizeof(buf), buf);
+		ssize_t n = read(in, sizeof(buf), buf);
+		if (n < 0) {
+			status = (int)n;
+			break;
+		}
 		if (n == 0)
 			break;
-		int wrote = write(out, buf, n);
-		if (wrote < 0 || (size_t)wrote != n) {
+		int wrote = write(out, buf, (size_t)n);
+		if (wrote < 0 || (size_t)wrote != (size_t)n) {
 			status = -EIO;
 			break;
 		}
@@ -1847,6 +1868,204 @@ int64_t sys_poll(const syscall_args_t *args)
 	return syscall_copy_to_user(num_events, &ready_total, sizeof(ready_total));
 }
 
+int64_t sys_pselect(const syscall_args_t *args)
+{
+	int nfds = (int)args->rdi;
+	struct syscall_fd_set *user_read = (struct syscall_fd_set *)args->rsi;
+	struct syscall_fd_set *user_write = (struct syscall_fd_set *)args->rdx;
+	struct syscall_fd_set *user_except = (struct syscall_fd_set *)args->r10;
+	struct aurix_timespec *user_timeout = (struct aurix_timespec *)args->r8;
+	const void *user_sigmask = (const void *)args->r9;
+	int *num_events = (int *)args->rbx;
+
+	(void)user_sigmask; /* TODO: implement atomic sigmask handling */
+
+	SYSCALL_REQUIRE(num_events != NULL, -EFAULT);
+	SYSCALL_REQUIRE(nfds >= 0 && nfds <= SYSCALL_FD_SETSIZE, -EINVAL);
+	SYSCALL_REQUIRE(syscall_user_writable(num_events, sizeof(*num_events)) == 0,
+					-EFAULT);
+
+	struct syscall_fd_set kread, kwrite, kexcept;
+	if (user_read) {
+		SYSCALL_REQUIRE(syscall_user_readable(user_read, sizeof(kread)) == 0, -EFAULT);
+		SYSCALL_REQUIRE(syscall_user_writable(user_read, sizeof(kread)) == 0, -EFAULT);
+		int r = syscall_copy_from_user(&kread, user_read, sizeof(kread));
+		if (r != 0)
+			return r;
+	} else {
+		memset(&kread, 0, sizeof(kread));
+	}
+
+	if (user_write) {
+		SYSCALL_REQUIRE(syscall_user_readable(user_write, sizeof(kwrite)) == 0, -EFAULT);
+		SYSCALL_REQUIRE(syscall_user_writable(user_write, sizeof(kwrite)) == 0, -EFAULT);
+		int r = syscall_copy_from_user(&kwrite, user_write, sizeof(kwrite));
+		if (r != 0)
+			return r;
+	} else {
+		memset(&kwrite, 0, sizeof(kwrite));
+	}
+
+	if (user_except) {
+		SYSCALL_REQUIRE(syscall_user_readable(user_except, sizeof(kexcept)) == 0, -EFAULT);
+		SYSCALL_REQUIRE(syscall_user_writable(user_except, sizeof(kexcept)) == 0, -EFAULT);
+		int r = syscall_copy_from_user(&kexcept, user_except, sizeof(kexcept));
+		if (r != 0)
+			return r;
+	} else {
+		memset(&kexcept, 0, sizeof(kexcept));
+	}
+
+	int timeout_ms = -1;
+	struct aurix_timespec ktmo;
+	if (user_timeout) {
+		SYSCALL_REQUIRE(syscall_user_readable(user_timeout, sizeof(ktmo)) == 0, -EFAULT);
+		int r = syscall_copy_from_user(&ktmo, user_timeout, sizeof(ktmo));
+		if (r != 0)
+			return r;
+		if (ktmo.tv_sec < 0)
+			return -EINVAL;
+		if (ktmo.tv_nsec < 0 || ktmo.tv_nsec >= 1000000000L)
+			return -EINVAL;
+		uint64_t ms = (uint64_t)ktmo.tv_sec * 1000ULL + (uint64_t)ktmo.tv_nsec / 1000000ULL;
+		timeout_ms = (ms > 0x7fffffffULL) ? 0x7fffffff : (int)ms;
+	}
+
+	struct pcb *proc = syscall_current_process();
+	SYSCALL_REQUIRE_PROC(proc);
+
+	/* Build pollfd list from the fd_sets. */
+	size_t count = 0;
+	for (int fd = 0; fd < nfds; fd++) {
+		if (syscall_fd_isset(&kread, fd) || syscall_fd_isset(&kwrite, fd) ||
+			syscall_fd_isset(&kexcept, fd))
+			count++;
+	}
+
+	struct pollfd *kfds = NULL;
+	if (count) {
+		kfds = kmalloc(count * sizeof(*kfds));
+		if (!kfds)
+			return -ENOMEM;
+	}
+
+	size_t j = 0;
+	for (int fd = 0; fd < nfds; fd++) {
+		short events = 0;
+		if (syscall_fd_isset(&kread, fd))
+			events |= POLLIN;
+		if (syscall_fd_isset(&kwrite, fd))
+			events |= POLLOUT;
+		/* Best-effort: map exceptfds to POLLIN for now. */
+		if (syscall_fd_isset(&kexcept, fd))
+			events |= POLLIN;
+		if (!events)
+			continue;
+		kfds[j].fd = fd;
+		kfds[j].events = events;
+		kfds[j].revents = 0;
+		j++;
+	}
+
+	int ready_total = 0;
+	for (;;) {
+		ready_total = 0;
+		for (size_t i = 0; i < count; i++) {
+			struct pollfd *pfd = &kfds[i];
+			pfd->revents = 0;
+			if (pfd->fd < 0)
+				continue;
+
+			struct fileio *f = NULL;
+			int r = syscall_fd_get(proc, pfd->fd, &f);
+			if (r != 0) {
+				pfd->revents |= POLLNVAL;
+				ready_total++;
+				continue;
+			}
+
+			if (f->flags & PIPE_READ_END) {
+				struct pipe *p = (struct pipe *)f->private;
+				if (p) {
+					spinlock_acquire(&p->lock);
+					if ((pfd->events & POLLIN) && p->used > 0)
+						pfd->revents |= POLLIN;
+					if (p->writers == 0)
+						pfd->revents |= POLLHUP;
+					spinlock_release(&p->lock);
+				}
+			} else if (f->flags & PIPE_WRITE_END) {
+				struct pipe *p = (struct pipe *)f->private;
+				if (p) {
+					spinlock_acquire(&p->lock);
+					if ((pfd->events & POLLOUT) && p->used < PIPE_BUFFER_SIZE)
+						pfd->revents |= POLLOUT;
+					if (p->readers == 0)
+						pfd->revents |= POLLERR;
+					spinlock_release(&p->lock);
+				}
+			} else {
+				if (pfd->events & POLLIN)
+					pfd->revents |= POLLIN;
+				if (pfd->events & POLLOUT)
+					pfd->revents |= POLLOUT;
+			}
+
+			if (pfd->revents)
+				ready_total++;
+
+			close(f);
+		}
+
+		if (ready_total > 0 || timeout_ms == 0)
+			break;
+
+		if (timeout_ms > 0) {
+			sleep_ms((uint64_t)timeout_ms);
+			timeout_ms = 0;
+			continue;
+		}
+
+		/* timeout_ms < 0: sleep in small increments until something happens */
+		sleep_ms(10);
+	}
+
+	struct syscall_fd_set out_read, out_write, out_except;
+	memset(&out_read, 0, sizeof(out_read));
+	memset(&out_write, 0, sizeof(out_write));
+	memset(&out_except, 0, sizeof(out_except));
+
+	for (size_t i = 0; i < count; i++) {
+		struct pollfd *pfd = &kfds[i];
+		if (pfd->revents & POLLIN)
+			syscall_fd_setbit(&out_read, pfd->fd);
+		if (pfd->revents & POLLOUT)
+			syscall_fd_setbit(&out_write, pfd->fd);
+		if (pfd->revents & (POLLERR | POLLHUP | POLLNVAL))
+			syscall_fd_setbit(&out_except, pfd->fd);
+	}
+
+	SYSCALL_KFREE_IF(kfds);
+
+	if (user_read) {
+		int r = syscall_copy_to_user(user_read, &out_read, sizeof(out_read));
+		if (r != 0)
+			return r;
+	}
+	if (user_write) {
+		int r = syscall_copy_to_user(user_write, &out_write, sizeof(out_write));
+		if (r != 0)
+			return r;
+	}
+	if (user_except) {
+		int r = syscall_copy_to_user(user_except, &out_except, sizeof(out_except));
+		if (r != 0)
+			return r;
+	}
+
+	return syscall_copy_to_user(num_events, &ready_total, sizeof(ready_total));
+}
+
 int64_t sys_dup(const syscall_args_t *args)
 {
 	int oldfd = (int)args->rdi;
@@ -2217,12 +2436,12 @@ int64_t sys_load_module(const syscall_args_t *args)
 		return -ENOMEM;
 	}
 
-	size_t bytes = read(f, image_size, image);
+	ssize_t bytes = read(f, image_size, image);
 	close(f);
 
-	if (bytes != image_size) {
+	if (bytes < 0 || (size_t)bytes != image_size) {
 		kfree(image);
-		return -EIO;
+		return bytes < 0 ? bytes : -EIO;
 	}
 
 	if (!module_load_image(image, (uint32_t)image_size)) {
@@ -2272,6 +2491,15 @@ int64_t sys_execve(const syscall_args_t *args)
 		return r;
 	}
 
+	if (resolved) {
+		const char *a0 = (argv_count > 0 && argv_copy && argv_copy[0]) ? argv_copy[0] : "(null)";
+		const char *a1 = (argv_count > 1 && argv_copy && argv_copy[1]) ? argv_copy[1] : "(null)";
+		if (strcmp(resolved, "/etc/rc") == 0 || strcmp(resolved, "/etc/console-sh") == 0 ||
+			strcmp(resolved, "/bin/sh") == 0) {
+			trace("execve: path=%s argv0=%s argv1=%s\n", resolved, a0, a1);
+		}
+	}
+
 	r = copy_user_string_vector(envp, EXEC_MAX_ENVP, &envp_copy, &envp_count);
 	if (r != 0) {
 		free_string_vector(argv_copy, argv_count);
@@ -2305,7 +2533,8 @@ int64_t sys_execve(const syscall_args_t *args)
 		return -ENOMEM;
 	}
 
-	if (read(f, image_size, buf) != image_size) {
+	ssize_t got = read(f, image_size, buf);
+	if (got < 0 || (size_t)got != image_size) {
 		close(f);
 		kfree(buf);
 		free_string_vector(argv_copy, argv_count);
@@ -2377,7 +2606,8 @@ int64_t sys_execve(const syscall_args_t *args)
 			return -ENOMEM;
 		}
 
-		if (read(interp_file, interp_size, interp_buf) != interp_size) {
+		ssize_t got = read(interp_file, interp_size, interp_buf);
+		if (got < 0 || (size_t)got != interp_size) {
 			close(interp_file);
 			kfree(interp_buf);
 			free_string_vector(argv_copy, argv_count);
@@ -3133,6 +3363,7 @@ void syscall_builtin_init(void)
 	register_syscall(SYS_OPENAT, sys_openat, "openat");
 	register_syscall(SYS_READLINK, sys_readlink, "readlink");
 	register_syscall(SYS_POLL, sys_poll, "poll");
+	register_syscall(SYS_PSELECT, sys_pselect, "pselect");
 	register_syscall(SYS_DUP, sys_dup, "dup");
 	register_syscall(SYS_DUP2, sys_dup2, "dup2");
 	register_syscall(SYS_DUP3, sys_dup3, "dup3");

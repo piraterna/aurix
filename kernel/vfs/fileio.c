@@ -103,17 +103,19 @@ struct fileio *open(const char *path, int flags, mode_t mode)
 	return f;
 }
 
-size_t read(struct fileio *file, size_t size, void *out)
+ssize_t read(struct fileio *file, size_t size, void *out)
 {
 	if (!file) {
-		return 0;
+		return -EBADF;
 	}
 
 	if (file->flags & PIPE_READ_END) {
-		pipe_read(file, out, &size);
-		return size;
+		int ret = pipe_read(file, out, &size);
+		if (ret < 0)
+			return ret;
+		return (ssize_t)size;
 	} else if (file->flags & PIPE_WRITE_END) {
-		return 0;
+		return -EBADF;
 	}
 
 	if (!(file->flags & SPECIAL_FILE_TYPE_DEVICE)) {
@@ -131,12 +133,11 @@ size_t read(struct fileio *file, size_t size, void *out)
 		((struct vnode *)file->private)
 			->ops->read(((struct vnode *)file->private), &bytes, &offset, out);
 
-	if (ret != 0) {
-		return 0;
-	}
+	if (ret != 0)
+		return ret;
 
 	file->offset = offset;
-	return bytes;
+	return (ssize_t)bytes;
 }
 
 int write(struct fileio *file, void *buf, size_t size)

@@ -259,13 +259,6 @@ bool module_load_image(void *image, uint32_t size)
 	uintptr_t entry_point = 0;
 	char *virt_data = (char *)image;
 
-	/* Reject duplicate module loads before allocating/mapping anything. */
-	struct axmod_info *raw_mi = module_find_modinfo_raw(virt_data);
-	if (raw_mi && raw_mi->name && module_is_loaded(raw_mi->name)) {
-		warn("Module '%s' is already loaded\n", raw_mi->name);
-		return false;
-	}
-
 	pcb *mod = proc_create();
 	if (!mod) {
 		error("Failed to create process for module\n");

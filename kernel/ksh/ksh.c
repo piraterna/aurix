@@ -215,8 +215,8 @@ void ksh_thread(void)
 				if (!ksh_dev_has_data(com1_dev))
 					break;
 				uint8_t b = 0;
-				size_t n = read(com1, 1, &b);
-				if (n == (size_t)-1 || n == 0)
+				ssize_t n = read(com1, 1, &b);
+				if (n <= 0)
 					break;
 				did_work = true;
 				ksh_handle_ascii((char)b, line, &len, &cursor, sizeof(line));
@@ -235,8 +235,8 @@ void ksh_thread(void)
 				sleep_ms(10);
 			continue;
 		}
-		size_t n = read(kbd, 1, &sc);
-		if (n == (size_t)-1 || n == 0) {
+		ssize_t n = read(kbd, 1, &sc);
+		if (n <= 0) {
 			if (!did_work)
 				sleep_ms(10);
 			continue;

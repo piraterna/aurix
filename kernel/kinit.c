@@ -109,7 +109,8 @@ pcb *load_init(const char *path)
 		return NULL;
 	}
 
-	if (read(f, f->size, buf) != f->size) {
+	ssize_t got = read(f, f->size, buf);
+	if (got < 0 || (size_t)got != f->size) {
 		error("failed to read file: %s\n", path);
 		close(f);
 		kfree(buf);
@@ -196,11 +197,12 @@ static void stage_boot_modules_to_ramfs(void)
 		close(sysdir);
 	}
 
-	struct fileio *manifest =
-		open("/sys/modules.list", O_CREATE | O_WRONLY | O_TRUNC, 0644);
-	if (!manifest) {
-		kpanic(NULL, "Failed to create /sys/modules.list");
-	}
+	/*
+	 * Load boot modules directly in the kernel.
+	 * Keep staging the module images under /sys for debugging, but do not rely on
+	 * a manifest file.
+	 */
+	struct fileio *manifest = NULL;
 
 	for (uint32_t m = 0; m < boot_params->module_count; m++) {
 		struct aurix_module *mod = &boot_params->modules[m];
@@ -211,15 +213,21 @@ static void stage_boot_modules_to_ramfs(void)
 			continue;
 		}
 
+		if (!module_load(mod->addr, mod->size)) {
+			warn("Failed to load module '%s'\n", name);
+		} else {
+			trace("Loaded module '%s'\n", name);
+		}
+
 		if (!stage_module_file(name, mod->addr, mod->size, manifest)) {
-			close(manifest);
 			kpanicf(NULL, "Failed to stage module '%s'", name);
 		}
 
 		trace("Staged module '%s' to ramfs\n", name);
 	}
 
-	close(manifest);
+	if (manifest)
+		close(manifest);
 }
 
 void _start(struct aurix_parameters *params)
@@ -323,7 +331,6 @@ void _start(struct aurix_parameters *params)
 	sched_init();
 
 	platform_timekeeper_init();
-	stage_boot_modules_to_ramfs();
 	struct fileio *klog_file =
 		open("/sys/klog", O_CREATE | O_WRONLY | O_TRUNC, 0644);
 	if (!klog_file) {
@@ -345,7 +352,7 @@ void _start(struct aurix_parameters *params)
 				cpu_get_current()->name_ext);
 	}
 
-	pcb *init_proc = load_init("/bin/init");
+	pcb *init_proc = load_init("/sbin/init");
 	if (!init_proc) {
 		error(
 			"launching ksh (builtin debug shell), reason: failed to load init\n");
@@ -355,6 +362,12 @@ void _start(struct aurix_parameters *params)
 		struct tcb *ksh = thread_create(p, ksh_thread);
 		ksh->process->name = strdup("ksh");
 	}
+
+	/*
+	 * Load boot modules after spawning init so /sbin/init gets PID 1.
+	 * sysvinit refuses to run as any other PID.
+	 */
+	stage_boot_modules_to_ramfs();
 
 	pit_set_freq(1000); // 1kHz should be fast enough
 	sched_enable();

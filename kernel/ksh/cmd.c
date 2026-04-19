@@ -680,7 +680,8 @@ static int cmd_exec(int argc, char **argv)
 		return 1;
 	}
 
-	if (read(f, f->size, buf) != f->size) {
+	ssize_t got = read(f, f->size, buf);
+	if (got < 0 || (size_t)got != f->size) {
 		kprintf("ksh: failed to read file: %s\n", path);
 		close(f);
 		kfree(buf);
@@ -762,7 +763,8 @@ static int cmd_readf(int argc, char **argv)
 		return 1;
 	}
 
-	if (read(f, f->size, buf) != f->size) {
+	ssize_t got = read(f, f->size, buf);
+	if (got < 0 || (size_t)got != f->size) {
 		kprintf("ksh: failed to read file: %s\n", full_path);
 		kfree(buf);
 		return 1;

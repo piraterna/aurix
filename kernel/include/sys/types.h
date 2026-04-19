@@ -30,5 +30,7 @@ typedef unsigned int gid_t;
 typedef unsigned int mode_t;
 typedef int pid_t;
 typedef int64_t off_t;
+// Signed counterpart to size_t.
+typedef intptr_t ssize_t;
 
 #endif // _SYS_TYPES_H
