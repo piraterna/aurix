@@ -87,7 +87,7 @@ struct fileio *fio_create();
 void fio_retain(struct fileio *file);
 
 struct fileio *open(const char *path, int flags, mode_t mode);
-size_t read(struct fileio *file, size_t size, void *out);
+ssize_t read(struct fileio *file, size_t size, void *out);
 int write(struct fileio *file, void *buf, size_t size);
 int close(struct fileio *file);
 

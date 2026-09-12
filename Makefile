@@ -52,9 +52,7 @@ endif
 export BUILD_DIR ?= $(ROOT_DIR)/build
 export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
 export RELEASE_DIR ?= $(ROOT_DIR)/release
-export INITRD_DIR ?= $(ROOT_DIR)/initrd
 export MODULE_DIR ?= $(ROOT_DIR)/modules
-export APPS_DIR ?= $(ROOT_DIR)/src
 
 export NOUEFI ?= n
 
@@ -69,7 +67,6 @@ NVRAM_JSON := $(BUILD_DIR)/uefi_nvram.json
 LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
-
 INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
 HOST_OS := $(shell uname -s 2>/dev/null || printf "Unknown")
@@ -100,6 +97,7 @@ QEMU_DEBUG ?= 1
 QEMU_FLAGS := -m 2G -smp $(QEMU_SMP) -rtc base=localtime $(QEMU_ACCEL)
 
 ifeq ($(QEMU_ACCELL),none)
+QEMU_ACCEL :=
 else ifeq ($(QEMU_ACCEL),)
 QEMU_ACCEL :=
 else
@@ -214,7 +212,8 @@ endif
 livecd: install
 	@printf ">>> Generating Live CD..."
 	@mkdir -p $(RELEASE_DIR)
-	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD)
+	@utils/arch/$(ARCH)/generate-iso.sh $(LIVECD) $(SYSROOT_DIR)
+endif
 
 .PHONY: livehdd
 livehdd: install
@@ -258,6 +257,12 @@ menuconfig:
 	@python3 utils/kconfiglib/menuconfig.py
 	@$(MAKE) genconfig
 
+.PHONY: defconfig
+defconfig:
+	@cp utils/arch/$(ARCH)/defconfig .config
+	@$(MAKE) genconfig
+endif
+
 .PHONY: format
 format:
 	@clang-format -i $(shell find . -name "*.c" -o -name "*.h")
@@ -266,12 +271,10 @@ format:
 clean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
-	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean
 distclean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
-	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR) $(RELEASE_DIR)

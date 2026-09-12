@@ -8,6 +8,7 @@ if [[ -z $1 ]]; then
 fi
 
 disk_name=$1
+sysroot_dir=$2
 
 uefi_image=$BUILD_DIR/uefi.img
 tempmountdir=$(mktemp -d 2>/dev/null)
@@ -34,7 +35,7 @@ mkdir -p $tempmountdir/boot
 
 cp $uefi_image $tempmountdir/boot/uefi.bin
 cp $BUILD_DIR/boot/pc-bios/stage1-cd.bin $tempmountdir/boot/bootcd.bin
-cp -r $ROOT_DIR/sysroot/* $tempmountdir/
+cp -r $sysroot_dir/* $tempmountdir/
 
 # Create ISO
 xorriso -as mkisofs -b boot/bootcd.bin \

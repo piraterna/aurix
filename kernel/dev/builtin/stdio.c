@@ -28,6 +28,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/errno.h>
 #include <sys/sched.h>
 #include <time/time.h>
 
@@ -197,6 +198,19 @@ struct device_ops stdin_ops = {
 	.poll = stdin_poll,
 };
 
+/*
+ * Provide a traditional /dev/console node for early userspace.
+ * sysvinit expects to open /dev/console to set up stdio for getty/shell.
+ */
+struct device_ops console_ops = {
+	.open = NULL,
+	.close = NULL,
+	.read = stdin_read,
+	.write = stdout_write,
+	.ioctl = stdio_ioctl,
+	.poll = stdin_poll,
+};
+
 // TODO: proper stdout with ttys and shit
 struct device stdout = {
 	.name = "stdout",
@@ -225,6 +239,27 @@ struct device stderr = {
 	.driver_data = NULL,
 	.bound_driver = NULL,
 	.ops = &stdout_ops, // same as stdout for now
+	.next = NULL,
+};
+
+struct device console = {
+	.name = "console",
+	.class_name = "stdio",
+	.dev_node_path = "console",
+	.driver_data = NULL,
+	.bound_driver = NULL,
+	.ops = &console_ops,
+	.next = NULL,
+};
+
+/* Simple /dev/tty alias for early userspace (no per-session semantics yet). */
+struct device tty = {
+	.name = "tty",
+	.class_name = "stdio",
+	.dev_node_path = "tty",
+	.driver_data = NULL,
+	.bound_driver = NULL,
+	.ops = &console_ops,
 	.next = NULL,
 };
 
@@ -344,9 +379,15 @@ static bool stdin_fd_nonblocking(void)
 		struct vnode *vn = (struct vnode *)f->private;
 		struct devfs_node *node =
 			vn ? (struct devfs_node *)vn->node_data : NULL;
-		if (node && node->device && node->device->dev_node_path &&
-			strcmp(node->device->dev_node_path, "stdin") == 0) {
-			nonblocking = true;
+		if (node && node->device && node->device->dev_node_path) {
+			const char *p = node->device->dev_node_path;
+			/*
+			 * Treat /dev/console and /dev/tty as blocking even if opened with
+			 * O_NONBLOCK. sysvinit opens /dev/console with O_NONBLOCK and many
+			 * user programs (toybox, shells) don't expect EAGAIN on stdin.
+			 */
+			if (strcmp(p, "stdin") == 0)
+				nonblocking = true;
 		}
 	}
 	spinlock_release(&proc->fd_lock);
@@ -707,8 +748,17 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 	size_t serial_count =
 		stdio_collect_serial_devs(serial_devs, MAX_DEVICES, true, false);
 
-	if (!kbd && serial_count == 0)
-		return -1;
+	if (!kbd && serial_count == 0) {
+		if (stdin_fd_nonblocking())
+			return -EAGAIN;
+		/* No input devices yet; block instead of failing (keeps init/getty alive). */
+		while (!kbd && serial_count == 0) {
+			sleep_ms(10);
+			kbd = stdio_find_dev("/raw/ps2/kbd0");
+			serial_count =
+				stdio_collect_serial_devs(serial_devs, MAX_DEVICES, true, false);
+		}
+	}
 
 	char *out = buf;
 	size_t n = 0;
@@ -726,6 +776,8 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 					break;
 				out[n++] = (char)ch;
 			}
+			if (n == 0 && nonblocking)
+				return -EAGAIN;
 			return (int)n;
 		}
 
@@ -767,7 +819,7 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 				continue;
 
 			if (nonblocking)
-				return (int)n;
+				return n > 0 ? (int)n : -EAGAIN;
 
 			if (!did_work) {
 				sleep_ms(1);
@@ -778,7 +830,7 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 				if (n > 0)
 					return (int)n;
 				if (idle_ms >= (uint64_t)vtime * 100u)
-					return 0;
+					return nonblocking ? -EAGAIN : 0;
 			}
 
 			if (vmin > 0 && vtime > 0) {
@@ -817,7 +869,7 @@ int stdin_read(struct device *dev, void *buf, size_t len, size_t offset)
 				break;
 
 			if (nonblocking)
-				return 0;
+				return -EAGAIN;
 
 			if (!did_work)
 				sleep_ms(1);
@@ -978,6 +1030,30 @@ int stdio_ioctl(struct device *dev, uint64_t cmd, void *arg)
 		*(int *)arg = stdin_rb_count() + (stdin_line_eof_pending ? 1 : 0);
 		return 0;
 
+	/*
+	 * Minimal tty ioctls used by sysvinit / shells.
+	 * We do not yet implement full controlling-tty / pgrp semantics.
+	 */
+	case 0x540B: /* TCFLSH */
+		return 0;
+	case 0x540C: /* TIOCEXCL */
+		return 0;
+	case 0x540D: /* TIOCNXCL */
+		return 0;
+	case 0x540E: /* TIOCSCTTY */
+		return 0;
+	case 0x540F: /* TIOCGPGRP */
+		if (!arg)
+			return -1;
+		{
+			tcb *thr = thread_current();
+			pcb *p = thr ? thr->process : NULL;
+			*(int *)arg = p ? (int)p->pid : 0;
+		}
+		return 0;
+	case 0x5410: /* TIOCSPGRP */
+		return 0;
+
 	default:
 		warn("stdio: unknown ioctl cmd 0x%lx\n", cmd);
 		return -1;
@@ -989,10 +1065,23 @@ int stdio_probe(struct device *dev)
 	if (strcmp(dev->class_name, "stdio") != 0)
 		return -1;
 
-	if (strcmp(dev->name, "stdin") == 0)
+	/*
+	 * Keep per-node semantics:
+	 * stdin:   read-only + ioctl/poll
+	 * stdout:  write-only + ioctl
+	 * stderr:  write-only + ioctl
+	 * console: read/write + ioctl/poll
+	 * tty:     read/write + ioctl/poll (alias for now)
+	 */
+	if (strcmp(dev->name, "stdin") == 0) {
 		dev->ops = &stdin_ops;
-	else
+	} else if (strcmp(dev->name, "stdout") == 0 || strcmp(dev->name, "stderr") == 0) {
 		dev->ops = &stdout_ops;
+	} else if (strcmp(dev->name, "console") == 0 || strcmp(dev->name, "tty") == 0) {
+		dev->ops = &console_ops;
+	} else {
+		dev->ops = &stdout_ops;
+	}
 
 	dev->driver_data = NULL;
 	trace("stdio: bound to device %s\n", dev->name ? dev->name : "(unnamed)");
@@ -1004,6 +1093,8 @@ void stdio_init()
 	device_register(&stdin);
 	device_register(&stdout);
 	device_register(&stderr);
+	device_register(&console);
+	device_register(&tty);
 	driver_register(&stdio_driver);
 	driver_bind_all();
 	trace("stdio: initialized\n");

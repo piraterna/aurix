@@ -899,7 +899,8 @@ static bool elf_load_interpreter(struct pcb *proc, const char *path,
 		return false;
 	}
 
-	if (read(f, f->size, buf) != f->size) {
+	ssize_t got = read(f, f->size, buf);
+	if (got < 0 || (size_t)got != f->size) {
 		close(f);
 		kfree(buf);
 		return false;

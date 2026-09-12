@@ -81,6 +81,7 @@ enum {
 	SYS_FACCESSAT = 52,
 	SYS_UTIMENSAT = 53,
 	SYS_GETPGID = 54,
+	SYS_PSELECT = 55,
 };
 
 typedef struct {

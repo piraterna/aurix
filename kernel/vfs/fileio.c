@@ -103,17 +103,19 @@ struct fileio *open(const char *path, int flags, mode_t mode)
 	return f;
 }
 
-size_t read(struct fileio *file, size_t size, void *out)
+ssize_t read(struct fileio *file, size_t size, void *out)
 {
 	if (!file) {
-		return 0;
+		return -EBADF;
 	}
 
 	if (file->flags & PIPE_READ_END) {
-		pipe_read(file, out, &size);
-		return size;
+		int ret = pipe_read(file, out, &size);
+		if (ret < 0)
+			return ret;
+		return (ssize_t)size;
 	} else if (file->flags & PIPE_WRITE_END) {
-		return 0;
+		return -EBADF;
 	}
 
 	if (!(file->flags & SPECIAL_FILE_TYPE_DEVICE)) {
@@ -131,12 +133,11 @@ size_t read(struct fileio *file, size_t size, void *out)
 		((struct vnode *)file->private)
 			->ops->read(((struct vnode *)file->private), &bytes, &offset, out);
 
-	if (ret != 0) {
-		return 0;
-	}
+	if (ret != 0)
+		return ret;
 
 	file->offset = offset;
-	return bytes;
+	return (ssize_t)bytes;
 }
 
 int write(struct fileio *file, void *buf, size_t size)
@@ -171,6 +172,17 @@ int write(struct fileio *file, void *buf, size_t size)
 	return ret;
 }
 
+static void _fio_dir_handle_free(struct fileio *file)
+{
+	if (!file || !file->dir)
+		return;
+
+	if (file->dir->entries)
+		kfree(file->dir->entries);
+	kfree(file->dir);
+	file->dir = NULL;
+}
+
 int close(struct fileio *file)
 {
 	if (!file) {
@@ -180,6 +192,8 @@ int close(struct fileio *file)
 	if (atomic_fetch_sub_explicit(&file->refs, 1, memory_order_acq_rel) != 1) {
 		return 0;
 	}
+
+	_fio_dir_handle_free(file);
 
 	struct vnode *vn = file->private;
 
@@ -191,6 +205,7 @@ int close(struct fileio *file)
 	if (vfs_close(vn, file->flags, false) != 0) {
 		return -EIO;
 	}
+
 	kfree(file);
 	return 0;
 }
