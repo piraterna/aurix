@@ -291,9 +291,9 @@ int cpio_extract(struct cpio_fs *cpio, char *dest_path)
 			strcat(path, "/");
 			strcat(path, dir);
 
-			int flags = V_CREATE;
-			if (!is_last)
-				flags |= V_DIR;
+			//int flags = V_CREATE;
+			//if (!is_last)
+			//	flags |= V_DIR;
 
 			struct vnode *v;
 			struct fileio *f;

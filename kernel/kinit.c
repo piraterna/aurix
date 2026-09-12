@@ -278,35 +278,11 @@ void _start(struct aurix_parameters *params)
 #endif
 
 	// setup fs
-	struct aurix_module *initrd_mod = NULL;
-	for (uint32_t m = 0; m < boot_params->module_count; m++) {
-		struct aurix_module *mod = &boot_params->modules[m];
-		if (strcmp(mod->filename, "initrd.cpio") == 0) {
-			initrd_mod = mod;
-			break;
-		}
-	}
-
-	if (!initrd_mod) {
-		kpanic(NULL, "No initrd found, checked \\System\\initrd.cpio");
-	}
-
-	struct cpio_fs *cpio = kmalloc(sizeof(struct cpio_fs));
-	memset(cpio, 0, sizeof(struct cpio_fs));
-	if (cpio_fs_parse(cpio, (void *)PHYS_TO_VIRT((uintptr_t)initrd_mod->addr),
-					  initrd_mod->size) != 0) {
-		kpanic(NULL, "Failed to parse initrd file.");
-	}
-
 	ramfs_init();
 	struct ramfs *ramfs = ramfs_create_fs();
 
 	if (ramfs_vfs_init(ramfs, "/") != 0) {
 		kpanic(NULL, "Failed to initialize ramfs");
-	}
-
-	if (cpio_extract(cpio, "/") != 0) {
-		kpanic(NULL, "Failed to parse initrd file on second pass.");
 	}
 
 	vfs_mkdir("/dev", 0755);

@@ -210,8 +210,6 @@ size_t get_actual_cpus(void)
 						 lapic->id);
 				} else {
 					lapics[cpu_count++] = lapic;
-					debug("Registered CPU #%u with _UID %u\n", lapic->id,
-						  lapic->uid);
 				}
 			}
 		}
@@ -219,6 +217,5 @@ size_t get_actual_cpus(void)
 		i += entry->len;
 	}
 
-	trace("Actual CPUs detected: %zu\n", cpu_count);
 	return cpu_count;
 }

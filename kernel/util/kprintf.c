@@ -30,6 +30,7 @@
 #define NANOPRINTF_USE_SMALL_FORMAT_SPECIFIERS 1
 #include <nanoprintf.h>
 
+#include <ext/flanterm/flanterm.h>
 #include <util/kprintf.h>
 #include <debug/uart.h>
 

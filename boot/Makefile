@@ -19,7 +19,16 @@
 
 .DEFAULT_GOAL := all
 
-export BOOT_ROOT := $(ROOT_DIR)/boot
+export ROOT_DIR := $(if $(ROOT_DIR),$(ROOT_DIR),$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+
+export ARCH ?= x86_64
+export PLATFORM ?= uefi
+export BUILD_TYPE ?= debug
+
+export BUILD_DIR ?= $(ROOT_DIR)/build
+export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
+
+export BOOT_ROOT := $(if $(BOOT_ROOT),$(BOOT_ROOT),$(ROOT_DIR))
 
 export INCLUDE_DIRS := $(BOOT_ROOT)/include \
 					   $(BOOT_ROOT)/include/arch/$(ARCH) \
@@ -28,14 +37,15 @@ export INCLUDE_DIRS := $(BOOT_ROOT)/include \
 export DEFINES += __$(ARCH)__ \
 				_AXBOOT
 
-export BUILD_DIR ?= build
-export SYSROOT_DIR ?= sysroot
-
 export ASFLAGS := $(foreach d, $(DEFINES), -D$d)
 export CFLAGS := $(foreach d, $(DEFINES), -D$d) -Wall -Wextra -Wno-unused-local-typedef -ffreestanding -fno-stack-protector -fno-omit-frame-pointer -fno-stack-check -MMD -MP
 export LDFLAGS := -nostdlib
 
+export NOUEFI ?= n
+
 include arch/$(ARCH)/config.mk
+
+$(info $(ROOT_DIR))
 
 ifeq ($(BUILD_TYPE),debug)
 CFLAGS += -O0 -g3
@@ -62,7 +72,7 @@ endif
 sounds:
 	@mkdir -p $(BUILD_DIR)/boot/sounds
 	@mkdir -p $(BOOT_ROOT)/include/sounds
-	@for f in $(BOOT_ROOT)/sound/*.mp3; do \
+#	@for f in $(BOOT_ROOT)/sound/*.mp3; do \
 		file=$$(basename $$f ".$${f##*.}") ; \
 		printf "  GEN\t$$file.h\n" ; \
     	ffmpeg -i "$$f" -acodec pcm_s16le -f s16le -ac 2 "$(BUILD_DIR)/boot/sounds/$$file.raw" -y 2>/dev/null ; \
@@ -79,3 +89,4 @@ install:
 .PHONY: clean
 clean:
 	@rm -rf $(BOOT_ROOT)/include/sounds
+	@rm -rf $(BUILD_DIR)/boot

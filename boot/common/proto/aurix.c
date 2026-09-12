@@ -365,6 +365,9 @@ void aurix_load(char *kernel_path)
 
 	struct aurix_parameters parameters = { 0 };
 
+	parameters.signature[0] = 'A';
+	parameters.signature[1] = 'X';
+
 	// set current revision
 	parameters.revision = AURIX_PROTOCOL_REVISION;
 	parameters.stack_addr = (uintptr_t)stack;
