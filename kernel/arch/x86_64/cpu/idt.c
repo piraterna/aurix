@@ -171,8 +171,6 @@ static void isr_handle_user_exception(const struct interrupt_frame *frame)
 	kpanic_nohalt(frame, exception_str[frame->vector]);
 #endif
 
-	panic_dump_to_file(frame, exception_str[frame->vector]);
-
 	thread_exit(current, -1);
 
 	struct cpu *cpu = cpu_get_current();

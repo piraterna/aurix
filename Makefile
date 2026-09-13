@@ -49,6 +49,7 @@ ifneq (,$(wildcard $(TOOLCHAIN_DIR)/$(ARCH)-aurix-gcc))
 export PATH := $(TOOLCHAIN_DIR):$(PATH)
 endif
 
+export APPS_DIR ?= $(ROOT_DIR)/src
 export BUILD_DIR ?= $(ROOT_DIR)/build
 export SYSROOT_DIR ?= $(ROOT_DIR)/sysroot
 export RELEASE_DIR ?= $(ROOT_DIR)/release
@@ -67,7 +68,6 @@ NVRAM_JSON := $(BUILD_DIR)/uefi_nvram.json
 LIVECD := $(RELEASE_DIR)/aurix-$(GITREV)-livecd_$(ARCH)-$(PLATFORM).iso
 LIVEHDD := $(RELEASE_DIR)/aurix-$(GITREV)-livehdd_$(ARCH)-$(PLATFORM).img
 LIVESD := $(RELEASE_DIR)/aurix-$(GITREV)-livesd_$(ARCH)-$(PLATFORM).img
-INITRD_CPIO := $(SYSROOT_DIR)/System/initrd.cpio
 
 HOST_OS := $(shell uname -s 2>/dev/null || printf "Unknown")
 
@@ -140,11 +140,19 @@ DEFINES += BUILD_RELEASE
 endif
 
 ##
+# Check if toolchain exists
+#
+
+ifeq (, $(shell which $(ARCH)-aurix-gcc))
+$(error Aurix toolchain not found.)
+endif
+
+##
 # Recipes
 #
 
 .PHONY: all
-all: genconfig boot kernel kmodules apps initrd
+all: genconfig boot kernel kmodules apps
 	@:
 
 .PHONY: boot
@@ -166,47 +174,29 @@ apps:
 	@printf ">>> Building apps...\n"
 	@$(MAKE) -C $(APPS_DIR)
 
-.PHONY: initrd
-initrd: apps __FORCE_initrd
-	@printf ">>> Building initrd...\n"
-	@rm -rf $(BUILD_DIR)/initrd
-	@mkdir -p $(BUILD_DIR)/initrd
-	@cp -r $(INITRD_DIR)/* $(BUILD_DIR)/initrd/
-
-	@$(MAKE) -C $(APPS_DIR) install APP_INSTALL_DIR=$(BUILD_DIR)/initrd/bin
-	@mkdir -p $(BUILD_DIR)/initrd/usr/lib
-	@cp -a $(SYSROOT_DIR)/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
-	@cp -a $(ROOT_DIR)/libc/mlibc-sysroot/usr/lib/*.so* $(BUILD_DIR)/initrd/usr/lib/ 2>/dev/null || true
-	@mkdir -p $(BUILD_DIR)/initrd/lib $(BUILD_DIR)/initrd/lib64
-	@for f in $(BUILD_DIR)/initrd/usr/lib/*.so*; do \
-		name=$$(basename $$f); \
-		ln -sf "../usr/lib/$$name" $(BUILD_DIR)/initrd/lib/$$name; \
-		ln -sf "../usr/lib/$$name" $(BUILD_DIR)/initrd/lib64/$$name; \
-	 done
-
-	@mkdir -p $(SYSROOT_DIR)/System
-	@cd $(BUILD_DIR)/initrd && find . \( -type f -o -type l \) | cpio -R root:root -H newc -o > $(INITRD_CPIO)
-
-.PHONY: __FORCE_initrd
-__FORCE_initrd:
-
 .PHONY: install
-install: boot kernel kmodules apps initrd
+install: boot kernel kmodules apps
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
+	@printf "1"
 ifneq (,$(filter $(ARCH),i686 x86_64))
 	@$(MAKE) -C boot install PLATFORM=pc-bios
 else
 	@$(MAKE) -C boot install
 endif
+	@printf "2"
 ifneq (,$(filter $(ARCH),i686 x86_64 arm32 aarch64))
 ifeq ($(NOUEFI),n)
 	@$(MAKE) -C boot install PLATFORM=uefi
 endif
 endif
+	@printf "3"
 	@$(MAKE) -C kernel install
+	@printf "4"
 	@$(MAKE) -C $(MODULE_DIR) install
+	@printf "5"
 	@$(MAKE) -C $(APPS_DIR) install
+	@printf "6"
 
 .PHONY: livecd
 livecd: install
@@ -269,10 +259,12 @@ format:
 clean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
+	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean
 distclean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
+	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR) $(RELEASE_DIR)

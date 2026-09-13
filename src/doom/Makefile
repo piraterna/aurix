@@ -31,15 +31,10 @@ endif
 APP_FILE := $(APP_BUILD_DIR)/$(APP_NAME)
 DOOM_OUTPUT_FILE := $(APP_BUILD_DIR)/doomgeneric
 
-DOOM_HOST_CC ?= x86_64-aurix-cc
-DOOM_TARGET_CC ?= x86_64-aurix-gcc
+DOOM_HOST_CC ?= $(ARCH)-aurix-cc
+DOOM_TARGET_CC ?= $(ARCH)-aurix-gcc
 DOOM_MAKE_FLAGS := O=$(APP_BUILD_DIR)
-
-ifneq (,$(wildcard $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-gcc))
-DOOM_CROSS_COMPILE := $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-
-else
 DOOM_CROSS_COMPILE := $(AURIX_TARGET)-
-endif
 
 .PHONY: all clean distclean install rebuild clone
 

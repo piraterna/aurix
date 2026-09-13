@@ -24,25 +24,15 @@ APP_DIRS := $(filter-out include/,$(APP_DIRS))
 APP_DIRS := $(filter-out %.nocomp/,$(APP_DIRS))
 
 export BUILD_DIR := $(BUILD_DIR)/src
-export APP_INSTALL_DIR := $(INITRD_DIR)/bin
+export APP_INSTALL_DIR := $(SYSROOT_DIR)/Apps
 
-export TOOLCHAIN_DIR ?= $(ROOT_DIR)/libc/toolchain/usr/bin
 export AURIX_TARGET ?= $(ARCH)-aurix
 
-ifneq (,$(wildcard $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-gcc))
-export APP_AS := $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-gcc
-export APP_CC := $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-gcc
-export APP_LD := $(APP_CC)
-export APP_AR := $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-ar
-export APP_OBJCOPY := $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-objcopy
-else
-$(warning Aurix toolchain not found. Run ./libc/build.sh to install it.)
 export APP_AS := $(AURIX_TARGET)-gcc
 export APP_CC := $(AURIX_TARGET)-gcc
 export APP_LD := $(APP_CC)
 export APP_AR := $(AURIX_TARGET)-ar
 export APP_OBJCOPY := $(AURIX_TARGET)-objcopy
-endif
 
 export APP_CFLAGS := -Wall -Wextra -I$(abspath include)
 export APP_LDFLAGS :=

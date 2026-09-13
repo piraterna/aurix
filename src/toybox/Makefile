@@ -42,12 +42,7 @@ TOYBOX_HOST_CC ?= cc
 TOYBOX_TARGET_CC ?= gcc
 TOYBOX_CONFIG_TARGET ?= allnoconfig
 TOYBOX_MAKE_FLAGS := O=$(APP_BUILD_DIR)
-
-ifneq (,$(wildcard $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-gcc))
-TOYBOX_CROSS_COMPILE := $(TOOLCHAIN_DIR)/$(AURIX_TARGET)-
-else
 TOYBOX_CROSS_COMPILE := $(AURIX_TARGET)-
-endif
 
 .PHONY: all clean distclean install rebuild clone patches
 
