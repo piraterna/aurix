@@ -46,14 +46,18 @@ char *config_paths[] = {
 	"\\EFI\\BOOT\\axboot.cfg",
 };
 
-struct axboot_cfg cfg = { .default_entry = DEFAULT_ENTRY,
+struct axboot_cfg sample_config = { .default_entry = DEFAULT_ENTRY,
 						  .timeout = DEFAULT_TIMEOUT,
 						  .ui_mode = UI_TEXT,
 
 						  //.entry_count = 0,
 						  .entry_count = 2,
 						  .bootlog_filename = NULL,
-						  .modules = { NULL } };
+						  .modules = { "\\System\\support\\serial16550.sys",
+										"\\System\\support\\i8042_ps2.sys",
+										/*"\\System\\support\\pci.sys"*/ } };
+
+struct axboot_cfg *cfg = &sample_config;
 
 struct axboot_entry entries[2] = {
 	{ .name = "AurixOS",
@@ -68,6 +72,12 @@ struct axboot_entry entries[2] = {
 
 void config_init(void)
 {
+	if (cfg) {
+		debug("Config has already been parsed!\n");
+		
+		debug("DEBUG: Not returning\n");
+		//return;
+	}
 	// create a filename for boot log
 	// format: \AXBOOT_LOG-YY-MM-DD_HHMMSS.txt
 	char bootlog_fn[33];
@@ -76,11 +86,11 @@ void config_init(void)
 
 	snprintf(bootlog_fn, 33, "\\AXBOOT_LOG-%u-%u-%u_%u%u%u.txt", dt.year,
 			 dt.month, dt.day, dt.h, dt.m, dt.s);
-	cfg.bootlog_filename = (char *)mem_alloc(ARRAY_LENGTH(bootlog_fn));
-	if (!cfg.bootlog_filename) {
+	cfg->bootlog_filename = (char *)mem_alloc(ARRAY_LENGTH(bootlog_fn));
+	if (!cfg->bootlog_filename) {
 		debug("Error!\n");
 	} else {
-		strncpy(cfg.bootlog_filename, (char *)&bootlog_fn, 33);
+		strncpy(cfg->bootlog_filename, (char *)&bootlog_fn, 33);
 	}
 
 	char *config_buf = NULL;
@@ -103,22 +113,24 @@ void config_init(void)
 			;
 	}
 
+	//cfg = config_parse(config_buf, config_len);
+
 	mem_free(config_buf);
 }
 
 int config_get_timeout()
 {
-	return cfg.timeout;
+	return (cfg ? cfg->timeout : 0);
 }
 
 int config_get_default()
 {
-	return cfg.default_entry;
+	return (cfg ? cfg->default_entry : 0);
 }
 
 int config_get_entry_count()
 {
-	return cfg.entry_count;
+	return (cfg ? cfg->entry_count : 0);
 }
 
 struct axboot_entry *config_get_entries()
@@ -128,17 +140,17 @@ struct axboot_entry *config_get_entries()
 
 int config_get_ui_mode()
 {
-	return cfg.ui_mode;
+	return (cfg ? cfg->ui_mode : 0);
 }
 
 char **config_get_modules(uint32_t *count)
 {
 	if (count) {
 		*count = 0;
-		while (cfg.modules[*count]) {
+		while (cfg->modules[*count]) {
 			*count += 1;
 		}
 	}
 
-	return cfg.modules;
+	return cfg->modules;
 }

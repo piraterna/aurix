@@ -83,7 +83,7 @@ bool paging_init(void)
 
 	for (uint32_t i = 0; i < boot_params->mmap_entries; i++) {
 		struct aurix_memmap *e = &boot_params->mmap[i];
-		if (e->type == AURIX_MMAP_RESERVED || e->type == AURIX_MMAP_KERNEL)
+		if (e->type == AURIX_MMAP_RESERVED)
 			continue;
 
 		uint64_t flags = VMM_PRESENT;

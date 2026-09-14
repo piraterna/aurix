@@ -110,7 +110,7 @@ else
 QEMU_FLAGS += -serial none
 endif
 
-#QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
+QEMU_FLAGS += -device VGA -device qemu-xhci -device usb-kbd -device usb-mouse
 
 # QEMU Audio support (macos only)
 #QEMU_FLAGS += -audiodev coreaudio,id=coreaudio0 -device ich9-intel-hda -device hda-output,audiodev=coreaudio0
@@ -178,25 +178,19 @@ apps:
 install: boot kernel kmodules apps
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
-	@printf "1"
 ifneq (,$(filter $(ARCH),i686 x86_64))
 	@$(MAKE) -C boot install PLATFORM=pc-bios
 else
 	@$(MAKE) -C boot install
 endif
-	@printf "2"
 ifneq (,$(filter $(ARCH),i686 x86_64 arm32 aarch64))
 ifeq ($(NOUEFI),n)
 	@$(MAKE) -C boot install PLATFORM=uefi
 endif
 endif
-	@printf "3"
 	@$(MAKE) -C kernel install
-	@printf "4"
 	@$(MAKE) -C $(MODULE_DIR) install
-	@printf "5"
 	@$(MAKE) -C $(APPS_DIR) install
-	@printf "6"
 
 .PHONY: livecd
 livecd: install
