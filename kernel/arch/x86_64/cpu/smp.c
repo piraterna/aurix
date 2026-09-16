@@ -31,8 +31,9 @@
 #include <cpu/cpu.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
-#include <sys/panic.h>
+
 #include <aurix.h>
+
 #include <stdint.h>
 #include <stdatomic.h>
 #include <stdbool.h>

@@ -30,8 +30,9 @@
 #include <lib/string.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
-#include <sys/panic.h>
+
 #include <aurix.h>
+
 #include <stdint.h>
 #include <stddef.h>
 

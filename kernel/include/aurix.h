@@ -24,9 +24,13 @@
 #define _AURIX_H
 
 #include <config.h>
+
 #include <debug/log.h>
-#include <stdint.h>
 #include <mm/vmm.h>
+#include <sys/panic.h>
+#include <sys/spinlock.h>
+
+#include <stdint.h>
 
 extern uintptr_t hhdm_offset;
 extern vctx_t *kvctx;

@@ -21,13 +21,14 @@
 /*********************************************************************************/
 
 #include <boot/axprot.h>
+
 #include <mm/pmm.h>
 #include <mm/vmm.h>
+
 #include <lib/bitmap.h>
 #include <lib/align.h>
 #include <lib/string.h>
-#include <sys/panic.h>
-#include <sys/spinlock.h>
+
 #include <aurix.h>
 
 #define PAGE_CACHE_SIZE 1024
