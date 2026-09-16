@@ -41,6 +41,21 @@
 struct aurix_parameters *boot_params = NULL;
 uintptr_t hhdm_offset = 0;
 
+#if CONFIG_KCONSOLE == 1
+#include <flanterm.h>
+#include <flanterm_backends/fb.h>
+
+struct flanterm_context *ft_ctx;
+
+void _e_kcon_puts(char str[], size_t len)
+{
+	flanterm_write(ft_ctx, str, len);
+	if (str[len - 1] == '\n') {
+		flanterm_write(ft_ctx, "\r", 1);
+	}
+}
+#endif
+
 void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
@@ -53,6 +68,33 @@ void _start(struct aurix_parameters *params)
 		kpanicf(NULL, "Aurix Protocol revision mismatch: expected %u, got %u",
 				AURIX_PROTOCOL_REVISION, params->revision);
 	}
+
+#if CONFIG_KCONSOLE == 1
+	uint32_t red_size = 8, green_size = 8, blue_size = 8;
+	uint32_t red_shift = 16, green_shift = 8, blue_shift = 0;
+
+	uint32_t bpp = params->framebuffer.bpp * 8; // convert to bits
+
+	if (bpp != 32 && bpp != 24) {
+		kpanicf(NULL, "Unsupported framebuffer format: %u bpp\n", bpp);
+	}
+
+	if (params->framebuffer.format == AURIX_FB_BGRA) {
+		red_shift = 0;
+		green_shift = 8;
+		blue_shift = 16;
+	} else if (params->framebuffer.format != AURIX_FB_RGBA) {
+		kpanicf(NULL, "Unsupported framebuffer pixel format: %d\n",
+				params->framebuffer.format);
+	}
+
+	ft_ctx = flanterm_fb_init(
+		NULL, NULL, (uint32_t *)params->framebuffer.addr,
+		params->framebuffer.width, params->framebuffer.height,
+		params->framebuffer.pitch, red_size, red_shift, green_size, green_shift,
+		blue_size, blue_shift, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+		0, 0, 1, 0, 0, 0, 0, true);
+#endif
 
 	cpu_early_init();
 

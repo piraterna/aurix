@@ -99,8 +99,27 @@ KERNEL_OBJ_BASE := $(KERNEL_CFILES:%.c=$(BUILD_DIR)/kernel/%.c.o) \
 KERNEL_OBJ := $(KERNEL_OBJ_BASE) $(KERNEL_KSYMS_O)
 
 -include arch/$(ARCH)/config.mk
-
 -include $(wildcard $(BUILD_DIR)/kernel/*.d)
+
+# a little bit shady, but it works for now
+-include ../.config
+
+.PHONY: deps
+deps:
+	@printf ">>> Fetching dependencies...\n"
+ifeq ($(CONFIG_KCONSOLE),y)
+	@if [ ! -d external/flanterm ]; then \
+		printf ">>> Cloning flanterm...\n"; \
+		git clone --depth 1 https://github.com/mintsuki/flanterm.git external/flanterm; \
+	else \
+		printf ">>> flanterm already exists, skipping...\n"; \
+	fi
+endif
+
+ifeq ($(CONFIG_KCONSOLE),y)
+KERNEL_CFILES += $(shell find external/flanterm -name '*.c')
+KERNEL_CFLAGS += -Iexternal/flanterm/src
+endif
 
 $(KERNEL_PRE_FILE): $(KERNEL_OBJ_BASE) 
 	@mkdir -p $(@D)
@@ -127,37 +146,37 @@ ifneq ($(BUILD_TYPE),debug)
 	@$(KERNEL_OBJCOPY) --strip-debug --strip-unneeded $@
 endif
 
-$(BUILD_DIR)/kernel/%.c.o: %.c
+$(BUILD_DIR)/kernel/%.c.o: %.c Makefile | deps
 	@mkdir -p $(@D)
 	@printf "  CC\t$<\n"
 	@$(KERNEL_CC) $(KERNEL_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/kernel/arch/%.c.o: arch/$(ARCH)/%.c
+$(BUILD_DIR)/kernel/arch/%.c.o: arch/$(ARCH)/%.c Makefile | deps
 	@mkdir -p $(@D)
 	@printf "  CC\t$<\n"
 	@$(KERNEL_CC) $(KERNEL_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/kernel/arch/%.S.o: arch/$(ARCH)/%.S
+$(BUILD_DIR)/kernel/arch/%.S.o: arch/$(ARCH)/%.S Makefile | deps
 	@mkdir -p $(@D)
 	@printf "  AS\t$<\n"
 	@$(KERNEL_AS) $(KERNEL_ASFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/kernel/arch/%.asm.o: arch/$(ARCH)/%.asm
+$(BUILD_DIR)/kernel/arch/%.asm.o: arch/$(ARCH)/%.asm Makefile | deps
 	@mkdir -p $(@D)
 	@printf "  NASM\t$<\n"
 	@$(KERNEL_NASM) $(KERNEL_NASMFLAGS) $< -o $@
 
-$(BUILD_DIR)/kernel/platform/%.c.o: platform/$(PLATFORM)/%.c
+$(BUILD_DIR)/kernel/platform/%.c.o: platform/$(PLATFORM)/%.c Makefile | deps
 	@mkdir -p $(@D)
 	@printf "  CC\t$<\n"
 	@$(KERNEL_CC) $(KERNEL_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/kernel/platform/%.S.o: platform/$(PLATFORM)/%.S
+$(BUILD_DIR)/kernel/platform/%.S.o: platform/$(PLATFORM)/%.S Makefile | deps
 	@mkdir -p $(@D)
 	@printf "  AS\t$<\n"
 	@$(KERNEL_AS) $(KERNEL_ASFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/kernel/platform/%.asm.o: platform/$(PLATFORM)/%.asm
+$(BUILD_DIR)/kernel/platform/%.asm.o: platform/$(PLATFORM)/%.asm Makefile | deps
 	@mkdir -p $(@D)
 	@printf "  NASM\t$<\n"
 	@$(KERNEL_NASM) $(KERNEL_NASMFLAGS) $< -o $@

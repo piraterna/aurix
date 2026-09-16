@@ -39,8 +39,8 @@
 #define LOG_VERBOSITY_SERIAL LOG_LEVEL_ALL
 #endif
 
-#ifndef LOG_VERBOSITY_DISPLAY
-#define LOG_VERBOSITY_DISPLAY LOG_LEVEL_ERROR
+#ifndef LOG_VERBOSITY_KCON
+#define LOG_VERBOSITY_KCON LOG_LEVEL_ALL
 #endif
 
 /*
@@ -93,7 +93,7 @@ typedef struct {
 
 static log_sink_t g_log_sinks[LOG_SINK_MAX] = {
 	{ serial_kprintf, LOG_VERBOSITY_SERIAL, LOG_STYLE_SERIAL },
-	{ flanterm_kprintf, LOG_VERBOSITY_DISPLAY, LOG_STYLE_DISPLAY }
+	{ kcon_kprintf, LOG_VERBOSITY_KCON, LOG_STYLE_DISPLAY }
 };
 
 #if defined(__GNUC__) || defined(__clang__)
