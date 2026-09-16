@@ -49,7 +49,7 @@ void _start(struct aurix_parameters *params)
 	log_init();
 	serial_init();
 
-	if (params->revision == AURIX_PROTOCOL_REVISION) {
+	if (params->revision != AURIX_PROTOCOL_REVISION) {
 		kpanicf(NULL, "Aurix Protocol revision mismatch: expected %u, got %u",
 				AURIX_PROTOCOL_REVISION, params->revision);
 	}
