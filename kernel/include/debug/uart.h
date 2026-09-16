@@ -20,8 +20,8 @@
 /* SOFTWARE. */
 /*********************************************************************************/
 
-#ifndef _DEBUG_SERIAL_H
-#define _DEBUG_SERIAL_H
+#ifndef _DEBUG_UART_H
+#define _DEBUG_UART_H
 
 #include <platform/debug/uart.h>
 #include <stddef.h>
@@ -34,4 +34,4 @@ void serial_sendbuf(const char *buf, size_t len);
 void serial_sendstr(const char *s);
 void port_sendstr(uint16_t port, const char *s);
 
-#endif /* _DEBUG_SERIAL_H */
+#endif /* _DEBUG_UART_H */

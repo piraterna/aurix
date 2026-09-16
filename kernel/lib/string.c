@@ -197,10 +197,14 @@ char *strtok(char *restrict str, const char *restrict delim)
 
 char *strdup(const char *s)
 {
+	// FIXME: heap
+	return NULL;
+
 	if (!s)
 		return NULL;
 	size_t len = strlen(s);
-	char *out = kmalloc(len + 1);
+	char *out;
+	//char *out = kmalloc(len + 1);
 	if (!out)
 		return NULL;
 	for (size_t i = 0; i <= len; i++) {

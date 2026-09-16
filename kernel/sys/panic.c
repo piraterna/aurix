@@ -23,10 +23,7 @@
 #include <arch/cpu/cpu.h>
 #include <cpu/trace.h>
 #include <mm/vmm.h>
-#include <sys/sched.h>
 #include <util/kprintf.h>
-#include <vfs/fileio.h>
-#include <vfs/vfs.h>
 #include <nanoprintf.h>
 
 #include <stdbool.h>
@@ -83,15 +80,14 @@ static void panic_print_symbol(uintptr_t addr)
 
 static void panic_backtrace(uintptr_t pm_phys, uintptr_t rbp, uint16_t depth)
 {
-	pagetable *pm = pm_phys ? (pagetable *)pm_phys : NULL;
+	(void)pm_phys;
+
 	uintptr_t prev = 0;
 
 	for (uint16_t i = 0; i < depth; i++) {
 		if (!rbp)
 			break;
 		if (rbp & 0x7)
-			break;
-		if (vget_phys(pm, rbp) == 0 || vget_phys(pm, rbp + sizeof(void *)) == 0)
 			break;
 
 		uintptr_t *rbp_ptr = (uintptr_t *)rbp;
@@ -136,28 +132,13 @@ void kpanic_nohalt(const struct interrupt_frame *frame, const char *reason)
 
 	panic_stop_other_cpus(cpu_id);
 
-	tcb *t = thread_current();
-	pcb *p = t ? t->process : NULL;
-	uint32_t tid = t ? t->tid : 0;
-	uint32_t pid = p ? p->pid : 0;
-	const char *pname = (p && p->name) ? p->name : NULL;
-	bool show_task = (p && p->pid != 0);
-
 	kprintf(
 		"\n" KPANIC_RED_BG
 		"====================== KERNEL PANIC ======================" KPANIC_RESET
 		"\n");
 	kprintf(KPANIC_BOLD "reason" KPANIC_RESET ": %s\n",
 			reason ? reason : "panic");
-	if (show_task) {
-		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u pid=%u tid=%u",
-				cpu_id, pid, tid);
-		if (pname)
-			kprintf(" proc=%s", pname);
-		kprintf("\n");
-	} else {
-		kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u\n", cpu_id);
-	}
+	kprintf(KPANIC_BOLD "where " KPANIC_RESET ": cpu=%u\n", cpu_id);
 
 	if (frame) {
 		kprintf(KPANIC_BOLD "fault " KPANIC_RESET ": ");

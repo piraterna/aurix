@@ -59,7 +59,6 @@ int cpu_early_init()
 
 	gdt_init();
 	idt_init();
-	x86_64_syscall_init();
 	cpu_enable_sse();
 
 	cpu_count++;

@@ -31,7 +31,6 @@
 #include <cpu/cpu.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
-#include <sys/sched.h>
 #include <sys/panic.h>
 #include <aurix.h>
 #include <stdint.h>
@@ -167,7 +166,6 @@ __attribute__((noreturn)) void smp_cpu_startup(uint8_t cpu)
 
 	debug("cpu%u: s=0x%llx, l=%u\n", cpu, stack, 16 * 1024);
 
-	sched_init();
 	for (;;) {
 		__asm__ volatile("hlt");
 	}

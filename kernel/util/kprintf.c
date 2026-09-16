@@ -30,7 +30,6 @@
 #define NANOPRINTF_USE_SMALL_FORMAT_SPECIFIERS 1
 #include <nanoprintf.h>
 
-#include <ext/flanterm/flanterm.h>
 #include <util/kprintf.h>
 #include <debug/uart.h>
 
@@ -138,8 +137,6 @@ int kprintf(const char *fmt, ...)
 	if (length >= 0 && length < (int)sizeof(buffer)) {
 		klog_append_locked(buffer, (size_t)length);
 		serial_sendbuf(buffer, (size_t)length);
-		if (ft_ctx)
-			flanterm_write(ft_ctx, (char *)buffer, length);
 	}
 
 	va_end(args);
@@ -206,11 +203,6 @@ int flanterm_kprintf(const char *fmt, ...)
 	va_start(args, fmt);
 	char buffer[1024];
 	int length = npf_vsnprintf(buffer, sizeof(buffer), fmt, args);
-
-	if (length >= 0 && length < (int)sizeof(buffer)) {
-		if (ft_ctx)
-			flanterm_write(ft_ctx, buffer, length);
-	}
 
 	va_end(args);
 

@@ -98,14 +98,9 @@ KERNEL_OBJ_BASE := $(KERNEL_CFILES:%.c=$(BUILD_DIR)/kernel/%.c.o) \
 
 KERNEL_OBJ := $(KERNEL_OBJ_BASE) $(KERNEL_KSYMS_O)
 
-GLOBAL_DEPS := include/aurix/axapi_defs.inc
-
-$(KERNEL_OBJ_BASE): $(GLOBAL_DEPS)
-
 -include arch/$(ARCH)/config.mk
 
 -include $(wildcard $(BUILD_DIR)/kernel/*.d)
-
 
 $(KERNEL_PRE_FILE): $(KERNEL_OBJ_BASE) 
 	@mkdir -p $(@D)

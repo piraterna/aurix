@@ -100,16 +100,16 @@ uint8_t pci_read8(uint32_t id, uint32_t reg)
 
 uint16_t pci_read16(uint32_t id, uint32_t reg)
 {
-	uint32_t addr = 0x80000000 | id | (reg & 0xfc);
+	uint32_t addr = ((uint32_t)0x80000000) | id | (reg & 0xfc);
 	ax_outdw(PCI_CONFIG_ADDR, addr);
 	return ax_inw(PCI_CONFIG_DATA + (reg & 0x02));
 }
 
 void pci_visit(uint8_t bus, uint8_t dev, uint8_t func)
 {
-	uint32_t id = (bus << 16) | (dev << 11) | (func << 8);
+	uint32_t id = (bus << 16) | (dev << 11) | ((func & 0x07) << 8);
 	struct pci_devinfo info;
-	info.vendor_id = pci_read16(id, PCI_CONFIG_VENDOR_ID);
+	info.vendor_id = pci_read16((bus << 16) | (dev << 11), PCI_CONFIG_VENDOR_ID);
 	if (info.vendor_id == 0xffff) {
 		return;
 	}
@@ -119,19 +119,24 @@ void pci_visit(uint8_t bus, uint8_t dev, uint8_t func)
 	info.subclass = pci_read8(id, PCI_CONFIG_SUBCLASS);
 	info.class = pci_read8(id, PCI_CONFIG_CLASS_CODE);
 
-	mod_log("Found device %02x:%02x:%d 0x%04x/0x%04x\n", bus, dev, func, info.vendor_id, info.device_id);
+	//mod_log("Found device %02x:%02x:%d 0x%04x/0x%04x\n", bus, dev, func, info.vendor_id, info.device_id);
 }
 
 int mod_init()
 {
+	if (driver_register(&pci_driver) != 0) {
+		mod_log("failed to register pci driver\n");
+		return -1;
+	}
+
 	mod_log("Finding PCI devices...\n");
 	for (uint8_t bus = 0; bus < 256; bus++) {
-		for (uint8_t dev = 0; dev = 32; dev++) {
+		for (uint8_t dev = 0; dev < 32; dev++) {
 			uint32_t pciid = (bus << 16) | (dev << 11);
 			uint8_t header_type = pci_read8(pciid, PCI_CONFIG_HEADER_TYPE);
 			uint8_t func_count = header_type & PCI_TYPE_MULTIFUNC ? 8 : 1;
 
-			for (uint8_t func = 0; func < func_count; func++) {
+			for (uint8_t func = 1; func < func_count; func++) {
 				pci_visit(bus, dev, func);
 			}
 		}

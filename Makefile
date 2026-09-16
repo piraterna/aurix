@@ -152,7 +152,7 @@ endif
 #
 
 .PHONY: all
-all: genconfig boot kernel kmodules apps
+all: genconfig boot kernel apps
 	@:
 
 .PHONY: boot
@@ -175,7 +175,7 @@ apps:
 	@$(MAKE) -C $(APPS_DIR)
 
 .PHONY: install
-install: boot kernel kmodules apps
+install: boot kernel apps
 	@printf ">>> Building sysroot...\n"
 	@mkdir -p $(SYSROOT_DIR)
 ifneq (,$(filter $(ARCH),i686 x86_64))
@@ -189,7 +189,7 @@ ifeq ($(NOUEFI),n)
 endif
 endif
 	@$(MAKE) -C kernel install
-	@$(MAKE) -C $(MODULE_DIR) install
+#	@$(MAKE) -C $(MODULE_DIR) install
 	@$(MAKE) -C $(APPS_DIR) install
 
 .PHONY: livecd

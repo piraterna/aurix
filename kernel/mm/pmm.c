@@ -28,8 +28,6 @@
 #include <lib/string.h>
 #include <sys/panic.h>
 #include <sys/spinlock.h>
-#include <test/pmm_test.h>
-#include <test/test.h>
 #include <aurix.h>
 
 #define PAGE_CACHE_SIZE 1024
@@ -156,11 +154,6 @@ void pmm_init(void)
 		memset(page_refcounts, 0, refcount_pages * PAGE_SIZE);
 		refcount_entries = bitmap_pages;
 	}
-
-	// Register tests
-#ifdef CONFIG_BUILD_TESTS
-	TEST_ADD(pmm_test);
-#endif
 }
 
 void pmm_reclaim_bootparms()

@@ -22,11 +22,8 @@
 
 #include <arch/cpu/cpu.h>
 #include <cpu/trace.h>
-#include <loader/elf.h>
-#include <loader/module.h>
 #include <mm/vmm.h>
 #include <sys/ksyms.h>
-#include <sys/sched.h>
 #include <aurix.h>
 #include <stdint.h>
 
@@ -44,31 +41,10 @@ bool trace_lookup_symbol(uintptr_t addr, const char **name_out,
 	if (addr == 0)
 		return false;
 
-	{
-		char *elf = NULL;
-		uintptr_t load_base = 0;
-		uintptr_t link_base = 0;
-		if (module_lookup_image(addr, &elf, &load_base, &link_base) && elf) {
-			uintptr_t link_addr = (addr - load_base) + link_base;
-			uintptr_t sym_link = 0;
-			if (!elf_lookup_addr(elf, link_addr, name_out, &sym_link) ||
-				!*name_out)
-				return false;
-			if (sym_addr_out)
-				*sym_addr_out = (sym_link - link_base) + load_base;
-			return true;
-		}
-	}
-
 	if (addr >= KERNEL_BASE)
 		return ksym_lookup(addr, name_out, sym_addr_out);
 
-	tcb *t = thread_current();
-	pcb *p = t ? t->process : NULL;
-	if (!p || !p->image_elf)
-		return false;
-
-	return elf_lookup_addr(p->image_elf, addr, name_out, sym_addr_out);
+	return false;
 }
 
 void stack_trace(uint16_t max_depth)
@@ -80,15 +56,15 @@ void stack_trace(uint16_t max_depth)
 
 void stack_trace_from(uintptr_t pm_phys, uintptr_t rbp, uint16_t max_depth)
 {
-	pagetable *pm = pm_phys ? (pagetable *)pm_phys : NULL;
+	(void)pm_phys;
+
 	uintptr_t prev_rbp = 0;
 	for (uint16_t depth = 0; depth < max_depth; depth++) {
 		if (rbp == 0)
 			break;
 		if (rbp & 0x7) /* must be 8-byte aligned */
 			break;
-		if (vget_phys(pm, rbp) == 0 || vget_phys(pm, rbp + sizeof(void *)) == 0)
-			break;
+
 		uintptr_t *rbp_ptr = (uintptr_t *)rbp;
 		uintptr_t saved_rip = rbp_ptr[1];
 		if (saved_rip == 0)

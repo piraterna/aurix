@@ -31,11 +31,9 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 #include <sys/panic.h>
-#include <sys/sched.h>
 #include <aurix.h>
 #include <stdint.h>
 #include <stddef.h>
-#include <user/syscall.h>
 
 #define IDT_TRAP 0xF
 #define IDT_INTERRUPT 0xE
@@ -98,10 +96,6 @@ void idt_init()
 		idt_set_desc(&idt[v], (uint64_t)isr_stubs[v], IDT_INTERRUPT, 0);
 	}
 
-	// syscall handler
-	idt_set_desc(&idt[0x80], (uint64_t)isr_stubs[0x80], IDT_TRAP,
-				 3); // DPL=3 for user access
-
 	__asm__ volatile("lidt %0" ::"m"(idtr));
 }
 
@@ -117,129 +111,20 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 	desc->reserved = 0;
 }
 
-static void isr_handle_user_exception(const struct interrupt_frame *frame)
-{
-	tcb *current = thread_current();
-	if (!current || !current->process || current->process->pid == 0) {
-		kpanic(frame, exception_str[frame->vector]);
-	}
-
-	if (frame->vector == 14) {
-		uintptr_t fault_addr = frame->cr2;
-		uintptr_t virt = ALIGN_DOWN(fault_addr, PAGE_SIZE);
-		if ((frame->err & PF_ERR_PRESENT) && (frame->err & PF_ERR_WRITE)) {
-			uint64_t flags = vget_flags(current->process->pm, virt);
-			if ((flags & VMM_PRESENT) && (flags & VMM_COW)) {
-				uintptr_t phys = vget_phys(current->process->pm, virt);
-				if (phys) {
-					uintptr_t phys_page = ALIGN_DOWN(phys, PAGE_SIZE);
-					uint32_t refs = pmm_refcount(phys_page);
-					uint64_t new_flags = (flags | VMM_WRITABLE) & ~VMM_COW;
-					if (refs <= 1) {
-						map_page(current->process->pm, virt, phys_page,
-								 new_flags);
-						return;
-					}
-
-					uintptr_t new_phys = (uintptr_t)palloc(1);
-					if (new_phys) {
-						memcpy((void *)PHYS_TO_VIRT(new_phys),
-							   (void *)PHYS_TO_VIRT(phys_page), PAGE_SIZE);
-						map_page(current->process->pm, virt, new_phys,
-								 new_flags);
-						pmm_ref_dec(phys_page, 1);
-						return;
-					}
-				}
-			}
-		}
-		error(
-			"exception %s rip=0x%llx cr2=0x%llx err=0x%llx occured in %s (PID=%u, TID=%u)\n",
-			exception_str[frame->vector], frame->rip, frame->cr2, frame->err,
-			current->process->name ? current->process->name : "<unknown>",
-			current->process->pid, current->tid);
-	} else {
-		error("exception %s (0x%llx) occured in %s (PID=%u, TID=%u)\n",
-			  exception_str[frame->vector], frame->rip,
-			  current->process->name ? current->process->name : "<unknown>",
-			  current->process->pid, current->tid);
-	}
-
-	error("!!! fsbase value: 0x%llx\n", rdmsr(0xC0000100));
-
-#if CONFIG_MPANIC_DUMP
-	kpanic_nohalt(frame, exception_str[frame->vector]);
-#endif
-
-	thread_exit(current, -1);
-
-	struct cpu *cpu = cpu_get_current();
-	tcb *next = cpu ? cpu->thread_list : NULL;
-
-	if (!next) {
-		cpu_halt();
-		UNREACHABLE();
-	}
-
-	gdt_set_kernel_stack(next->kthread.rsp0);
-	switch_task(NULL, &next->kthread);
-	UNREACHABLE();
-}
-
-static void isr_syscall_handler(struct interrupt_frame *frame)
-{
-	tcb *current = thread_current();
-	if (!current || !current->process) {
-		kpanic(frame, "syscall from invalid context");
-	}
-
-	syscall_args_t args = { .rdi = frame->rdi,
-							.id = frame->rax,
-							.rsi = frame->rsi,
-							.rdx = frame->rdx,
-							.r10 = frame->r10,
-							.r8 = frame->r8,
-							.r9 = frame->r9,
-							.rip = frame->rip,
-							.rflags = frame->rflags,
-							.rsp = frame->rsp,
-							.rbx = frame->rbx,
-							.rbp = frame->rbp,
-							.r12 = frame->r12,
-							.r13 = frame->r13,
-							.r14 = frame->r14,
-							.r15 = frame->r15 };
-
-	if (frame->vector == 0x80) {
-		warn("%s called via an int 0x80 syscall! perferably use \"syscall\"\n",
-			 syscall_table[args.id].name);
-	}
-
-	int64_t ret = syscall_dispatch((uint32_t)args.id, &args);
-
-	frame->rax = ret;
-}
-
 void isr_common_handler(struct interrupt_frame frame)
 {
 	if (frame.vector < 0x20) {
-		isr_handle_user_exception(&frame);
+		error("excp\n");
 	} else if (frame.vector < 0x80) {
 		uint8_t irq = frame.vector - 0x20;
 		irq_dispatch(irq);
 		apic_send_eoi();
-		if (irq == 0) {
-			sched_tick();
-		}
 	} else if (frame.vector == 0xfe) {
 		apic_send_eoi();
-		sched_yield();
 	} else if (frame.vector == 0xff) {
 		// shutdown
 		cpu_halt();
 		UNREACHABLE();
-	} else if (frame.vector == 0x80) {
-		isr_syscall_handler(&frame);
 	} else {
 		warn("Unhandled interrupt %u\n", frame.vector);
 	}
