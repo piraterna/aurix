@@ -27,7 +27,7 @@
 
 int kprintf(const char *fmt, ...);
 int serial_kprintf(const char *fmt, ...);
-int flanterm_kprintf(const char *fmt, ...);
+int kcon_kprintf(const char *fmt, ...);
 int snprintf(char *buf, size_t size, const char *fmt, ...);
 
 int klog_sink(const char *fmt, ...);

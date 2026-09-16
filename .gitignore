@@ -3,6 +3,9 @@ release/
 sysroot/
 .vscode/
 .idea/
+external/
+.cache/
+compile_commands.json
 
 modules/ps2kbd/
 modules/ps2mouse/

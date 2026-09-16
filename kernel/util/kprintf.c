@@ -192,7 +192,10 @@ int serial_kprintf(const char *fmt, ...)
 	return length;
 }
 
-int flanterm_kprintf(const char *fmt, ...)
+#if CONFIG_KCONSOLE == 1
+extern void _e_kcon_puts(char str[], size_t len);
+
+int kcon_kprintf(const char *fmt, ...)
 {
 	uint8_t irq_state = save_if();
 	cpu_disable_interrupts();
@@ -204,12 +207,23 @@ int flanterm_kprintf(const char *fmt, ...)
 	char buffer[1024];
 	int length = npf_vsnprintf(buffer, sizeof(buffer), fmt, args);
 
+	if (length >= 0 && length < (int)sizeof(buffer)) {
+		_e_kcon_puts(buffer, (size_t)length);
+	}
+
 	va_end(args);
 
 	spinlock_release(&log_lock);
 	restore_if(irq_state);
 	return length;
 }
+#else
+int kcon_kprintf(const char *fmt, ...)
+{
+	(void)fmt;
+	return 0;
+}
+#endif
 
 void _log_force_unlock()
 {
