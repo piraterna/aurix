@@ -137,6 +137,11 @@ int kprintf(const char *fmt, ...)
 	if (length >= 0 && length < (int)sizeof(buffer)) {
 		klog_append_locked(buffer, (size_t)length);
 		serial_sendbuf(buffer, (size_t)length);
+#if CONFIG_KCONSOLE == 1
+		extern void _e_kcon_puts(char str[], size_t len);
+		_e_kcon_puts(buffer, (size_t)length);
+		/* dirty, but make sure we see everything on kcon */
+#endif
 	}
 
 	va_end(args);

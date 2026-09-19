@@ -56,7 +56,7 @@
 #endif
 
 #ifndef LOG_STYLE_DISPLAY
-#define LOG_STYLE_DISPLAY LOG_STYLE_MODE_PLAIN
+#define LOG_STYLE_DISPLAY LOG_STYLE_MODE_COLOR
 #endif
 
 /* Color palette used by COLOR sinks only */

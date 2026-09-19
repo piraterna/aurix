@@ -47,11 +47,36 @@ uintptr_t hhdm_offset = 0;
 
 struct flanterm_context *ft_ctx;
 
-void _e_kcon_puts(char str[], size_t len)
+static inline const char *_e_find_nl(const char *p, const char *end)
 {
-	flanterm_write(ft_ctx, str, len);
-	if (str[len - 1] == '\n') {
-		flanterm_write(ft_ctx, "\r", 1);
+	for (; p < end; p++)
+		if (*p == '\n')
+			return p;
+	return NULL;
+}
+
+void _e_kcon_puts(const char *str, size_t len)
+{
+	if (ft_ctx == NULL || str == NULL || len == 0)
+		return;
+
+	const char *p = str;
+	const char *end = str + len;
+
+	while (p < end) {
+		const char *nl = _e_find_nl(p, end);
+
+		if (nl == NULL) {
+			flanterm_write(ft_ctx, p, (size_t)(end - p));
+			return;
+		}
+
+		flanterm_write(ft_ctx, p, (size_t)(nl - p) + 1);
+
+		if (nl == str || nl[-1] != '\r')
+			flanterm_write(ft_ctx, "\r", 1);
+
+		p = nl + 1;
 	}
 }
 #endif
@@ -69,6 +94,14 @@ void _start(struct aurix_parameters *params)
 				AURIX_PROTOCOL_REVISION, params->revision);
 	}
 
+	kprintf("    _              _\n");
+	kprintf("   / \\  _   _ _ __(_)_  __\n");
+	kprintf("  / _ \\| | | | '__| \\ \\/ /\n");
+	kprintf(" / ___ \\ |_| | |  | |>  <\n");
+	kprintf("/_/   \\_\\__,_|_|  |_/_/\\_\\\n");
+	kprintf("\n");
+	success("Booted Aurix kernel\n");
+
 #if CONFIG_KCONSOLE == 1
 	uint32_t red_size = 8, green_size = 8, blue_size = 8;
 	uint32_t red_shift = 16, green_shift = 8, blue_shift = 0;
@@ -80,9 +113,9 @@ void _start(struct aurix_parameters *params)
 	}
 
 	if (params->framebuffer.format == AURIX_FB_BGRA) {
-		red_shift = 0;
+		red_shift = 16;
 		green_shift = 8;
-		blue_shift = 16;
+		blue_shift = 0;
 	} else if (params->framebuffer.format != AURIX_FB_RGBA) {
 		kpanicf(NULL, "Unsupported framebuffer pixel format: %d\n",
 				params->framebuffer.format);
@@ -94,6 +127,11 @@ void _start(struct aurix_parameters *params)
 		params->framebuffer.pitch, red_size, red_shift, green_size, green_shift,
 		blue_size, blue_shift, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 		0, 0, 1, 0, 0, 0, 0, true);
+
+	if (!ft_ctx)
+		error("Failed to initialize kconsole\n");
+	else
+		success("kconsole initialized\n");
 #endif
 
 	cpu_early_init();
