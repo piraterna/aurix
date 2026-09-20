@@ -115,7 +115,7 @@ void idt_set_desc(struct idt_descriptor *desc, uint64_t offset, uint8_t type,
 void isr_common_handler(struct interrupt_frame frame)
 {
 	if (frame.vector < 0x20) {
-		error("excp\n");
+		kpanic(&frame, exception_str[frame.vector]);
 	} else if (frame.vector < 0x80) {
 		uint8_t irq = frame.vector - 0x20;
 		irq_dispatch(irq);

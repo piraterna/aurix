@@ -23,6 +23,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef struct {
 	const char *name;
@@ -118,20 +119,46 @@ static void uart_send_one(uint16_t base, char c)
 static void uart_sendbuf_locked(uart_port_t *uart, const char *buf, size_t len)
 {
 	spinlock_acquire(&uart->lock);
-	for (size_t i = 0; i < len; ++i)
-		uart_send_one(uart->base, buf[i]);
+	uint16_t base = uart->base;
+	bool prev_was_cr = false;
+
+	for (size_t i = 0; i < len; ++i) {
+		char c = buf[i];
+		if (c == '\n' && !prev_was_cr)
+			uart_send_one(base, '\r');
+		uart_send_one(base, c);
+		prev_was_cr = (c == '\r');
+	}
+	spinlock_release(&uart->lock);
+}
+
+static void uart_sendbuf_fifo(uart_port_t *uart, const char *buf, size_t len)
+{
+	uint16_t base = uart->base;
+	spinlock_acquire(&uart->lock);
+	bool prev_was_cr = false;
+
+	while (len--) {
+		char c = *buf++;
+		if (c == '\n' && !prev_was_cr)
+			uart_send_one(base, '\r');
+		uart_send_one(base, c);
+		prev_was_cr = (c == '\r');
+	}
 	spinlock_release(&uart->lock);
 }
 
 static void uart_sendstr_locked(uart_port_t *uart, const char *s)
 {
 	spinlock_acquire(&uart->lock);
+	bool prev_was_cr = false;
+
 	while (*s != '\0') {
-		if (*s == '\r') {
-			++s;
-			continue;
-		}
-		uart_send_one(uart->base, *s++);
+		char c = *s++;
+		if (c == '\n' && !prev_was_cr)
+			uart_send_one(uart->base, '\r');
+		uart_send_one(uart->base, c);
+		prev_was_cr = (c == '\r');
 	}
 	spinlock_release(&uart->lock);
 }
@@ -147,7 +174,10 @@ void serial_sendbuf(const char *buf, size_t len)
 		if (!uart_ports[i].present)
 			continue;
 
-		uart_sendbuf_locked(&uart_ports[i], buf, len);
+		if (len >= 16)
+			uart_sendbuf_fifo(&uart_ports[i], buf, len);
+		else
+			uart_sendbuf_locked(&uart_ports[i], buf, len);
 	}
 
 	spinlock_release(&uart_write_lock);
