@@ -24,6 +24,7 @@
 #include <arch/apic/apic.h>
 #include <arch/cpu/irq.h>
 #include <cpu/cpu.h>
+#include <sys/spinlock.h>
 
 #include <debug/log.h>
 #include <debug/uart.h>
@@ -46,6 +47,7 @@ uintptr_t hhdm_offset = 0;
 #include <flanterm_backends/fb.h>
 
 struct flanterm_context *ft_ctx;
+static spinlock_t kcon_lock;
 
 static inline const char *_e_find_nl(const char *p, const char *end)
 {
@@ -60,6 +62,7 @@ void _e_kcon_puts(const char *str, size_t len)
 	if (ft_ctx == NULL || str == NULL || len == 0)
 		return;
 
+	spinlock_acquire(&kcon_lock);
 	const char *p = str;
 	const char *end = str + len;
 
@@ -68,7 +71,7 @@ void _e_kcon_puts(const char *str, size_t len)
 
 		if (nl == NULL) {
 			flanterm_write(ft_ctx, p, (size_t)(end - p));
-			return;
+			break;
 		}
 
 		flanterm_write(ft_ctx, p, (size_t)(nl - p) + 1);
@@ -78,6 +81,7 @@ void _e_kcon_puts(const char *str, size_t len)
 
 		p = nl + 1;
 	}
+	spinlock_release(&kcon_lock);
 }
 #endif
 
@@ -85,6 +89,7 @@ void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
 	hhdm_offset = params->hhdm_offset;
+	spinlock_init(&kcon_lock);
 
 	log_init();
 	serial_init();
@@ -94,12 +99,12 @@ void _start(struct aurix_parameters *params)
 				AURIX_PROTOCOL_REVISION, params->revision);
 	}
 
-	kprintf("    _              _\n");
-	kprintf("   / \\  _   _ _ __(_)_  __\n");
-	kprintf("  / _ \\| | | | '__| \\ \\/ /\n");
-	kprintf(" / ___ \\ |_| | |  | |>  <\n");
-	kprintf("/_/   \\_\\__,_|_|  |_/_/\\_\\\n");
-	kprintf("\n");
+	success("    _              _\n");
+	success("   / \\  _   _ _ __(_)_  __\n");
+	success("  / _ \\| | | | '__| \\ \\/ /\n");
+	success(" / ___ \\ |_| | |  | |>  <\n");
+	success("/_/   \\_\\__,_|_|  |_/_/\\_\\\n");
+	success("\n");
 	success("Booted Aurix kernel\n");
 
 #if CONFIG_KCONSOLE == 1
