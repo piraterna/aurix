@@ -216,24 +216,24 @@ livesd: install
 	@mkdir -p $(RELEASE_DIR)
 	@utils/arch/$(ARCH)/generate-sd.sh $(LIVESD)
 
-.PHONY: run
-run: livecd
-	@printf ">>> Running QEMU...\n"
-	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
-
 nvram:
 	@printf ">>> Generating NVRAM...\n"
 	@mkdir -p $(BUILD_DIR)
 	@./utils/gen-nvram.sh -o $(NVRAM_JSON) -var,guid=d8637320-2230-4748-b8e8-a69d8e9708f6,name=boot-args,data="-v debug\0",attr=7
 
-.PHONY: run-uefi
-run-uefi: livecd nvram
+.PHONY: run
+run: livecd nvram
 	@printf ">>> Running QEMU (UEFI)...\n"
 	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) \
 	-drive if=pflash,format=raw,unit=0,file=ovmf/ovmf_code-$(ARCH).fd,readonly=on \
 	-drive if=pflash,format=raw,unit=1,file=ovmf/ovmf_vars-$(ARCH).fd \
 	-device uefi-vars-x64,jsonfile=$(NVRAM_JSON) \
 	-cdrom $(LIVECD) -d guest_errors
+
+.PHONY: run-bios
+run-bios: livecd
+	@printf ">>> Running QEMU...\n"
+	@qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_MACHINE_FLAGS) -cdrom $(LIVECD)
 
 .PHONY: genconfig
 genconfig: .config
@@ -258,7 +258,6 @@ format:
 clean:
 	@$(MAKE) -C boot clean
 	@$(MAKE) -C $(MODULE_DIR) clean
-	@$(MAKE) -C $(APPS_DIR) clean
 	@rm -rf $(BUILD_DIR) $(SYSROOT_DIR)
 
 .PHONY: distclean
