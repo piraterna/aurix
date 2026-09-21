@@ -20,7 +20,7 @@
 
 .PHONY: all
 all:
-	@libc/build.sh
+	@$(ROOT_DIR)/libc/build.sh
 
 .PHONY: install
 install:

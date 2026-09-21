@@ -89,7 +89,10 @@ void _start(struct aurix_parameters *params)
 {
 	boot_params = params;
 	hhdm_offset = params->hhdm_offset;
+
+#if CONFIG_KCONSOLE == 1
 	spinlock_init(&kcon_lock);
+#endif
 
 	log_init();
 	serial_init();
