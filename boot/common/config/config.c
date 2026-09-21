@@ -36,7 +36,7 @@
 // default timeout of 0 disables the UI entirely, which is essentialy what
 // *should* happen now since the UI is... in a catastrophic state. Just remember
 // to set this back to 30 once the UI is ready
-#define DEFAULT_TIMEOUT 0
+#define DEFAULT_TIMEOUT 1
 // #define DEFAULT_TIMEOUT 30
 
 char *config_paths[] = {
@@ -51,7 +51,7 @@ struct axboot_cfg sample_config = { .default_entry = DEFAULT_ENTRY,
 						  .ui_mode = UI_TEXT,
 
 						  //.entry_count = 0,
-						  .entry_count = 2,
+						  .entry_count = 1,
 						  .bootlog_filename = NULL,
 						  .modules = { "\\System\\support\\serial16550.sys",
 										"\\System\\support\\i8042_ps2.sys",
@@ -59,15 +59,11 @@ struct axboot_cfg sample_config = { .default_entry = DEFAULT_ENTRY,
 
 struct axboot_cfg *cfg = &sample_config;
 
-struct axboot_entry entries[2] = {
+struct axboot_entry entries[1] = {
 	{ .name = "AurixOS",
 	  .description = "Boot the Aurix Operating System",
 	  .image_path = "\\System\\axkrnl",
 	  .protocol = PROTO_AURIX },
-	{ .name = "Windows 10",
-	  .description = "",
-	  .image_path = "\\EFI\\Microsoft\\bootmgfw.efi",
-	  .protocol = PROTO_CHAINLOAD }
 };
 
 void config_init(void)

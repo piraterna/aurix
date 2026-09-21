@@ -45,9 +45,28 @@ enum {
 	EVENT_NEXT_TAB = (1 << 5),
 
 	EVENT_LANG_CHANGE = (1 << 6),
+
+	EVENT_BOOT = (1 << 7),
 };
 
 struct datetime last_dt;
+
+static void clear_screen(struct ui_context *ctx)
+{
+	if (!ctx)
+		return;
+
+	for (uint32_t y = 0; y < ctx->fb_modes[ctx->current_mode].height; y++) {
+		for (uint32_t x = 0;
+			 x < ctx->fb_modes[ctx->current_mode].width; x++) {
+			*((uint32_t *)ctx->fb_addr +
+			  (ctx->fb_modes[ctx->current_mode].pitch /
+			   ctx->fb_modes[ctx->current_mode].bpp) *
+				  y +
+			  x) = 0xFF000000;
+		}
+	}
+}
 
 bool gui_init(struct ui_context *ctx)
 {
@@ -215,6 +234,8 @@ void ui_init()
 			;
 	}
 
+	clear_screen(&ctx);
+
 	ctx.ui = config_get_ui_mode();
 
 	debug("Dumping framebuffer information\n");
@@ -269,14 +290,19 @@ void ui_init()
 
 	struct datetime dt;
 	struct mouse_event me;
+	int timeout_cnt = config_get_timeout() + 1;
 
 	while (1) {
-		uint8_t event = 0;
+		uint16_t event = 0;
 
 		// datetime?
 		get_datetime(&dt);
 		if (memcmp(&dt, &last_dt, sizeof(struct datetime)) != 0) {
 			event |= EVENT_TIME;
+			timeout_cnt -= 1;
+			if (timeout_cnt == 0) {
+				event |= EVENT_BOOT;
+			}
 		}
 
 		// mouse movement?
@@ -297,28 +323,19 @@ void ui_init()
 				event |= EVENT_PREV_ENTRY;
 				break;
 			case SCANCODE_ENTER:
-				// clear the screen
-				for (uint32_t y = 0; y < ctx.fb_modes[ctx.current_mode].height;
-					 y++) {
-					for (uint32_t x = 0;
-						 x < ctx.fb_modes[ctx.current_mode].width; x++) {
-						*((uint32_t *)ctx.fb_addr +
-						  (ctx.fb_modes[ctx.current_mode].pitch /
-						   ctx.fb_modes[ctx.current_mode].bpp) *
-							  y +
-						  x) = 0xFF000000;
-					}
-				}
-				struct axboot_entry *entries = config_get_entries();
-				loader_load(&entries[ctx.current_selection]);
+				event |= EVENT_BOOT;
 				break;
 			default:
 				break;
 			}
 		}
 
-		if (event != 0) {
+		if (event != 0 && !(event & EVENT_BOOT)) {
 			ui_callback(&ctx, &dt, NULL, &me, event);
+		} else if (event & EVENT_BOOT) {
+			clear_screen(&ctx);
+			struct axboot_entry *entries = config_get_entries();
+			loader_load(&entries[ctx.current_selection]);
 		} else {
 #ifdef __x86_64
 			__asm__ volatile("hlt");
