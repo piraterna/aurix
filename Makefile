@@ -169,6 +169,10 @@ kernel:
 kmodules:
 	@$(MAKE) -C $(MODULE_DIR)
 
+.PHONY: libc
+libc:
+	@$(MAKE) -C libc
+
 .PHONY: apps
 apps:
 	@printf ">>> Building apps...\n"
@@ -191,6 +195,7 @@ endif
 	@$(MAKE) -C kernel install
 #	@$(MAKE) -C $(MODULE_DIR) install
 	@$(MAKE) -C $(APPS_DIR) install
+	@$(MAKE) -C libc install
 
 .PHONY: livecd
 livecd: install
