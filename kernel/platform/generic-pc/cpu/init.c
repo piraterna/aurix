@@ -37,6 +37,11 @@ size_t cpu_count = 0;
 
 static void cpu_enable_sse(void)
 {
+	struct cpuid *info = &(cpu_get_current()->cpuid);
+	if (!(info->edx_bits.sse)) {
+		return;
+	}
+
 	uint64_t cr0 = read_cr0();
 	cr0 &= ~(1ULL << 2); // EM
 	cr0 &= ~(1ULL << 3); // TS
@@ -51,6 +56,64 @@ static void cpu_enable_sse(void)
 	__asm__ volatile("fninit");
 }
 
+static void cpu_enable_avx(void)
+{
+	struct cpuid *info = &(cpu_get_current()->cpuid);
+
+	if (!info->ecx_bits.avx) {
+		return;
+	}
+
+	uint64_t cr4 = read_cr4();
+	cr4 |= (1ULL << 18); // OSXSAVE
+	write_cr4(cr4);
+
+	__asm__ volatile("pushq %%rax\n"
+					 "pushq %%rcx\n"
+					 "pushq %%rdx\n"
+					 "xorq %%rcx, %%rcx\n"
+					 "xgetbv\n"
+					 "orl $7, %%eax\n"
+					 "xsetbv\n"
+					 "popq %%rdx\n"
+					 "popq %%rcx\n"
+					 "popq %%rax" ::: "memory");
+}
+
+static void cpu_enable_avx512(void)
+{
+	uint32_t eax, ebx, ecx, edx;
+
+	struct cpuid *info = &(cpu_get_current()->cpuid);
+
+    if (!info->ecx_bits.avx || !info->ecx_bits.rdrand) {
+        return;
+    }
+
+	cpuid(0x07, 0x00, &eax, &ebx, &ecx, &edx);
+    if (!(ebx & (1 << 16))) {
+        return;
+    }
+
+    cpuid(0x0d, 0, &eax, &ebx, &ecx, &edx);
+    if ((eax & 0xE0) != 0xE0) {
+        return;
+    }
+
+	__asm__ volatile("pushq %%rax\n"
+					 "pushq %%rcx\n"
+					 "pushq %%rdx\n"
+					 "xorq %%rcx, %%rcx\n"
+					 "xgetbv\n"
+					 "orl $224, %%eax\n" // 0b11100000 - opmask, ZMM_Hi256, Hi16_ZMM
+					 "mov $0, %%ecx\n"
+					 "movl $0, %%edx\n"
+					 "xsetbv\n"
+					 "popq %%rdx\n"
+					 "popq %%rcx\n"
+					 "popq %%rax" ::: "memory");
+}
+
 int cpu_early_init()
 {
 	// save cpuinfo
@@ -59,7 +122,6 @@ int cpu_early_init()
 
 	gdt_init();
 	idt_init();
-	cpu_enable_sse();
 
 	cpu_count++;
 
@@ -77,27 +139,27 @@ void cpu_init()
 	}
 
 	uint32_t func;
-	cpuid(0x01, &func, (uint32_t *)(cpu->vendor_str),
+	cpuid(0x01, 0, &func, (uint32_t *)(cpu->vendor_str),
 		  (uint32_t *)(cpu->vendor_str + 8), (uint32_t *)(cpu->vendor_str + 4));
 	cpu->vendor_str[12] = 0;
 
 	// get feature set
-	cpuid(0x01, &eax, &ebx, &ecx, &edx);
+	cpuid(0x01, 0x00, &eax, &ebx, &ecx, &edx);
 
 	cpu->cpuid.ecx = ecx;
 	cpu->cpuid.edx = edx;
 
 	// get CPU name
-	cpuid(0x80000000, &func, &ebx, &ecx, &edx);
+	cpuid(0x80000000, 0, &func, &ebx, &ecx, &edx);
 	if (func >= 0x80000004) {
-		cpuid(0x80000002, (uint32_t *)(cpu->name_ext),
+		cpuid(0x80000002, 0, (uint32_t *)(cpu->name_ext),
 			  (uint32_t *)(cpu->name_ext + 4), (uint32_t *)(cpu->name_ext + 8),
 			  (uint32_t *)(cpu->name_ext + 12));
-		cpuid(0x80000003, (uint32_t *)(cpu->name_ext + 16),
+		cpuid(0x80000003, 0, (uint32_t *)(cpu->name_ext + 16),
 			  (uint32_t *)(cpu->name_ext + 20),
 			  (uint32_t *)(cpu->name_ext + 24),
 			  (uint32_t *)(cpu->name_ext + 28));
-		cpuid(0x80000004, (uint32_t *)(cpu->name_ext + 32),
+		cpuid(0x80000004, 0, (uint32_t *)(cpu->name_ext + 32),
 			  (uint32_t *)(cpu->name_ext + 36),
 			  (uint32_t *)(cpu->name_ext + 40),
 			  (uint32_t *)(cpu->name_ext + 44));
@@ -113,6 +175,11 @@ void cpu_init()
 			memset(&cpu->name_ext[48 - lead], 0, lead);
 		}
 	}
+
+	// enable CPU features
+	cpu_enable_sse();
+	cpu_enable_avx();
+	cpu_enable_avx512();
 }
 
 struct cpu *cpu_get_current()
