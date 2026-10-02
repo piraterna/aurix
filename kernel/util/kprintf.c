@@ -247,19 +247,19 @@ static void serial_sink_flush(log_sink_t *sink)
 	(void)sink;
 }
 
+#if CONFIG_KCONSOLE == 1
+extern void _e_kcon_puts(char str[], size_t len);
+
 static void kcon_sink_write(log_sink_t *sink, const char *buf, size_t len)
 {
-	(void)sink;
-#if CONFIG_KCONSOLE == 1
-	extern void _e_kcon_puts(char str[], size_t len);
 	_e_kcon_puts((char *)buf, len);
-#endif
 }
 
 static void kcon_sink_flush(log_sink_t *sink)
 {
 	(void)sink;
 }
+#endif
 
 static void klog_sink_write(log_sink_t *sink, const char *buf, size_t len)
 {
@@ -281,6 +281,7 @@ static log_sink_t g_serial_sink = {
 	.priv = NULL,
 };
 
+#if CONFIG_KCONSOLE == 1
 static log_sink_t g_kcon_sink = {
 	.write = kcon_sink_write,
 	.flush = kcon_sink_flush,
@@ -288,6 +289,7 @@ static log_sink_t g_kcon_sink = {
 	.flags = LOG_SINK_FLAG_COLOR | LOG_SINK_FLAG_TIME | LOG_SINK_FLAG_FUNC,
 	.priv = NULL,
 };
+#endif
 
 static log_sink_t g_klog_sink = {
 	.write = klog_sink_write,

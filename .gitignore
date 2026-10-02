@@ -24,6 +24,7 @@ uefi_nvram.json
 initrd/**/bin
 
 src/toybox/upstream/
+src/doom/upstream/
 
 libc/mlibc-sysroot
 libc/toolchain
